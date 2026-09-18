@@ -47,14 +47,31 @@ export function ExerciseRow({
   showFavorite?: boolean
 }) {
   const toggleFavorite = useStore((s) => s.toggleFavorite)
+  // Toute la ligne est la cible de sélection (pas seulement le nom) : sur
+  // mobile, taper à côté du texte doit aussi sélectionner l'exercice.
+  const clickable = Boolean(onClick)
   return (
     <div
+      role={clickable ? 'button' : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onClick={clickable ? onClick : undefined}
+      onKeyDown={
+        clickable
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                onClick?.()
+              }
+            }
+          : undefined
+      }
       className={cn(
         'flex items-center gap-3 rounded-xl border p-2.5 transition-colors',
         selected ? 'border-accent-line bg-accent-soft' : 'border-line bg-surface hover:bg-surface-2',
+        clickable && 'cursor-pointer select-none',
       )}
     >
-      <button type="button" onClick={onClick} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+      <div className="flex min-w-0 flex-1 items-center gap-3 text-left">
         <ExerciseAvatar exercise={exercise} size={38} />
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-1.5">
@@ -73,11 +90,15 @@ export function ExerciseRow({
             <span className="truncate">{exercise.equipment}</span>
           </span>
         </span>
-      </button>
+      </div>
       {showFavorite && (
         <IconButton
           label={exercise.isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
-          onClick={() => toggleFavorite(exercise.id)}
+          onClick={(e) => {
+            // Ne déclenche pas la sélection / navigation de la ligne.
+            e.stopPropagation()
+            toggleFavorite(exercise.id)
+          }}
           className={cn('h-8 w-8', exercise.isFavorite && 'text-warning')}
         >
           <Star size={15} fill={exercise.isFavorite ? 'currentColor' : 'none'} />

@@ -21,13 +21,13 @@ import {
   Star,
   Trophy,
 } from 'lucide-react'
-import { useStore } from '@/store/store'
+import { useStore, selectActiveWorkout } from '@/store/store'
 import { Page, PageHeader } from '@/components/PageHeader'
 import { ChartTooltipContent, chartLineCursor, chartTooltipWrapper } from '@/components/charts'
 import { Button, Card, EmptyState, IconButton, SectionTitle, Stat, Tabs } from '@/components/ui'
 import { ExerciseFormModal } from '@/components/ExerciseFormModal'
 import { CATEGORY_META, TRACKING_TYPES } from '@/types'
-import { getExerciseProgress, getExerciseSessions, getPersonalRecords, RECORD_LABELS } from '@/lib/calc'
+import { arcWorkouts, getExerciseProgress, getExerciseSessions, getPersonalRecords, RECORD_LABELS } from '@/lib/calc'
 import { cn, formatDate, formatDistance, formatDuration, formatVolume, formatWeight, kgToDisplay, tintBg, tintText } from '@/lib/utils'
 
 type Tab = 'progression' | 'historique' | 'infos'
@@ -41,7 +41,7 @@ export default function ExerciseDetailPage() {
   const toggleFavorite = useStore((s) => s.toggleFavorite)
   const addExercise = useStore((s) => s.addExercise)
   const addExerciseToWorkout = useStore((s) => s.addExerciseToWorkout)
-  const activeWorkout = useStore((s) => s.workouts.find((w) => w.id === s.activeWorkoutId))
+  const activeWorkout = useStore(selectActiveWorkout)
   const notify = useStore((s) => s.notify)
 
   const [tab, setTab] = useState<Tab>('progression')
@@ -59,7 +59,11 @@ export default function ExerciseDetailPage() {
 
   const sessions = useMemo(() => (exercise ? getExerciseSessions(workouts, exercise.id) : []), [workouts, exercise])
   const progress = useMemo(() => (exercise ? getExerciseProgress(workouts, exercise.id) : []), [workouts, exercise])
-  const records = useMemo(() => (exercise ? getPersonalRecords(workouts, exercise.id) : []), [workouts, exercise])
+  // Records limités à l'arc en cours (réinitialisables dans les réglages).
+  const records = useMemo(
+    () => (exercise ? getPersonalRecords(arcWorkouts(workouts, settings.recordsSince), exercise.id) : []),
+    [workouts, exercise, settings.recordsSince],
+  )
 
   const duplicateAsCustom = () => {
     if (!exercise) return
@@ -177,17 +181,22 @@ export default function ExerciseDetailPage() {
                   >
                     <ChevronRight size={18} />
                   </IconButton>
-                  <div className="absolute bottom-2 left-1/2 flex -translate-x-1/2 gap-1.5">
+                  <div className="absolute bottom-1 left-1/2 flex -translate-x-1/2">
                     {exercise.images.map((_, i) => (
                       <button
                         key={i}
                         type="button"
                         onClick={() => setImageIndex(i)}
-                        className={cn(
-                          'h-1.5 rounded-full transition-all',
-                          i === imageIndex ? 'w-5 bg-accent' : 'w-1.5 bg-muted/50',
-                        )}
-                      />
+                        aria-label={`Image ${i + 1} sur ${exercise.images.length}`}
+                        className="flex h-7 w-7 items-center justify-center"
+                      >
+                        <span
+                          className={cn(
+                            'h-1.5 rounded-full transition-all',
+                            i === imageIndex ? 'w-5 bg-accent' : 'w-1.5 bg-muted/50',
+                          )}
+                        />
+                      </button>
                     ))}
                   </div>
                 </>

@@ -59,7 +59,8 @@ export function useThemeEffect() {
   }, [accent])
 }
 
-/** Empêche la mise en veille de l'écran pendant une séance. */export function useWakeLock(active: boolean) {
+/** Empêche la mise en veille de l'écran pendant une séance. */
+export function useWakeLock(active: boolean) {
   const enabled = useStore((s) => s.settings.keepAwake)
   useEffect(() => {
     if (!active || !enabled) return

@@ -38,7 +38,7 @@ import {
 import { ExercisePicker, ExerciseAvatar } from '@/components/ExercisePicker'
 import { CategoryBadge } from '@/components/ExerciseFormModal'
 import { useBottomBar } from '@/hooks/app'
-import { cn, inputToKg, kgToInput } from '@/lib/utils'
+import { cn, displayToMeters, inputToKg, kgToInput, metersToDisplay } from '@/lib/utils'
 
 /* ------------------------------------------------------------------ */
 
@@ -310,12 +310,12 @@ export default function RoutineEditorPage() {
                                 {fields.includes('distance') && (
                                   <NumberField
                                     className="h-9 flex-1 border-transparent bg-surface-2/60"
-                                    value={set.distance}
-                                    onChange={(v) => updateSets(re, i, { distance: v })}
-                                    step={100}
-                                    decimals={0}
-                                    placeholder="mètres"
-                                    suffix="m"
+                                    value={metersToDisplay(set.distance, settings.distanceUnit)}
+                                    onChange={(v) => updateSets(re, i, { distance: displayToMeters(v, settings.distanceUnit) })}
+                                    step={settings.distanceUnit === 'km' ? 0.1 : 0.05}
+                                    decimals={2}
+                                    placeholder={settings.distanceUnit}
+                                    suffix={settings.distanceUnit}
                                     ariaLabel={`Distance série ${i + 1}`}
                                   />
                                 )}
@@ -426,7 +426,8 @@ export default function RoutineEditorPage() {
         title="Remplacer par…"
         onPick={(ids) => {
           if (replaceTarget && ids[0]) {
-            updateRoutineExercise(routine.id, replaceTarget, { exerciseId: ids[0] })
+            const name = exercises.find((e) => e.id === ids[0])?.name
+            updateRoutineExercise(routine.id, replaceTarget, { exerciseId: ids[0], exerciseName: name })
           }
           setReplaceTarget(null)
         }}

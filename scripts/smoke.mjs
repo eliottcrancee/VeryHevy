@@ -240,12 +240,27 @@ async function main() {
 
     await step('Import de la base complète depuis internet', async () => {
       const before = await page.evaluate(() => window.__veryhevy.getState().exercises.length)
-      // Nouveau flux : Réglages → « Gérer la bibliothèque » → modale → « Compléter ».
+      // Nouveau flux : Réglages → « Gérer la bibliothèque » → bouton « Importer »
+      // du header → modale → « Compléter ».
       await page.evaluate(() => {
         const link = [...document.querySelectorAll('a')].find((a) =>
           a.textContent?.includes('Gérer la bibliothèque'),
         )
         link?.click()
+      })
+      await page.waitForFunction(
+        () => document.body.innerText.includes('151 exercices') || document.body.innerText.includes('résultat'),
+        { timeout: 10000 },
+      )
+      await page.waitForFunction(
+        () => [...document.querySelectorAll('button')].some((b) => b.getAttribute('aria-label') === 'Importer' || b.getAttribute('title') === 'Importer'),
+        { timeout: 10000 },
+      )
+      await page.evaluate(() => {
+        const btn = [...document.querySelectorAll('button')].find(
+          (b) => b.getAttribute('aria-label') === 'Importer' || b.getAttribute('title') === 'Importer',
+        )
+        btn?.click()
       })
       await page.waitForFunction(
         () => document.body.innerText.includes('Compléter avec la base illustrée'),

@@ -25,6 +25,7 @@ import {
   workoutSets,
 } from '@/lib/calc'
 import { createSeedRoutines, SEED_EXERCISES } from '@/lib/seed'
+import { SEED_IMAGES } from '@/lib/seed-images'
 import { mergeExercises } from '@/lib/importers'
 import { uid } from '@/lib/utils'
 
@@ -53,6 +54,7 @@ export const DEFAULT_SETTINGS: Settings = {
   firstDayOfWeek: 1,
   sync: { url: '', token: '', enabled: false },
   lastSyncAt: null,
+  recordsSince: null,
 }
 
 interface ImportResult {
@@ -310,6 +312,14 @@ export function routineToWorkoutExercises(
 /* Store                                                              */
 /* ------------------------------------------------------------------ */
 
+/** Exercices de la base intégrée, enrichis de leurs illustrations. */
+function seedWithImages(): Exercise[] {
+  return SEED_EXERCISES.map((e) => ({
+    ...e,
+    images: e.images.length ? e.images : (SEED_IMAGES[e.id.slice(3)] ?? []),
+  }))
+}
+
 export const useStore = create<StoreState>()(
   persist(
     (set, get) => ({
@@ -327,7 +337,20 @@ export const useStore = create<StoreState>()(
       /* -------------------------------------------------- cycle de vie */
       bootstrap: () => {
         if (get().exercises.length === 0) {
-          set({ exercises: SEED_EXERCISES.map((e) => ({ ...e })) })
+          set({ exercises: seedWithImages() })
+        }
+        // Illustrations infographiques de la base intégrée : comble aussi les
+        // exercices déjà enregistrés avant l'existence de la table. Sans
+        // toucher à `updatedAt` pour ne pas déclencher une synchro inutile
+        // (chaque appareil applique la table localement).
+        const before = get().exercises
+        const illustrated = before.map((e) => {
+          if (e.images.length || !e.id.startsWith('ex_')) return e
+          const imgs = SEED_IMAGES[e.id.slice(3)]
+          return imgs ? { ...e, images: imgs } : e
+        })
+        if (illustrated.some((e, i) => e !== before[i])) {
+          set({ exercises: illustrated })
         }
         if (get().routines.length === 0) {
           set({ routines: createSeedRoutines(get().exercises) })
@@ -351,11 +374,22 @@ export const useStore = create<StoreState>()(
         if (get().settings.restNotifyEnabled === undefined) {
           set({ settings: { ...get().settings, restNotifyEnabled: true } })
         }
+        // Records réinitialisables : clé absente des anciennes sauvegardes.
+        if (get().settings.recordsSince === undefined) {
+          set({ settings: { ...get().settings, recordsSince: null } })
+        }
         // Nettoie les supersets orphelins hérités d'anciennes données.
         const current = get()
         const cleaned = normalizeSupersets(current.workouts, current.routines)
         if (cleaned.workouts !== current.workouts || cleaned.routines !== current.routines) {
           set({ workouts: cleaned.workouts, routines: cleaned.routines })
+        }
+        // Aligne activeWorkoutId sur la réalité : sans ça, un identifiant perdu
+        // (crash, anciennes données) affichait le bandeau « séance en cours »
+        // mais l'écran « démarrer une séance » en cliquant dessus.
+        const active = get().workouts.find((w) => w.status === 'active')
+        if ((get().activeWorkoutId ?? null) !== (active?.id ?? null)) {
+          set({ activeWorkoutId: active?.id ?? null })
         }
         set({ hydrated: true })
       },
@@ -372,7 +406,7 @@ export const useStore = create<StoreState>()(
         ]
         const fresh = new Date(Date.now() + 1000).toISOString()
         set({
-          exercises: SEED_EXERCISES.map((e) => ({ ...e, updatedAt: fresh })),
+          exercises: seedWithImages().map((e) => ({ ...e, updatedAt: fresh })),
           workouts: [],
           routines: [],
           activeWorkoutId: null,
@@ -512,7 +546,7 @@ export const useStore = create<StoreState>()(
 
       restoreBuiltinExercises: () => {
         const before = new Set(get().exercises.map((e) => e.id))
-        const result = mergeExercises(get().exercises, SEED_EXERCISES)
+        const result = mergeExercises(get().exercises, seedWithImages())
         const restoredIds = result.exercises.filter((e) => !before.has(e.id)).map((e) => e.id)
         if (!restoredIds.length) {
           get().notify('Base par défaut déjà complète', 'info')
@@ -650,7 +684,9 @@ export const useStore = create<StoreState>()(
             ...w,
             ...patch,
             status: 'completed',
-            finishedAt: new Date().toISOString(),
+            // Chrono en pause (ou séance rouverte) : on garde l'instant figé,
+            // sinon la durée « gonfle » silencieusement du temps hors pause.
+            finishedAt: w.finishedAt ?? new Date().toISOString(),
           })),
           activeWorkoutId: get().activeWorkoutId === id ? null : get().activeWorkoutId,
           restTimer: { endsAt: null, totalSeconds: 0 },

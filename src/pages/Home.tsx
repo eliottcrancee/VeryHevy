@@ -86,35 +86,42 @@ export default function HomePage() {
       <PageHeader
         title={`${greeting} 👋`}
         subtitle={formatDate(new Date().toISOString(), 'long')}
-        actions={
-          <Button variant="primary" size="sm" onClick={() => navigate('/seance')}>
-            <Play size={15} /> {active ? 'Reprendre' : 'S’entraîner'}
-          </Button>
-        }
       />
 
       <Page className="space-y-6">
-        {/* Objectif hebdo */}
-        <Card className="flex items-center gap-4 p-4">
-          <ProgressRing progress={goalPct} size={68} stroke={6}>
-            {thisWeek.length}/{settings.weeklyGoal || '—'}
+        {/* CTA principal : bien visible au milieu du contenu, pas réduit à
+            une petite action d'en-tête inaccessible au doigt. */}
+        <Button
+          variant="primary"
+          size="lg"
+          block
+          className="h-14 text-base"
+          onClick={() => navigate('/seance')}
+        >
+          <Play size={20} /> {active ? 'Reprendre la séance' : "S'entraîner"}
+        </Button>
+
+        {/* Objectif hebdo (compact) */}
+        <Card className="flex items-center gap-3 p-3">
+          <ProgressRing progress={goalPct} size={52} stroke={5}>
+            <span className="text-[10px]">{thisWeek.length}/{settings.weeklyGoal || '—'}</span>
           </ProgressRing>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-bold">
+            <p className="text-[13px] font-bold">
               {thisWeek.length >= settings.weeklyGoal && settings.weeklyGoal > 0
                 ? 'Objectif de la semaine atteint 🎉'
                 : `Objectif : ${settings.weeklyGoal} séance${settings.weeklyGoal > 1 ? 's' : ''} par semaine`}
             </p>
-            <p className="mt-0.5 text-xs text-muted">
+            <p className="text-[11px] text-muted">
               {thisWeek.length} séance{thisWeek.length > 1 ? 's' : ''} cette semaine ·{' '}
               {remaining} restante{remaining > 1 ? 's' : ''}
+              {(streak > 0 || dayRun > 1) && (
+                <span className="ml-1.5 inline-flex items-center gap-1 font-bold text-warning">
+                  <Flame size={11} />
+                  {streak > 1 ? `${streak} semaines d’affilée` : `${dayRun} jours d’affilée`}
+                </span>
+              )}
             </p>
-            {(streak > 0 || dayRun > 1) && (
-              <p className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-warning/10 px-2 py-1 text-[11px] font-bold text-warning">
-                <Flame size={12} />
-                {streak > 1 ? `${streak} semaines d’affilée` : `${dayRun} jours d’affilée`}
-              </p>
-            )}
           </div>
         </Card>
 

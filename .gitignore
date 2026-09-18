@@ -13,3 +13,9 @@ npm-debug.log*
 .vite
 coverage
 *.tsbuildinfo
+# Données personnelles Heavy (ne jamais commiter) : export brut, conversion
+# et fichiers générés par l'outil de relecture tools/heavy-review.
+workout_data.csv
+heavy-import*.json
+heavy-rapport.json
+heavy-corrections.json

@@ -45,6 +45,7 @@ import {
   Textarea,
 } from '@/components/ui'
 import {
+  arcWorkouts,
   RECORD_LABELS,
   detectNewRecords,
   estimate1RM,
@@ -81,8 +82,16 @@ export default function WorkoutReportPage() {
   const exerciseMap = useMemo(() => new Map(exercises.map((e) => [e.id, e])), [exercises])
 
   const previousWorkouts = useMemo(
-    () => workouts.filter((w) => w.id !== id && w.status === 'completed' && +new Date(w.startedAt) < +new Date(workout?.startedAt ?? 0)),
-    [workouts, id, workout],
+    () =>
+      // Limitées à l'arc en cours : les records ne comparent qu'aux séances
+      // postérieures à la date de réinitialisation (réglages).
+      arcWorkouts(
+        workouts.filter(
+          (w) => w.id !== id && w.status === 'completed' && +new Date(w.startedAt) < +new Date(workout?.startedAt ?? 0),
+        ),
+        settings.recordsSince,
+      ),
+    [workouts, id, workout, settings.recordsSince],
   )
 
   const records = useMemo(

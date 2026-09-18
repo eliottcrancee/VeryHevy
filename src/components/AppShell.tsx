@@ -3,7 +3,6 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   BarChart3,
   CalendarDays,
-  Dumbbell,
   History,
   LayoutDashboard,
   ListChecks,
@@ -19,11 +18,11 @@ import { workoutDurationSeconds } from '@/lib/calc'
 import { selectActiveWorkout, useStore } from '@/store/store'
 import { Button, IconButton, Toaster } from '@/components/ui'
 import { ScrollTargetProvider } from '@/components/ui'
+import { Logo } from '@/components/Logo'
 
 const NAV = [
   { to: '/', label: 'Accueil', icon: LayoutDashboard, end: true },
   { to: '/programmes', label: 'Programmes', icon: ListChecks },
-  { to: '/exercices', label: 'Exercices', icon: Dumbbell },
   { to: '/historique', label: 'Historique', icon: History },
   { to: '/stats', label: 'Stats', icon: BarChart3 },
 ]
@@ -236,8 +235,8 @@ export function AppShell() {
         {/* ------------------------------- Sidebar desktop */}
         <aside className="fixed top-0 left-0 z-30 hidden h-dvh w-64 flex-col border-r border-line bg-surface px-3 py-5 lg:flex">
           <div className="mb-6 flex items-center gap-2.5 px-2">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent-solid text-lg text-accent-contrast">
-              💪
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent-soft text-accent">
+              <Logo size={22} />
             </span>
             <span className="text-lg font-extrabold tracking-tight">VeryHevy</span>
           </div>

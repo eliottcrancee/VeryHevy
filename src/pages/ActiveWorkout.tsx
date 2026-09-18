@@ -52,7 +52,7 @@ import {
 } from '@/components/ui'
 import { ExercisePicker } from '@/components/ExercisePicker'
 import { WorkoutExerciseCard } from '@/components/WorkoutLogger'
-import { useStore } from '@/store/store'
+import { useStore, selectActiveWorkout } from '@/store/store'
 import { workoutDurationSeconds, workoutSets, workoutVolume } from '@/lib/calc'
 import { cn, formatDuration, formatVolume, inputToKg, kgToInput } from '@/lib/utils'
 import { useBottomBar, useInterval } from '@/hooks/app'
@@ -189,7 +189,10 @@ function StartScreen() {
 
 export default function ActiveWorkoutPage() {
   const navigate = useNavigate()
-  const workout = useStore((s) => s.workouts.find((w) => w.id === s.activeWorkoutId))
+  // Même sélecteur que le bandeau « séance en cours » : le repli sur toute
+  // séance active garantit que cliquer le bandeau n'ouvre jamais l'écran
+  // « démarrer une séance » alors qu'une séance existe.
+  const workout = useStore(selectActiveWorkout)
   const exercises = useStore((s) => s.exercises)
   const addExerciseToWorkout = useStore((s) => s.addExerciseToWorkout)
   const moveWorkoutExercise = useStore((s) => s.moveWorkoutExercise)

@@ -243,6 +243,13 @@
 ---------------------------------------------------------------- */
 .app-main {
   padding-bottom: calc(var(--bottom-stack, 62px) + var(--bottom-bar, 0px) + 24px);
+  /* Scrollbar masquée : elle provoquait un décalage horizontal du contenu
+     (apparition/disparition selon la hauteur de page). Le défilement
+     molette/tactile reste intact. */
+  scrollbar-width: none;
+}
+.app-main::-webkit-scrollbar {
+  display: none;
 }
 
 @media (min-width: 1024px) {

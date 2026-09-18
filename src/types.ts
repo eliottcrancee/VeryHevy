@@ -285,6 +285,11 @@ export interface Settings {
   lastSyncAt: string | null
   /** Dernière erreur de synchro (affichage Réglages). */
   lastSyncError?: string
+  /**
+   * Début de l'« arc » en cours (ISO) : les records personnels ne comptent
+   * que les séances postérieures. Null = tous l'historique.
+   */
+  recordsSince?: string | null
 }
 
 export interface RestTimerState {

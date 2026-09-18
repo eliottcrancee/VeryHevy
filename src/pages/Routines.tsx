@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Copy, Dumbbell, MoreVertical, Pencil, Play, Plus, Trash2 } from 'lucide-react'
-import { useStore } from '@/store/store'
+import { useStore, selectActiveWorkout } from '@/store/store'
 import { Page, PageHeader } from '@/components/PageHeader'
 import { Button, Card, EmptyState, IconButton, Input, Menu, Modal, Textarea } from '@/components/ui'
 import { cn, formatDate, pluralize } from '@/lib/utils'
@@ -20,7 +20,7 @@ export default function RoutinesPage() {
   const startWorkout = useStore((s) => s.startWorkout)
   const notify = useStore((s) => s.notify)
 
-  const active = useStore((s) => s.workouts.find((w) => w.id === s.activeWorkoutId))
+  const active = useStore(selectActiveWorkout)
 
   const [createOpen, setCreateOpen] = useState(false)
   const [pickerFor, setPickerFor] = useState<string | null>(null)
@@ -59,9 +59,16 @@ export default function RoutinesPage() {
         title="Programmes"
         subtitle={`${pluralize(routines.length, 'programme')} enregistré${routines.length > 1 ? 's' : ''}`}
         actions={
-          <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
-            <Plus size={15} /> Créer
-          </Button>
+          <>
+            <Link to="/exercices" className="shrink-0">
+              <Button size="sm">
+                <Dumbbell size={15} /> Exercices
+              </Button>
+            </Link>
+            <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
+              <Plus size={15} /> Créer
+            </Button>
+          </>
         }
       />
 

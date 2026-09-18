@@ -145,7 +145,6 @@ const SetFieldInput = memo(function SetFieldInput({
           onChange={handleNumber}
           decimals={unit === 'kg' ? 2 : 1}
           placeholder={exercise?.tracking === 'bodyweight_reps' ? 'PDC' : '0'}
-          suffix={unit}
           phantom={phantom}
           className="h-9 min-w-0 flex-[1.15] border-transparent bg-surface-2/70"
         />
@@ -174,7 +173,6 @@ const SetFieldInput = memo(function SetFieldInput({
           onChange={handleNumber}
           decimals={2}
           placeholder="0"
-          suffix={distanceUnit}
           phantom={phantom}
           className="h-9 min-w-0 flex-[1.15] border-transparent bg-surface-2/70"
         />
@@ -223,21 +221,28 @@ export function SetRow({ workoutId, we, set, index, exercise, unit, distanceUnit
         isWarmup && 'opacity-80',
       )}
     >
-      <CheckBadge
-        done={set.completed}
-        disabled={!set.completed && !isSetValidatable(set)}
-        onClick={() => toggleSetCompleted(workoutId, we.id, set.id)}
-        size={32}
-        title={
-          set.completed
-            ? 'Série validée — toucher pour décocher'
-            : isSetValidatable(set)
-              ? `Série ${index + 1} — toucher pour valider`
-              : `Série ${index + 1} — renseigne reps, durée ou distance pour valider`
-        }
+      {/* Menu à gauche (3 points), validation à droite : le pouce garde la
+          case de validation en bord d'écran, la saisie reste au centre. */}
+      <Menu
+        align="left"
+        trigger={({ toggle }) => (
+          <IconButton
+            label="Options de la série"
+            onClick={toggle}
+            className="h-8 w-8 shrink-0 opacity-50 group-hover:opacity-100"
+          >
+            <MoreVertical size={15} />
+          </IconButton>
+        )}
+        items={[
+          { label: `Type : ${meta.label} (changer)`, onClick: cycleType },
+          { label: 'Dupliquer la série', icon: <Copy size={14} />, onClick: () => duplicateSet(workoutId, we.id, set.id) },
+          { label: 'Remplacer l’exercice', icon: <Replace size={14} />, onClick: onReplace },
+          { label: 'Supprimer la série', icon: <Trash2 size={14} />, danger: true, onClick: () => removeSet(workoutId, we.id, set.id) },
+        ]}
       />
 
-      {/* N° de série juste à côté de la case (comme E / D / X). */}
+      {/* N° de série (comme E / D / X), toucher pour changer le type. */}
       <button
         type="button"
         onClick={cycleType}
@@ -275,24 +280,21 @@ export function SetRow({ workoutId, we, set, index, exercise, unit, distanceUnit
         />
       )}
 
-      <Menu
-        align="right"
-        trigger={({ toggle }) => (
-          <IconButton
-            label="Options de la série"
-            onClick={toggle}
-            className="h-8 w-8 opacity-50 group-hover:opacity-100"
-          >
-            <MoreVertical size={15} />
-          </IconButton>
-        )}
-        items={[
-          { label: `Type : ${meta.label} (changer)`, onClick: cycleType },
-          { label: 'Dupliquer la série', icon: <Copy size={14} />, onClick: () => duplicateSet(workoutId, we.id, set.id) },
-          { label: 'Remplacer l’exercice', icon: <Replace size={14} />, onClick: onReplace },
-          { label: 'Supprimer la série', icon: <Trash2 size={14} />, danger: true, onClick: () => removeSet(workoutId, we.id, set.id) },
-        ]}
-      />
+      <span className="ml-auto shrink-0 pl-0.5">
+        <CheckBadge
+          done={set.completed}
+          disabled={!set.completed && !isSetValidatable(set)}
+          onClick={() => toggleSetCompleted(workoutId, we.id, set.id)}
+          size={32}
+          title={
+            set.completed
+              ? 'Série validée — toucher pour décocher'
+              : isSetValidatable(set)
+                ? `Série ${index + 1} — toucher pour valider`
+                : `Série ${index + 1} — renseigne reps, durée ou distance pour valider`
+          }
+        />
+      </span>
     </div>
   )
 }
@@ -427,9 +429,10 @@ export function WorkoutExerciseCard({
         />
       </header>
 
-      {/* Colonnes */}
+      {/* Colonnes — les unités (kg / lb / km / mi) ne sont écrites qu'ici,
+          au-dessus des champs, pour laisser toute la largeur à la saisie. */}
       <div className="flex items-center gap-1 px-2 pb-1 text-[10px] font-bold tracking-wide text-muted uppercase">
-        <span className="w-[32px]" />
+        <span className="w-8" />
         <span className="w-6 text-center">#</span>
         {trackingFieldsOf(exercise).map((f) => (
           <span key={f} className={cn('min-w-0 flex-1 text-center', f === 'weight' || f === 'distance' ? 'flex-[1.15]' : '')}>
@@ -437,7 +440,7 @@ export function WorkoutExerciseCard({
           </span>
         ))}
         {settings.showRpe && <span className="w-14 shrink-0 text-center">rpe</span>}
-        <span className="w-8" />
+        <span className="w-[34px]" />
       </div>
 
       {/* Séries */}

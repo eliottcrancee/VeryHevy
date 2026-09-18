@@ -9,14 +9,17 @@ import {
   Monitor,
   Palette,
   RefreshCw,
+  RotateCcw,
   Sun,
   Trash2,
+  Trophy,
   Upload,
 } from 'lucide-react'
 import type { AppData } from '@/types'
 import { useStore } from '@/store/store'
 import { syncNow } from '@/lib/sync'
 import { Page, PageHeader } from '@/components/PageHeader'
+import { Logo } from '@/components/Logo'
 import {
   Button,
   Card,
@@ -30,7 +33,7 @@ import {
   Select,
 } from '@/components/ui'
 import { parseExternalExercises } from '@/lib/importers'
-import { cn, downloadJSON, notificationPermission, pluralize } from '@/lib/utils'
+import { cn, downloadJSON, formatDate, fromDateKey, notificationPermission, pluralize, toDateKey } from '@/lib/utils'
 
 const ACCENTS = [
   { name: 'Bleu', value: '#4f83ff' },
@@ -332,6 +335,41 @@ export default function SettingsPage() {
           </div>
         </Card>
 
+        {/* Records personnels */}
+        <Card className="space-y-3 p-4">
+          <SectionTitle className="mb-0">
+            <span className="inline-flex items-center gap-1.5">
+              <Trophy size={13} /> Records personnels
+            </span>
+          </SectionTitle>
+          <p className="text-sm text-muted">
+            Changement de salle, reprise après une pause ? Commencez un nouvel
+            arc : seules les séances postérieures à cette date comptent pour vos
+            records (fiches exercices, statistiques et rapports).
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="date"
+              value={settings.recordsSince ? toDateKey(settings.recordsSince) : ''}
+              onChange={(e) =>
+                updateSettings({ recordsSince: e.target.value ? fromDateKey(e.target.value).toISOString() : null })
+              }
+              className="h-10 rounded-xl border border-line bg-surface-2 px-3 text-[15px] text-ink outline-none transition-colors focus:border-accent focus:bg-surface"
+              aria-label="Compter les records à partir du"
+            />
+            {settings.recordsSince && (
+              <>
+                <span className="text-xs text-muted">
+                  Records comptés depuis le {formatDate(settings.recordsSince, 'long')}
+                </span>
+                <Button size="sm" onClick={() => updateSettings({ recordsSince: null })}>
+                  <RotateCcw size={14} /> Tout recompter
+                </Button>
+              </>
+            )}
+          </div>
+        </Card>
+
         {/* Bibliothèque */}
         <Card className="space-y-3 p-4">
           <SectionTitle className="mb-0">
@@ -448,10 +486,15 @@ export default function SettingsPage() {
               <Info size={13} /> À propos
             </span>
           </SectionTitle>
-          <p className="text-sm text-muted">
-            <strong className="text-ink">VeryHevy</strong> — carnet d’entraînement personnel. Musculation, cardio,
-            mobilité : tout se mesure, se coche et se compare.
-          </p>
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent-soft text-accent">
+              <Logo size={22} />
+            </span>
+            <p className="text-sm text-muted">
+              <strong className="text-ink">VeryHevy</strong> — carnet d'entraînement personnel. Musculation, cardio,
+              mobilité : tout se mesure, se coche et se compare.
+            </p>
+          </div>
           <p className="text-[11px] text-muted">
             Base d’exercices optionnelle : free-exercise-db (domaine public). Application 100 % locale, fonctionne
             hors ligne une fois installée.

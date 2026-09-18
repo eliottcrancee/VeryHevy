@@ -309,6 +309,16 @@ export function completedWorkouts(workouts: Workout[]) {
   return workouts.filter((w) => w.status === 'completed')
 }
 
+/**
+ * Séances de l'« arc » en cours : quand les records sont réinitialisés
+ * (nouvelle salle, reprise après pause…), on ne compte que les séances
+ * postérieures à la date choisie.
+ */
+export function arcWorkouts(workouts: Workout[], since?: string | null): Workout[] {
+  if (!since) return workouts
+  return workouts.filter((w) => w.startedAt >= since)
+}
+
 export function workoutsInRange(workouts: Workout[], from: Date, to: Date) {
   const a = +from
   const b = +to

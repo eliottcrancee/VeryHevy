@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none" color="#181B1A" role="img" aria-labelledby="title desc">
+  <title id="title">VeryHevy icon</title>
+  <desc id="desc">Icône monochrome combinant les lettres V et H avec une barre de musculation.</desc>
+
+  <!-- Monochrome: change the color attribute or set color from CSS. -->
+  <g fill="currentColor">
+    <!-- V: wide stance, upward momentum -->
+    <path d="M72 94H138L225 318L256 238L290 324L257 410H201L72 94Z"/>
+
+    <!-- H: compact, architectural counterweight -->
+    <path d="M280 94H342V218H384V94H446V418H384V282H342V418H280V94Z"/>
+
+    <!-- Barbell: one continuous horizontal anchor -->
+    <rect x="76" y="231" width="360" height="50" rx="25"/>
+    <rect x="48" y="199" width="32" height="114" rx="12"/>
+    <rect x="24" y="178" width="32" height="156" rx="12"/>
+    <rect x="432" y="199" width="32" height="114" rx="12"/>
+    <rect x="456" y="178" width="32" height="156" rx="12"/>
+  </g>
+</svg>

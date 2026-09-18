@@ -17,6 +17,7 @@ import { useStore } from '@/store/store'
 import { Page, PageHeader } from '@/components/PageHeader'
 import { Card, Chip, EmptyState, ProgressBar, SectionTitle, Stat } from '@/components/ui'
 import {
+  arcWorkouts,
   completedWorkouts,
   estimate1RM,
   getPersonalRecords,
@@ -106,10 +107,12 @@ export default function StatsPage() {
 
   const records = useMemo(() => {
     const used = new Set(filtered.flatMap((w) => w.exercises.map((we) => we.exerciseId)))
+    // Records limités à l'arc en cours (réinitialisables dans les réglages).
+    const arc = arcWorkouts(all, settings.recordsSince)
     return [...used]
       .map((id) => {
         const ex = exercises.find((e) => e.id === id)
-        const prs = getPersonalRecords(all, id)
+        const prs = getPersonalRecords(arc, id)
         const best = prs.find((p) => p.kind === 'weight')
         const e1rm = prs.find((p) => p.kind === 'e1rm')
         return ex && (best || e1rm) ? { ex, best: best?.value, e1rm: e1rm?.value, kind: best ? 'weight' : 'e1rm', date: (best ?? e1rm)!.workout.startedAt } : null
@@ -117,7 +120,7 @@ export default function StatsPage() {
       .filter((x): x is NonNullable<typeof x> => x !== null)
       .sort((a, b) => +new Date(b.date) - +new Date(a.date))
       .slice(0, 10)
-  }, [filtered, all, exercises])
+  }, [filtered, all, exercises, settings.recordsSince])
 
   // Heatmap de régularité (12 dernières semaines)
   const heatmap = useMemo(() => {

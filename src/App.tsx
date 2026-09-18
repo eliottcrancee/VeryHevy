@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from '@/components/AppShell'
+import { Logo } from '@/components/Logo'
 import { useHydrated } from '@/store/store'
 import { useThemeEffect } from '@/hooks/app'
 import HomePage from '@/pages/Home'
@@ -21,8 +22,8 @@ export default function App() {
   if (!hydrated) {
     return (
       <div className="grid-bg flex min-h-dvh flex-col items-center justify-center gap-4">
-        <span className="flex h-16 w-16 animate-pulse items-center justify-center rounded-2xl bg-accent-solid text-3xl text-accent-contrast">
-          💪
+        <span className="flex h-16 w-16 animate-pulse items-center justify-center rounded-2xl bg-accent-soft text-accent">
+          <Logo size={38} />
         </span>
         <p className="text-sm font-semibold text-muted">Chargement du carnet…</p>
       </div>
