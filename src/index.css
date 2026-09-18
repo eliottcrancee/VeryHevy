@@ -1,0 +1,255 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ---------------------------------------------------------------
+   Design tokens — swap at runtime for light / dark + accent color
+--------------------------------------------------------------- */
+:root {
+  --accent-user: #4f83ff;
+  /* `--accent` sert au texte et aux icônes : assombri en thème clair pour
+     rester lisible sur fond blanc. `--accent-solid` est le fond des boutons
+     pleins, calibré pour un texte blanc ≥ 4.5:1 quel que soit l'accent choisi. */
+  --accent: color-mix(in srgb, var(--accent-user) 76%, black);
+  --accent-solid: color-mix(in srgb, var(--accent-user) 82%, black);
+  --accent-contrast: #ffffff;
+
+  --bg: #f3f4f7;
+  --surface: #ffffff;
+  --surface-2: #eef0f4;
+  --surface-3: #e3e6ec;
+  --border: #e0e3ea;
+  --text: #14161b;
+  --muted: #5b6472;
+  --shadow-color: 220 20% 60%;
+
+  /* Teinte des libellés colorés (catégories, dossiers) : assombris en thème
+     clair et éclaircis en thème sombre pour rester lisibles partout. */
+  --tint-a: 70%;
+  --tint-b: black;
+
+  --success: #15803d;
+  --success-solid: #15803d;
+  --warning: #b45309;
+  --danger: #c81e1e;
+  --danger-solid: #dc2626;
+  --info: #0369a1;
+}
+
+.dark {
+  --bg: #0a0b0f;
+  --surface: #13151b;
+  --surface-2: #1a1d25;
+  --surface-3: #232833;
+  --border: #262b36;
+  --text: #f1f3f8;
+  --muted: #8d95a8;
+  --shadow-color: 220 40% 2%;
+
+  --tint-a: 76%;
+  --tint-b: white;
+
+  --accent: var(--accent-user);
+  --accent-solid: color-mix(in srgb, var(--accent-user) 82%, black);
+
+  --success: #4ade80;
+  --success-solid: #15803d;
+  --warning: #fbbf24;
+  --danger: #f87171;
+  --danger-solid: #c62020;
+  --info: #38bdf8;
+}
+
+@theme inline {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--border);
+  --color-ink: var(--text);
+  --color-muted: var(--muted);
+
+  --color-accent: var(--accent);
+  --color-accent-solid: var(--accent-solid);
+  --color-accent-contrast: var(--accent-contrast);
+  --color-accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
+  --color-accent-line: color-mix(in srgb, var(--accent) 45%, transparent);
+
+  --color-success: var(--success);
+  --color-success-solid: var(--success-solid);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-danger-solid: var(--danger-solid);
+  --color-info: var(--info);
+
+  --radius-xl2: 1.25rem;
+
+  --animate-in: fade-in 0.22s ease-out both;
+  --animate-slide-up: slide-up 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-pop: pop 0.18s cubic-bezier(0.22, 1.4, 0.36, 1) both;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes pop {
+  0% {
+    transform: scale(0.94);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 14px transparent;
+  }
+}
+
+/* ---------------------------------------------------------------
+   Base
+--------------------------------------------------------------- */
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html {
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    overscroll-behavior-y: none;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+
+  input,
+  textarea,
+  select,
+  button {
+    font: inherit;
+    color: inherit;
+  }
+
+  /* Remove number input spinners */
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type='number'] {
+    -moz-appearance: textfield;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--muted) 35%, transparent);
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in srgb, var(--muted) 60%, transparent);
+    background-clip: content-box;
+  }
+}
+
+@layer utilities {
+  .safe-b {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .safe-t {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 1rem;
+  }
+  .glass {
+    background: color-mix(in srgb, var(--surface) 82%, transparent);
+    backdrop-filter: blur(14px) saturate(140%);
+  }
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  .pulse-ring {
+    animation: pulse-ring 1.6s ease-out infinite;
+  }
+  .grid-bg {
+    background-image: radial-gradient(
+      circle at 1px 1px,
+      color-mix(in srgb, var(--muted) 22%, transparent) 1px,
+      transparent 0
+    );
+    background-size: 22px 22px;
+  }
+}
+
+/* ---------------------------------------------------------------
+   Marge basse du contenu principal.
+   `--bottom-stack` est renseigné par AppShell avec la hauteur réelle de
+   la barre inférieure mobile (navigation, éventuellement surmontée du
+   bandeau « séance en cours »), pour qu'aucune barre fixe ne recouvre
+   le contenu ni un autre bouton d'action.
+---------------------------------------------------------------- */
+.app-main {
+  padding-bottom: calc(var(--bottom-stack, 62px) + var(--bottom-bar, 0px) + 24px);
+}
+
+@media (min-width: 1024px) {
+  .app-main {
+    padding-bottom: 2.5rem;
+  }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}
