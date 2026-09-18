@@ -33,9 +33,10 @@ jobs:
       - run: npm run build
 
       - uses: actions/configure-pages@v5
-        with:
-          # active Pages en mode « GitHub Actions » si ce n'est pas déjà fait
-          enablement: true
+        # Pas d'`enablement: true` : le GITHUB_TOKEN du workflow n'a pas le droit de
+        # CRÉER le site Pages (« Resource not accessible by integration »). Pages doit
+        # être activé une fois par un administrateur, dans Settings → Pages →
+        # Source : « GitHub Actions ».
 
       - uses: actions/upload-pages-artifact@v3
         with:

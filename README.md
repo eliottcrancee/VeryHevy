@@ -210,15 +210,24 @@ ligne serveur coupé**.
 ### Publication automatique
 
 Le workflow `.github/workflows/deploy.yml` construit et publie le site à chaque
-`push` sur `main`. Le dépôt doit être **public** et Pages réglé sur la source
-« GitHub Actions » (le workflow l'active automatiquement via `configure-pages`).
+`push` sur `main`.
+
+**À faire une seule fois** : activer Pages dans *Settings → Pages → Source :
+« GitHub Actions »*. Le `GITHUB_TOKEN` du workflow ne peut pas créer le site
+lui-même (erreur `Resource not accessible by integration`), c'est une restriction
+de GitHub.
 
 ```bash
-gh repo create <nom> --public --source=. --push
-# puis, dans Settings → Pages, choisir « GitHub Actions » si nécessaire
+# création du dépôt + premier envoi
+gh repo create VeryHevy --public --source=. --push
+
+# activation de Pages (une fois) — nécessite un jeton avec le scope « repo »
+gh api -X POST repos/<compte>/VeryHevy/pages -f build_type=workflow
 ```
 
-L'application sera disponible sur `https://<compte>.github.io/<nom>/`.
+L'application est alors disponible sur `https://<compte>.github.io/VeryHevy/`.
+Le workflow se relance à chaque `push` ; il peut aussi être déclenché à la main
+depuis l'onglet *Actions* (`workflow_dispatch`).
 
 > Le service worker précache l'intégralité du build (fichiers hachés compris,
 injectés dans `dist/sw.js` par `vite.config.ts`). Sans cette étape, une première
