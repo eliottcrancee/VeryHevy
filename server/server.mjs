@@ -20,6 +20,19 @@ import { fileURLToPath } from 'node:url'
 import { timingSafeEqual } from 'node:crypto'
 
 const ROOT = dirname(fileURLToPath(import.meta.url))
+
+// Charge server/.env si présent (pratique en lancement direct sans Docker).
+try {
+  const envText = readFileSync(join(ROOT, '.env'), 'utf8')
+  for (const line of envText.split('\n')) {
+    const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/)
+    if (!m) continue
+    if (!(m[1] in process.env)) process.env[m[1]] = m[2].replace(/^(['"])(.*)\1$/, '$2')
+  }
+} catch {
+  /* pas de .env : variables d'environnement classiques */
+}
+
 const PORT = Number(process.env.PORT ?? 8443)
 const DATA_DIR = process.env.DATA_DIR ?? join(ROOT, 'data')
 const DATA_FILE = join(DATA_DIR, 'veryhevy-sync.json')
