@@ -30,7 +30,7 @@ import {
   Select,
 } from '@/components/ui'
 import { parseExternalExercises } from '@/lib/importers'
-import { cn, downloadJSON, pluralize } from '@/lib/utils'
+import { cn, downloadJSON, notificationPermission, pluralize } from '@/lib/utils'
 
 const ACCENTS = [
   { name: 'Bleu', value: '#4f83ff' },
@@ -66,6 +66,9 @@ export default function SettingsPage() {
   } | null>(null)
   const [busy, setBusy] = useState(false)
   const [syncing, setSyncing] = useState(false)
+  const [notifPerm, setNotifPerm] = useState<NotificationPermission | 'unsupported'>(() =>
+    notificationPermission(),
+  )
   const fileRef = useRef<HTMLInputElement>(null)
 
   const syncState = settings.sync.enabled && settings.sync.url.trim() ? 'ready' : 'off'
@@ -88,6 +91,41 @@ export default function SettingsPage() {
   }
 
   const totalSets = workouts.reduce((n, w) => n + w.exercises.reduce((m, we) => m + we.sets.length, 0), 0)
+
+  /** Active la notif de fin de repos (demande l'autorisation système au besoin). */
+  const toggleRestNotify = async (v: boolean) => {
+    if (!v) {
+      updateSettings({ restNotifyEnabled: false })
+      return
+    }
+    const current = notificationPermission()
+    if (current === 'unsupported') {
+      setNotifPerm(current)
+      notify('Notifications non prises en charge par ce navigateur', 'error')
+      return
+    }
+    if (current === 'denied') {
+      setNotifPerm(current)
+      updateSettings({ restNotifyEnabled: true })
+      notify('Notifications bloquées : autorisez-les dans les réglages du site', 'error')
+      return
+    }
+    if (current === 'default') {
+      try {
+        const asked = await Notification.requestPermission()
+        setNotifPerm(asked)
+        if (asked !== 'granted') {
+          notify('Autorisation de notification refusée', 'error')
+          return
+        }
+      } catch {
+        notify('Autorisation de notification impossible', 'error')
+        return
+      }
+    }
+    updateSettings({ restNotifyEnabled: true })
+    notify('Notifications de fin de repos activées', 'success')
+  }
 
   const exportAll = () => {
     downloadJSON(`veryhevy-sauvegarde-${new Date().toISOString().slice(0, 10)}.json`, {
@@ -267,6 +305,20 @@ export default function SettingsPage() {
               onChange={(v) => updateSettings({ restSoundEnabled: v })}
               label="Bip sonore à la fin du repos"
             />
+            <Checkbox
+              checked={settings.restNotifyEnabled}
+              onChange={(v) => void toggleRestNotify(v)}
+              label="Notification système à la fin du repos (téléphone / PC)"
+            />
+            {settings.restNotifyEnabled && notifPerm === 'denied' && (
+              <p className="text-xs text-danger">
+                Notifications bloquées par le navigateur : autorisez-les dans les réglages du site pour
+                en profiter.
+              </p>
+            )}
+            {settings.restNotifyEnabled && notifPerm === 'unsupported' && (
+              <p className="text-xs text-muted">Notifications non prises en charge par ce navigateur.</p>
+            )}
             <Checkbox
               checked={settings.keepAwake}
               onChange={(v) => updateSettings({ keepAwake: v })}

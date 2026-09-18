@@ -44,6 +44,7 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultRestSeconds: 90,
   autoStartRest: true,
   restSoundEnabled: true,
+  restNotifyEnabled: true,
   keepAwake: true,
   weeklyGoal: 4,
   defaultSets: 3,
@@ -343,6 +344,11 @@ export const useStore = create<StoreState>()(
             },
             syncDeleted: Array.isArray(get().syncDeleted) ? get().syncDeleted : [],
           })
+        }
+        // Notification de fin de repos : activée par défaut, y compris pour
+        // les réglages enregistrés avant l'existence de cette clé.
+        if (get().settings.restNotifyEnabled === undefined) {
+          set({ settings: { ...get().settings, restNotifyEnabled: true } })
         }
         // Nettoie les supersets orphelins hérités d'anciennes données.
         const current = get()

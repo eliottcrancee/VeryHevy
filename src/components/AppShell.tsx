@@ -14,7 +14,7 @@ import {
   Timer,
   X,
 } from 'lucide-react'
-import { cn, formatDuration, playBeep, vibrate } from '@/lib/utils'
+import { cn, formatDuration, playBeep, showRestNotification, vibrate } from '@/lib/utils'
 import { workoutDurationSeconds } from '@/lib/calc'
 import { selectActiveWorkout, useStore } from '@/store/store'
 import { Button, IconButton, Toaster } from '@/components/ui'
@@ -48,6 +48,7 @@ export function RestTimerBar() {
   const pauseRest = useStore((s) => s.pauseRest)
   const resumeRest = useStore((s) => s.resumeRest)
   const soundEnabled = useStore((s) => s.settings.restSoundEnabled)
+  const notifyEnabled = useStore((s) => s.settings.restNotifyEnabled)
   const [fired, setFired] = useState(false)
 
   const paused = restTimer.pausedSeconds != null
@@ -70,8 +71,9 @@ export function RestTimerBar() {
       setFired(true)
       if (soundEnabled) playBeep(2)
       vibrate([120, 60, 120])
+      if (notifyEnabled) showRestNotification(restTimer.label ?? undefined)
     }
-  }, [active, finished, fired, soundEnabled])
+  }, [active, finished, fired, soundEnabled, notifyEnabled, restTimer.label])
 
   if (!active) return null
 
@@ -305,7 +307,7 @@ export function AppShell() {
         {showNav && (
           <div
             ref={bottomStackRef}
-            className="glass safe-b fixed inset-x-0 bottom-0 z-40 flex flex-col border-t border-line lg:hidden"
+            className="safe-b fixed inset-x-0 bottom-0 z-40 flex flex-col border-t border-line bg-surface lg:hidden"
           >
             {showActivePill && (
               <div className="border-b border-line px-3 py-2">

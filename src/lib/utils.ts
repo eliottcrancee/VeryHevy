@@ -242,6 +242,35 @@ export function vibrate(pattern: number | number[] = 90) {
   }
 }
 
+/** État de l'autorisation « notifications » (ou 'unsupported'). */
+export function notificationPermission(): NotificationPermission | 'unsupported' {
+  try {
+    if (!('Notification' in window)) return 'unsupported'
+    return Notification.permission
+  } catch {
+    return 'unsupported'
+  }
+}
+
+/**
+ * Notification système « repos terminé » (téléphone/PC, même écran éteint
+ * côté Android). À n'appeler qu'après un geste ou un minuteur utilisateur :
+ * silencieuse si l'autorisation n'est pas accordée (voir Réglages).
+ */
+export function showRestNotification(label?: string) {
+  try {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return
+    new Notification('Repos terminé 💪', {
+      body: label ? `${label} — à vous !` : 'À vous !',
+      tag: 'veryhevy-rest',
+      icon: './icon.svg',
+      requireInteraction: true,
+    })
+  } catch {
+    /* notifications indisponibles */
+  }
+}
+
 export function downloadJSON(filename: string, data: unknown) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)

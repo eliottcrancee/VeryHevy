@@ -272,6 +272,8 @@ export interface Settings {
   defaultRestSeconds: number
   autoStartRest: boolean
   restSoundEnabled: boolean
+  /** Notification système (téléphone/PC) à la fin du chrono de repos. */
+  restNotifyEnabled: boolean
   keepAwake: boolean
   weeklyGoal: number
   defaultSets: number
