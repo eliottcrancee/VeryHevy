@@ -2,11 +2,12 @@
  * Vérifie que le build de production fonctionne **en sous-chemin**, comme sur
  * GitHub Pages (`https://<compte>.github.io/<dépôt>/`).
  *
- *   npm run build && node scripts/check-pages.mjs
+ *   node scripts/check-pages.mjs                       # teste dist/ en local
+ *   node scripts/check-pages.mjs https://exemple/xyz/  # teste un site en ligne
  *
- * Sert `dist/` sous un préfixe fictif et contrôle : chargement sans erreur,
- * navigation, manifeste, service worker (portée et enregistrement) et absence
- * de requête en 404 — le mode d'échec typique d'un `base` mal configuré.
+ * Contrôle : chargement sans erreur, navigation, manifeste, portée du service
+ * worker, **précache des fichiers compilés** et redémarrage hors ligne — les
+ * modes d'échec typiques d'un `base` mal configuré ou d'un précache incomplet.
  */
 import { spawn } from 'node:child_process'
 import http from 'node:http'
@@ -17,7 +18,10 @@ import puppeteer from 'puppeteer-core'
 const EDGE = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'
 const PORT = 4336
 const PREFIX = '/veryhevy'
-const BASE = `http://localhost:${PORT}${PREFIX}/`
+
+/** URL à tester. Sans argument : build local servi sous un préfixe fictif. */
+const LIVE = process.argv[2]
+const BASE = LIVE ? (LIVE.endsWith('/') ? LIVE : `${LIVE}/`) : `http://localhost:${PORT}${PREFIX}/`
 
 let failures = 0
 const check = (label, ok, detail = '') => {
@@ -34,24 +38,27 @@ const TYPES = {
   '.json': 'application/json',
 }
 
-const server = http.createServer(async (req, res) => {
-  const url = (req.url ?? '/').split('?')[0]
-  if (!url.startsWith(PREFIX)) {
-    res.writeHead(404).end('hors préfixe')
-    return
-  }
-  let rel = url.slice(PREFIX.length)
-  if (rel === '' || rel === '/') rel = '/index.html'
-  const file = path.join('dist', rel)
-  try {
-    const body = await readFile(file)
-    res.writeHead(200, { 'Content-Type': TYPES[path.extname(file)] ?? 'application/octet-stream' })
-    res.end(body)
-  } catch {
-    res.writeHead(404).end('introuvable')
-  }
-})
-await new Promise((r) => server.listen(PORT, r))
+let server = null
+if (!LIVE) {
+  server = http.createServer(async (req, res) => {
+    const url = (req.url ?? '/').split('?')[0]
+    if (!url.startsWith(PREFIX)) {
+      res.writeHead(404).end('hors préfixe')
+      return
+    }
+    let rel = url.slice(PREFIX.length)
+    if (rel === '' || rel === '/') rel = '/index.html'
+    const file = path.join('dist', rel)
+    try {
+      const body = await readFile(file)
+      res.writeHead(200, { 'Content-Type': TYPES[path.extname(file)] ?? 'application/octet-stream' })
+      res.end(body)
+    } catch {
+      res.writeHead(404).end('introuvable')
+    }
+  })
+  await new Promise((r) => server.listen(PORT, r))
+}
 
 const browser = await puppeteer.launch({ executablePath: EDGE, headless: true, args: ['--no-sandbox'] })
 const page = await browser.newPage()
@@ -73,23 +80,23 @@ page.on('response', (r) => {
 await page.goto(BASE, { waitUntil: 'networkidle2' })
 await new Promise((r) => setTimeout(r, 800))
 
-check('Sous-chemin : la page se charge', page.url().startsWith(BASE), page.url())
+check('la page se charge', page.url().startsWith(BASE), page.url())
 const text = await page.evaluate(() => document.body.innerText.toLowerCase())
-check('Sous-chemin : l’accueil est rendu', text.includes('objectif'), `${text.slice(0, 60).replace(/\n/g, ' ')}…`)
+check('l’accueil est rendu', text.includes('objectif'), `${text.slice(0, 60).replace(/\n/g, ' ')}…`)
 check(
-  'Sous-chemin : aucune ressource en erreur',
+  'aucune ressource en erreur',
   badResponses.length === 0,
   badResponses.slice(0, 5).join(', '),
 )
-check('Sous-chemin : aucune erreur console', consoleErrors.length === 0, consoleErrors.slice(0, 3).join(' | '))
+check('aucune erreur console', consoleErrors.length === 0, consoleErrors.slice(0, 3).join(' | '))
 // le CSS et le JS sont bien chargés depuis le sous-chemin
 const assetOk = await page.evaluate(() => {
   const js = [...document.querySelectorAll('script[src]')].map((s) => s.getAttribute('src'))
   const css = [...document.querySelectorAll('link[rel="stylesheet"]')].map((l) => l.getAttribute('href'))
-  const sheetLoaded = [...document.styleSheets].some((s) => s.href && s.href.includes('/veryhevy/'))
+  const sheetLoaded = [...document.styleSheets].some((s) => s.href && s.href.includes('/assets/'))
   return { js, css, sheetLoaded }
 })
-check('Sous-chemin : la feuille de style est appliquée', assetOk.sheetLoaded, assetOk.css.join(', '))
+check('la feuille de style est appliquée', assetOk.sheetLoaded, assetOk.css.join(', '))
 
 // navigation par onglets
 await page.evaluate(() => {
@@ -97,7 +104,7 @@ await page.evaluate(() => {
   link?.click()
 })
 await new Promise((r) => setTimeout(r, 900))
-check('Sous-chemin : la navigation par onglets fonctionne', page.url().includes('#/stats'), page.url())
+check('la navigation par onglets fonctionne', page.url().includes('#/stats'), page.url())
 
 // manifeste
 const manifest = await page.evaluate(async () => {
@@ -106,9 +113,9 @@ const manifest = await page.evaluate(async () => {
   const res = await fetch(link.href)
   return res.ok ? await res.json() : { error: res.status }
 })
-check('Sous-chemin : le manifeste PWA est accessible', Boolean(manifest?.name), manifest?.name ?? JSON.stringify(manifest))
+check('le manifeste PWA est accessible', Boolean(manifest?.name), manifest?.name ?? JSON.stringify(manifest))
 check(
-  'Sous-chemin : les icônes du manifeste pointent au bon endroit',
+  'les icônes du manifeste pointent au bon endroit',
   Array.isArray(manifest?.icons) && manifest.icons.every((i) => !String(i.src).startsWith('/')),
   JSON.stringify(manifest?.icons?.[0]?.src),
 )
@@ -124,34 +131,63 @@ const sw = await page.evaluate(async () => {
   if (!regs.length || !regs[0].active) return { state: 'inactif' }
   return { state: 'ok', scope: regs[0].scope, controlled: Boolean(navigator.serviceWorker.controller) }
 })
-check('Sous-chemin : le service worker est actif', sw.state === 'ok', JSON.stringify(sw))
+check('le service worker est actif', sw.state === 'ok', JSON.stringify(sw))
 check(
-  'Sous-chemin : sa portée couvre bien le sous-chemin',
-  sw.state === 'ok' && sw.scope.endsWith(`${PREFIX}/`),
-  sw.scope ?? '',
+  'sa portée couvre bien le sous-chemin',
+  sw.state === 'ok' && sw.scope === BASE,
+  `${sw.scope ?? ''} (attendu ${BASE})`,
 )
 
-// Rechargement réellement hors ligne : on coupe l'origine, le SW doit servir
-// la page depuis son cache (Puppeteer n'émule pas la coupure pour le SW).
+// précache : tous les fichiers référencés par index.html doivent être en cache,
+// sinon l'application affiche un écran blanc hors ligne.
+const coverage = await page.evaluate(async () => {
+  const cacheNames = await caches.keys()
+  const cached = new Set()
+  for (const name of cacheNames) {
+    const cache = await caches.open(name)
+    for (const req of await cache.keys()) cached.add(new URL(req.url).pathname)
+  }
+  const html = await (await fetch('./index.html')).text()
+  const refs = [...html.matchAll(/(?:src|href)="(\.\/[^"]+)"/g)].map((m) => m[1])
+  const missing = refs.filter((ref) => !cached.has(new URL(ref, location.href).pathname))
+  return { refs, missing, cacheNames }
+})
+check(
+  'Précache : les fichiers compilés sont mis en cache',
+  coverage.missing.length === 0,
+  coverage.missing.length ? `manquants : ${coverage.missing.join(', ')}` : `${coverage.refs.length} fichiers`,
+)
+
+// Rechargement réellement hors ligne.
 if (sw.state === 'ok' && sw.controlled) {
   await page.evaluate(() => {
     location.hash = '#/'
   })
   await new Promise((r) => setTimeout(r, 500))
-  await new Promise((r) => server.close(r))
-  server.closeAllConnections?.()
+
+  if (server) {
+    // local : on coupe l'origine, le SW doit servir depuis son cache
+    await new Promise((r) => server.close(r))
+    server.closeAllConnections?.()
+    server = null
+  } else {
+    // en ligne : Puppeteer n'émule pas la coupure pour le service worker,
+    // on se contente de l'émulation côté page
+    await page.setOfflineMode(true)
+  }
+
   await page.reload({ waitUntil: 'domcontentloaded' })
   await new Promise((r) => setTimeout(r, 1500))
   const offlineText = await page.evaluate(() => document.body.innerText.toLowerCase())
   check(
-    'Sous-chemin : l’application reste utilisable sans serveur (hors ligne)',
+    'Hors ligne : l’application reste utilisable',
     offlineText.includes('objectif'),
-    `${offlineText.slice(0, 50).replace(/\n/g, ' ')}…`,
+    `${offlineText.slice(0, 45).replace(/\n/g, ' ')}…`,
   )
-} else {
-  server.close()
+  await page.setOfflineMode(false)
 }
 
 await browser.close()
-console.log(failures === 0 ? '\n✅ build compatible GitHub Pages' : `\n❌ ${failures} problème(s)`)
+server?.close()
+console.log(failures === 0 ? `\n✅ ${BASE} est fonctionnel` : `\n❌ ${failures} problème(s)`)
 process.exitCode = failures === 0 ? 0 : 1
