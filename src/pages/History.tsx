@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ChevronRight, Dumbbell, Search, Star } from 'lucide-react'
+import { ChevronRight, Dumbbell, Search, Share2, Star } from 'lucide-react'
 import { useStore } from '@/store/store'
 import { Page, PageHeader } from '@/components/PageHeader'
-import { Button, Card, Chip, EmptyState, Input } from '@/components/ui'
+import { Button, Card, Chip, EmptyState, IconButton, Input } from '@/components/ui'
 import {
   completedWorkouts,
   muscleBreakdown,
@@ -12,6 +12,7 @@ import {
   workoutVolume,
 } from '@/lib/calc'
 import { formatDate, formatDuration, formatVolume, normalize } from '@/lib/utils'
+import { shareWorkout } from '@/lib/share'
 
 type Period = 'tout' | '30j' | '90j' | 'annee'
 
@@ -20,6 +21,7 @@ export default function HistoryPage() {
   const workouts = useStore((s) => s.workouts)
   const exercises = useStore((s) => s.exercises)
   const settings = useStore((s) => s.settings)
+  const notify = useStore((s) => s.notify)
   const [query, setQuery] = useState('')
   const [period, setPeriod] = useState<Period>('tout')
 
@@ -166,7 +168,23 @@ export default function HistoryPage() {
                               <span className="text-[11px] font-bold">{w.rating}</span>
                             </span>
                           ) : null}
-                          <ChevronRight size={16} className="mt-auto text-muted" />
+                          <span className="mt-auto flex items-center">
+                            <IconButton
+                              label={`Partager la séance « ${w.name} »`}
+                              className="h-8 w-8"
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                const previousWorkouts = completedWorkouts(workouts).filter(
+                                  (o) => o.id !== w.id && +new Date(o.startedAt) < +new Date(w.startedAt),
+                                )
+                                void shareWorkout({ workout: w, exercises, settings, previousWorkouts, notify })
+                              }}
+                            >
+                              <Share2 size={15} />
+                            </IconButton>
+                            <ChevronRight size={16} className="text-muted" />
+                          </span>
                         </div>
                       </div>
                     </Link>

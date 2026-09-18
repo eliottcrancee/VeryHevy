@@ -22,6 +22,7 @@ import {
   Pencil,
   Play,
   Save,
+  Share2,
   Trash2,
   Trophy,
   Weight,
@@ -56,6 +57,7 @@ import {
 } from '@/lib/calc'
 import { CATEGORY_META, SET_TYPE_META } from '@/types'
 import { downloadJSON, formatDate, formatDistance, formatDuration, formatTime, formatVolume, formatWeight, kgToDisplay } from '@/lib/utils'
+import { shareWorkout } from '@/lib/share'
 
 export default function WorkoutReportPage() {
   const { id = '' } = useParams()
@@ -69,6 +71,7 @@ export default function WorkoutReportPage() {
   const updateWorkout = useStore((s) => s.updateWorkout)
   const saveWorkoutAsRoutine = useStore((s) => s.saveWorkoutAsRoutine)
   const startWorkout = useStore((s) => s.startWorkout)
+  const notify = useStore((s) => s.notify)
 
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [saveRoutineOpen, setSaveRoutineOpen] = useState(false)
@@ -156,6 +159,16 @@ export default function WorkoutReportPage() {
                 }}
               >
                 <Pencil size={17} />
+              </IconButton>
+            )}
+            {!isActive && (
+              <IconButton
+                label="Partager la séance"
+                onClick={() =>
+                  void shareWorkout({ workout, exercises, settings, previousWorkouts, notify })
+                }
+              >
+                <Share2 size={17} />
               </IconButton>
             )}
             <Menu
