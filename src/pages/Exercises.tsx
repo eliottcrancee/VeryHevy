@@ -151,11 +151,6 @@ export default function ExercisesPage() {
         subtitle={`${exercises.length} exercices · ${exercises.filter((e) => e.isCustom).length} personnalisés`}
         actions={
           <>
-            {/* Cohérence avec le reste de l'app : « + » = créer (action directe),
-                les actions secondaires vivent dans le menu « ⋯ ». */}
-            <IconButton label="Créer un exercice" onClick={() => setCreateOpen(true)}>
-              <Plus size={19} />
-            </IconButton>
             <IconButton label="Importer" onClick={() => setImportOpen(true)}>
               <CloudDownload size={18} />
             </IconButton>
@@ -167,11 +162,10 @@ export default function ExercisesPage() {
                 </IconButton>
               )}
               items={[
-                { label: 'Importer la base complète', icon: <Database size={15} />, onClick: () => setImportOpen(true) },
                 {
-                  label: 'Restaurer les exercices par défaut',
-                  icon: <RefreshCw size={15} />,
-                  onClick: restoreBuiltinExercises,
+                  label: 'Bibliothèque : importer / restaurer',
+                  icon: <Database size={15} />,
+                  onClick: () => setImportOpen(true),
                 },
                 {
                   label: `Retirer les exercices importés (${importedCount})`,
@@ -214,7 +208,12 @@ export default function ExercisesPage() {
             <Filter size={16} />
             {activeFilters > 0 && <span className="text-xs">{activeFilters}</span>}
           </Button>
-          <Button variant="secondary" className="h-11 shrink-0" onClick={() => setCreateOpen(true)}>
+          <Button
+            variant="secondary"
+            className="h-11 shrink-0"
+            aria-label="Créer un exercice"
+            onClick={() => setCreateOpen(true)}
+          >
             <Plus size={16} />
           </Button>
         </div>
@@ -347,8 +346,8 @@ export default function ExercisesPage() {
 
       <ExerciseFormModal open={createOpen} onClose={() => setCreateOpen(false)} />
 
-      {/* Import */}
-      <Modal open={importOpen} onClose={() => setImportOpen(false)} title="Importer des exercices" size="md">
+      {/* Import / restauration */}
+      <Modal open={importOpen} onClose={() => setImportOpen(false)} title="Bibliothèque : importer / restaurer" size="md">
         <div className="space-y-4">
           <Card className="border-accent-line bg-accent-soft p-3.5">
             <p className="text-sm font-bold">Base libre free-exercise-db</p>
@@ -369,6 +368,27 @@ export default function ExercisesPage() {
               « Remplacer tout » efface la bibliothèque actuelle (y compris vos exercices personnalisés).
               Préférez « Compléter », qui détecte les doublons par nom.
             </p>
+          </Card>
+
+          <Card className="p-3.5">
+            <p className="text-sm font-bold">Exercices par défaut VeryHevy</p>
+            <p className="mt-1 text-xs text-muted">
+              Réintègre les {SEED_EXERCISES.length} exercices français intégrés, sans toucher au reste
+              de la bibliothèque.
+            </p>
+            <div className="mt-3">
+              <Button
+                size="sm"
+                disabled={importing}
+                onClick={() => {
+                  restoreBuiltinExercises()
+                  setImportOpen(false)
+                }}
+              >
+                <RefreshCw size={14} />
+                Restaurer les exercices par défaut
+              </Button>
+            </div>
           </Card>
 
           <Field label="Or, importer un fichier JSON">

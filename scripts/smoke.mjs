@@ -278,7 +278,7 @@ async function main() {
         input.dispatchEvent(new Event('input', { bubbles: true }))
       })
       await page.evaluate(() => {
-        // « + » de l'en-tête = création directe (le reste est dans le menu « ⋯ »)
+        // « + » de la barre de recherche = création directe
         const btn = [...document.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === 'Créer un exercice')
         btn?.click()
       })

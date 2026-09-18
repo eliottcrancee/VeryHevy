@@ -44,6 +44,41 @@ async function call(path: string, init?: RequestInit): Promise<Response> {
 
 let running: Promise<SyncSummary> | null = null
 
+/* ------------------------------------------------------------------ */
+/* Déclencheur différé (sync sur événement)                            */
+/* ------------------------------------------------------------------ */
+
+let kickTimer: ReturnType<typeof setTimeout> | null = null
+
+/**
+ * Planifie une synchro dans quelques secondes (anti-rebond) : toute
+ * modification locale (fin de séance, suppression, programme, exercice…)
+ * tente une synchro sans bloquer l'interface. `syncNow` ignore l'appel si
+ * une passe est déjà en cours ou si la synchro n'est pas configurée.
+ */
+export function kickSoon(delayMs = 4000): void {
+  if (typeof window === 'undefined') return
+  if (kickTimer) clearTimeout(kickTimer)
+  kickTimer = setTimeout(() => {
+    kickTimer = null
+    if (useStore.getState().settings.sync.enabled) void syncNow()
+  }, delayMs)
+}
+
+/** Empreinte des données synchronisables (volumes + dernier horodatage). */
+function syncFingerprint(): string {
+  const s = useStore.getState()
+  const stamp = (list: { updatedAt?: string; createdAt?: string }[]): string => {
+    let max = ''
+    for (const e of list) {
+      const t = e.updatedAt ?? e.createdAt ?? ''
+      if (t > max) max = t
+    }
+    return `${list.length}:${max}`
+  }
+  return [stamp(s.workouts), stamp(s.routines), stamp(s.exercises), s.syncDeleted.length].join('|')
+}
+
 /** Une passe complète : push des modifs locales puis pull. */
 export function syncNow(): Promise<SyncSummary> {
   if (running) return running
@@ -97,7 +132,7 @@ export function syncNow(): Promise<SyncSummary> {
 
 let started = false
 
-/** À appeler une fois au démarrage (boot + online + intervalle 5 min). */
+/** À appeler une fois au démarrage (boot + online + intervalle 5 min + événements). */
 export function startAutoSync() {
   if (started || typeof window === 'undefined') return
   started = true
@@ -108,4 +143,14 @@ export function startAutoSync() {
   // Première passe peu après l'hydratation (laisse IndexedDB répondre).
   setTimeout(kick, 4000)
   setInterval(kick, 5 * 60 * 1000)
+  // Toute modification des données (fin de séance, suppression, programme,
+  // exercice…) déclenche une synchro différée. Les réglages seuls ne sont
+  // pas dans l'empreinte : ils ne partent jamais sur le serveur.
+  let lastFp = syncFingerprint()
+  useStore.subscribe(() => {
+    const fp = syncFingerprint()
+    if (fp === lastFp) return
+    lastFp = fp
+    kickSoon()
+  })
 }

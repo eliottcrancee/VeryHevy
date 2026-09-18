@@ -379,16 +379,25 @@ export const useStore = create<StoreState>()(
 
       importData: (data) => {
         const current = get()
+        const asArray = <T>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : [])
         const exercises = data.exercises?.length
-          ? mergeExercises(current.exercises, data.exercises).exercises
+          ? mergeExercises(current.exercises, asArray<Exercise>(data.exercises)).exercises
           : current.exercises
-        const workouts = mergeById(current.workouts, data.workouts ?? [])
-        const routines = mergeById(current.routines, data.routines ?? [])
+        const workouts = mergeById(current.workouts, asArray<Workout>(data.workouts))
+        const routines = mergeById(current.routines, asArray<Routine>(data.routines))
+        // Les réglages de synchro de CET appareil sont conservés : restaurer
+        // une sauvegarde (p. ex. venue d'un autre téléphone) ne doit jamais
+        // écraser l'URL / le jeton configurés ici.
+        const incomingSettings: Partial<Settings> = data.settings ?? {}
         set({
           exercises,
           workouts,
           routines,
-          settings: { ...current.settings, ...(data.settings ?? {}) },
+          settings: {
+            ...current.settings,
+            ...incomingSettings,
+            sync: { ...current.settings.sync, ...(incomingSettings.sync ?? {}) },
+          },
         })
         get().notify(
           `Import réussi : ${workouts.length - current.workouts.length} séance(s), ${routines.length - current.routines.length} programme(s)`,

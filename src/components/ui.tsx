@@ -551,8 +551,11 @@ export function Checkbox({
       >
         <span
           className={cn(
-            'absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform',
-            checked ? 'translate-x-[1.125rem]' : 'translate-x-0.5',
+            // Piste 40 px, pastille 20 px, marges 2 px : positions en px fixes
+            // (pas de rem, insensible à la taille de police racine).
+            // Repos : x = 2. Actif : x = 40 − 20 − 2 − 2 = 16.
+            'absolute top-[2px] left-[2px] h-5 w-5 rounded-full bg-white shadow transition-transform',
+            checked ? 'translate-x-[16px]' : 'translate-x-0',
           )}
         />
       </button>

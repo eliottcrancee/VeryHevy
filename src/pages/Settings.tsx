@@ -58,6 +58,13 @@ export default function SettingsPage() {
 
   const [confirmReset, setConfirmReset] = useState(false)
   const [confirmReplace, setConfirmReplace] = useState(false)
+  const [pendingRestore, setPendingRestore] = useState<{
+    name: string
+    workouts: number
+    routines: number
+    exercises: number
+    data: Partial<AppData>
+  } | null>(null)
   const [busy, setBusy] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -110,7 +117,20 @@ export default function SettingsPage() {
         importExercises(list)
         notify(`${list.length} exercices importés`, 'success')
       } else {
-        importData(json as Partial<AppData>)
+        // Sauvegarde complète : on valide le fichier et on affiche son contenu
+        // avant de fusionner, pour éviter les mauvaises surprises.
+        const rec = (json ?? {}) as Partial<AppData> & { app?: unknown }
+        const looksLikeBackup =
+          rec.app === 'VeryHevy' || (Array.isArray(rec.workouts) && Array.isArray(rec.exercises))
+        if (json === null || typeof json !== 'object' || !looksLikeBackup) {
+          throw new Error('Ce fichier n’est pas une sauvegarde VeryHevy')
+        }
+        const count = (v: unknown): number => (Array.isArray(v) ? v.length : 0)
+        const w = count(rec.workouts)
+        const r = count(rec.routines)
+        const e = count(rec.exercises)
+        if (!w && !r && !e) throw new Error('Sauvegarde vide : rien à restaurer')
+        setPendingRestore({ name: file.name, workouts: w, routines: r, exercises: e, data: rec })
       }
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Fichier illisible', 'error')
@@ -346,7 +366,9 @@ export default function SettingsPage() {
             </span>
           </SectionTitle>
           <p className="text-sm text-muted">
-            Sauvegarde et réconcilie vos données avec votre serveur quand internet est disponible.
+            Sauvegarde et réconcilie vos données avec votre serveur : automatiquement après
+            chaque modification (fin de séance, programme, exercice…), toutes les 5 minutes et au
+            retour d’internet.
             100 % local par défaut — rien ne part tant que ce n’est pas configuré. La séance en
             cours et le chrono ne sont jamais synchronisés.
           </p>
@@ -424,6 +446,29 @@ export default function SettingsPage() {
           } finally {
             setBusy(false)
           }
+        }}
+      />
+
+      <ConfirmDialog
+        open={pendingRestore !== null}
+        title="Restaurer cette sauvegarde ?"
+        message={
+          pendingRestore && (
+            <>
+              « {pendingRestore.name} » contient {pluralize(pendingRestore.workouts, 'séance')},{' '}
+              {pluralize(pendingRestore.routines, 'programme')} et {pendingRestore.exercises} exercice(s).
+              <br />
+              La restauration <strong>fusionne</strong> : vos données actuelles sont conservées, le
+              contenu de la sauvegarde est ajouté ou mis à jour. Vos réglages de synchronisation
+              restent inchangés.
+            </>
+          )
+        }
+        confirmLabel="Restaurer"
+        onCancel={() => setPendingRestore(null)}
+        onConfirm={() => {
+          if (pendingRestore) importData(pendingRestore.data)
+          setPendingRestore(null)
         }}
       />
 
