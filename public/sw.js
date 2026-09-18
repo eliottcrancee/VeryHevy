@@ -2,7 +2,7 @@
    L'application est précachée à l'installation (y compris les fichiers compilés
    aux noms hachés, injectés au build), puis servie instantanément et hors ligne.
    Les données vivent dans IndexedDB, pas ici. */
-const CACHE = 'veryhevy-v3'
+const CACHE = 'veryhevy-v4'
 
 /* Injecté par `vite.config.ts` au moment du build : la liste complète des
    fichiers produits (JS, CSS, HTML, manifeste, icône…). En développement, la
