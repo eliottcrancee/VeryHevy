@@ -314,7 +314,7 @@ export function AppShell() {
             )}
             <nav>
               <div className="flex items-stretch justify-around px-1 pt-1.5 pb-1">
-                {navItems.map((item) => (
+                {[...navItems, { to: '/reglages', label: 'Réglages', icon: SettingsIcon }].map((item) => (
                   <NavLink
                     key={item.to}
                     to={item.to}
