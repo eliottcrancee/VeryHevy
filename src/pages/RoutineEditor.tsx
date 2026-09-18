@@ -26,6 +26,7 @@ import { Page, PageHeader } from '@/components/PageHeader'
 import {
   Button,
   Card,
+  DurationField,
   EmptyState,
   Field,
   IconButton,
@@ -299,15 +300,11 @@ export default function RoutineEditorPage() {
                                   />
                                 )}
                                 {fields.includes('duration') && (
-                                  <NumberField
-                                    className="h-9 flex-1 border-transparent bg-surface-2/60"
+                                  <DurationField
                                     value={set.duration}
                                     onChange={(v) => updateSets(re, i, { duration: v })}
-                                    step={5}
-                                    decimals={0}
-                                    placeholder="durée"
-                                    suffix="s"
                                     ariaLabel={`Durée série ${i + 1}`}
+                                    className="min-w-0 flex-1 border-transparent bg-surface-2/60"
                                   />
                                 )}
                                 {fields.includes('distance') && (

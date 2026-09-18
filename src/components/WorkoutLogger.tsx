@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { memo, useCallback, useMemo, useState } from 'react'
 import {
   ArrowDown,
   ArrowUp,
@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import type { Exercise, SetType, Workout, WorkoutExercise, WorkoutSet } from '@/types'
 import { SET_TYPE_META } from '@/types'
-import { Button, CheckBadge, IconButton, Menu, Modal, NumberField, Textarea } from '@/components/ui'
+import { Button, CheckBadge, DurationField, IconButton, Menu, Modal, NumberField, Textarea } from '@/components/ui'
 import { CategoryBadge } from '@/components/ExerciseFormModal'
 import { ExerciseAvatar } from '@/components/ExercisePicker'
 import { useStore, trackingFieldsOf } from '@/store/store'
@@ -37,8 +37,148 @@ interface SetRowProps {
   onReplace: () => void
 }
 
-export function SetRow({ workoutId, we, set, index, exercise, unit, distanceUnit, showRpe, onReplace }: SetRowProps) {
+/**
+ * Un champ de saisie isolé : ne s'abonne qu'à SA valeur primitive dans le
+ * store, avec un callback stable. Pendant la frappe, seul ce mini composant
+ * se re-rend (pas toute la page) — indispensable au clavier sur téléphone.
+ */
+const SetFieldInput = memo(function SetFieldInput({
+  workoutId,
+  weId,
+  setId,
+  index,
+  field,
+  exercise,
+  unit,
+  distanceUnit,
+}: {
+  workoutId: string
+  weId: string
+  setId: string
+  index: number
+  field: 'weight' | 'reps' | 'duration' | 'distance' | 'rpe'
+  exercise: Exercise | undefined
+  unit: 'kg' | 'lb'
+  distanceUnit: 'km' | 'mi'
+}) {
   const updateSet = useStore((s) => s.updateSet)
+  const raw = useStore((s) => {
+    const st = s.workouts
+      .find((w) => w.id === workoutId)
+      ?.exercises.find((e) => e.id === weId)
+      ?.sets.find((x) => x.id === setId)
+    if (!st) return undefined
+    switch (field) {
+      case 'weight':
+        return st.weight
+      case 'reps':
+        return st.reps
+      case 'duration':
+        return st.duration
+      case 'distance':
+        return st.distance
+      case 'rpe':
+        return st.rpe
+    }
+  })
+
+  const handleNumber = useCallback(
+    (v: number | undefined) => {
+      switch (field) {
+        case 'weight':
+          updateSet(workoutId, weId, setId, { weight: inputToKg(v, unit) })
+          break
+        case 'reps':
+          updateSet(workoutId, weId, setId, { reps: v })
+          break
+        case 'distance':
+          updateSet(workoutId, weId, setId, { distance: displayToMeters(v, distanceUnit) })
+          break
+        case 'rpe':
+          updateSet(workoutId, weId, setId, { rpe: v })
+          break
+        case 'duration':
+          updateSet(workoutId, weId, setId, { duration: v })
+          break
+      }
+    },
+    [updateSet, workoutId, weId, setId, field, unit, distanceUnit],
+  )
+
+  if (field === 'duration') {
+    return (
+      <DurationField
+        value={raw}
+        onChange={handleNumber}
+        ariaLabel={`Durée série ${index + 1}`}
+        className="min-w-0 flex-1 border-transparent bg-surface-2/70"
+      />
+    )
+  }
+
+  const label = `Série ${index + 1}`
+  switch (field) {
+    case 'weight':
+      return (
+        <NumberField
+          compact
+          stepless
+          ariaLabel={`Poids ${label.toLowerCase()}`}
+          value={kgToInput(raw, unit)}
+          onChange={handleNumber}
+          decimals={unit === 'kg' ? 2 : 1}
+          placeholder={exercise?.tracking === 'bodyweight_reps' ? 'PDC' : '0'}
+          suffix={unit}
+          className="h-9 min-w-0 flex-[1.15] border-transparent bg-surface-2/70"
+        />
+      )
+    case 'reps':
+      return (
+        <NumberField
+          compact
+          stepless
+          ariaLabel={`Répétitions ${label.toLowerCase()}`}
+          value={raw}
+          onChange={handleNumber}
+          decimals={0}
+          placeholder="0"
+          className="h-9 min-w-0 flex-1 border-transparent bg-surface-2/70"
+        />
+      )
+    case 'distance':
+      return (
+        <NumberField
+          compact
+          stepless
+          ariaLabel={`Distance ${label.toLowerCase()}`}
+          value={metersToDisplay(raw, distanceUnit)}
+          onChange={handleNumber}
+          decimals={2}
+          placeholder="0"
+          suffix={distanceUnit}
+          className="h-9 min-w-0 flex-[1.15] border-transparent bg-surface-2/70"
+        />
+      )
+    case 'rpe':
+      return (
+        <NumberField
+          compact
+          stepless
+          ariaLabel={`RPE ${label.toLowerCase()}`}
+          value={raw}
+          onChange={handleNumber}
+          min={1}
+          max={10}
+          decimals={1}
+          placeholder="RPE"
+          className="h-9 w-14 shrink-0 border-transparent bg-surface-2/70"
+        />
+      )
+  }
+  return null
+})
+
+export function SetRow({ workoutId, we, set, index, exercise, unit, distanceUnit, showRpe, onReplace }: SetRowProps) {
   const removeSet = useStore((s) => s.removeSet)
   const duplicateSet = useStore((s) => s.duplicateWorkoutSet)
   const toggleSetCompleted = useStore((s) => s.toggleSetCompleted)
@@ -47,10 +187,6 @@ export function SetRow({ workoutId, we, set, index, exercise, unit, distanceUnit
   const fields = trackingFieldsOf(exercise)
   const meta = SET_TYPE_META[set.type]
   const isWarmup = set.type === 'echauffement'
-
-  const patch = (p: Partial<WorkoutSet>) => updateSet(workoutId, we.id, set.id, p)
-
-  const distanceInDisplay = metersToDisplay(set.distance, distanceUnit)
 
   const cycleType = () => {
     const order: SetType[] = ['normal', 'echauffement', 'degressive', 'echec']
@@ -88,84 +224,30 @@ export function SetRow({ workoutId, we, set, index, exercise, unit, distanceUnit
         {meta.short || '·'}
       </button>
 
-      {fields.map((field) => {
-        if (field === 'weight') {
-          return (
-            <NumberField
-              key={field}
-              compact
-              ariaLabel={`Poids série ${index + 1}`}
-              value={kgToInput(set.weight, unit)}
-              onChange={(v) => patch({ weight: inputToKg(v, unit) })}
-              step={unit === 'lb' ? 5 : exercise?.tracking === 'bodyweight_reps' ? 5 : 2.5}
-              decimals={unit === 'kg' ? 2 : 1}
-              placeholder={exercise?.tracking === 'bodyweight_reps' ? 'PDC' : '0'}
-              suffix={unit}
-              className="h-9 min-w-0 flex-[1.15] border-transparent bg-surface-2/70"
-            />
-          )
-        }
-        if (field === 'reps') {
-          return (
-            <NumberField
-              key={field}
-              compact
-              ariaLabel={`Répétitions série ${index + 1}`}
-              value={set.reps}
-              onChange={(v) => patch({ reps: v })}
-              step={1}
-              decimals={0}
-              placeholder="0"
-              className="h-9 min-w-0 flex-1 border-transparent bg-surface-2/70"
-            />
-          )
-        }
-        if (field === 'duration') {
-          return (
-            <NumberField
-              key={field}
-              compact
-              ariaLabel={`Durée série ${index + 1}`}
-              value={set.duration}
-              onChange={(v) => patch({ duration: v })}
-              step={5}
-              decimals={0}
-              placeholder="0"
-              suffix="s"
-              className="h-9 min-w-0 flex-1 border-transparent bg-surface-2/70"
-            />
-          )
-        }
-        return (
-          <NumberField
-            key={field}
-            compact
-            ariaLabel={`Distance série ${index + 1}`}
-            value={distanceInDisplay}
-            onChange={(v) =>
-              patch({ distance: displayToMeters(v, distanceUnit) })
-            }
-            step={0.1}
-            decimals={2}
-            placeholder="0"
-            suffix={distanceUnit}
-            className="h-9 min-w-0 flex-[1.15] border-transparent bg-surface-2/70"
-          />
-        )
-      })}
+      {fields.map((field) => (
+        <SetFieldInput
+          key={field}
+          workoutId={workoutId}
+          weId={we.id}
+          setId={set.id}
+          index={index}
+          field={field}
+          exercise={exercise}
+          unit={unit}
+          distanceUnit={distanceUnit}
+        />
+      ))}
 
       {showRpe && (
-        <NumberField
-          compact
-          ariaLabel={`RPE série ${index + 1}`}
-          value={set.rpe}
-          onChange={(v) => patch({ rpe: v })}
-          step={0.5}
-          min={1}
-          max={10}
-          decimals={1}
-          placeholder="RPE"
-          className="h-9 w-14 shrink-0 border-transparent bg-surface-2/70"
+        <SetFieldInput
+          workoutId={workoutId}
+          weId={we.id}
+          setId={set.id}
+          index={index}
+          field="rpe"
+          exercise={exercise}
+          unit={unit}
+          distanceUnit={distanceUnit}
         />
       )}
 

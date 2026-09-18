@@ -1,5 +1,6 @@
 import {
   createContext,
+  memo,
   useContext,
   useEffect,
   useId,
@@ -275,10 +276,12 @@ export interface NumberFieldProps {
   ariaLabel?: string
   /** Version dense pour les lignes de séries (boutons + texte réduits). */
   compact?: boolean
+  /** Masque les boutons +/- : toute la largeur est dédiée à la saisie. */
+  stepless?: boolean
 }
 
 /** Champ numérique tactile : saisie directe + boutons +/- */
-export function NumberField({
+export const NumberField = memo(function NumberField({
   value,
   onChange,
   step = 1,
@@ -291,6 +294,7 @@ export function NumberField({
   decimals = 1,
   ariaLabel,
   compact,
+  stepless,
 }: NumberFieldProps) {
   const [text, setText] = useState(value === undefined ? '' : String(value))
   const focused = useRef(false)
@@ -333,19 +337,22 @@ export function NumberField({
         className,
       )}
     >
-      <button
-        type="button"
-        tabIndex={-1}
-        onClick={() => bump(-1)}
-        className={btnCls}
-        aria-label="Diminuer"
-      >
-        <Minus size={compact ? 12 : 14} />
-      </button>
+      {!stepless && (
+        <button
+          type="button"
+          tabIndex={-1}
+          onClick={() => bump(-1)}
+          className={btnCls}
+          aria-label="Diminuer"
+        >
+          <Minus size={compact ? 12 : 14} />
+        </button>
+      )}
       <div className="relative min-w-0 flex-1">
         <input
           aria-label={ariaLabel}
           inputMode="decimal"
+          autoComplete="off"
           value={text}
           placeholder={placeholder}
           onFocus={() => (focused.current = true)}
@@ -358,8 +365,8 @@ export function NumberField({
             commit(e.target.value)
           }}
           className={cn(
-            'tabular w-full min-w-0 bg-transparent text-center font-semibold outline-none placeholder:font-normal placeholder:text-muted/60',
-            compact ? 'px-0.5 text-sm' : 'text-[15px]',
+            // 16px minimum : iOS ne zoome pas automatiquement au focus.
+            'tabular w-full min-w-0 bg-transparent text-center text-base font-semibold outline-none placeholder:font-normal placeholder:text-muted/60',
             suffix ? 'pr-7 pl-1' : 'px-1',
             inputClassName,
           )}
@@ -370,18 +377,160 @@ export function NumberField({
           </span>
         )}
       </div>
-      <button
-        type="button"
-        tabIndex={-1}
-        onClick={() => bump(1)}
-        className={btnCls}
-        aria-label="Augmenter"
-      >
-        <Plus size={compact ? 12 : 14} />
-      </button>
+      {!stepless && (
+        <button
+          type="button"
+          tabIndex={-1}
+          onClick={() => bump(1)}
+          className={btnCls}
+          aria-label="Augmenter"
+        >
+          <Plus size={compact ? 12 : 14} />
+        </button>
+      )}
     </div>
   )
+})
+
+/** Secondes → "m:ss" (ex. 90 → "1:30"). */
+export function formatClock(totalSeconds: number | undefined): string {
+  if (totalSeconds === undefined || totalSeconds === null || Number.isNaN(totalSeconds)) return ''
+  const s = Math.max(0, Math.round(totalSeconds))
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const sec = s % 60
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
+  return `${m}:${String(sec).padStart(2, '0')}`
 }
+
+export interface DurationFieldProps {
+  /** Durée en secondes. */
+  value: number | undefined
+  onChange: (v: number | undefined) => void
+  className?: string
+  ariaLabel?: string
+}
+
+/**
+ * Saisie de durée en minutes:secondes (idéal cardio) : deux petits champs
+ * purement numériques, sans besoin du caractère « : » au clavier du téléphone.
+ */
+export const DurationField = memo(function DurationField({ value, onChange, className, ariaLabel }: DurationFieldProps) {
+  const toParts = (v: number | undefined) => {
+    if (v === undefined || v === null || Number.isNaN(v)) return { min: '', sec: '' }
+    const s = Math.max(0, Math.round(v))
+    return { min: String(Math.floor(s / 60)), sec: String(s % 60).padStart(2, '0') }
+  }
+
+  const [minText, setMinText] = useState(() => toParts(value).min)
+  const [secText, setSecText] = useState(() => toParts(value).sec)
+  const focused = useRef<'min' | 'sec' | null>(null)
+  const secRef = useRef<HTMLInputElement>(null)
+  const minRef = useRef<HTMLInputElement>(null)
+
+  // Resynchronise depuis le store quand on n'est pas en train de saisir.
+  useEffect(() => {
+    if (focused.current) return
+    const p = toParts(value)
+    setMinText(p.min)
+    setSecText(p.sec)
+  }, [value])
+
+  const commit = (minRaw: string, secRaw: string) => {
+    const m = minRaw.trim() === '' ? null : Number(minRaw)
+    const s = secRaw.trim() === '' ? null : Number(secRaw)
+    if (m === null && s === null) {
+      onChange(undefined)
+      return
+    }
+    if ((m !== null && !Number.isFinite(m)) || (s !== null && !Number.isFinite(s))) return
+    const minutes = Math.min(999, Math.max(0, Math.floor(m ?? 0)))
+    const seconds = Math.min(59, Math.max(0, Math.floor(s ?? 0)))
+    onChange(minutes * 60 + seconds)
+  }
+
+  const onMinChange = (raw: string) => {
+    const cleaned = raw.replace(/[^0-9]/g, '').slice(0, 3)
+    setMinText(cleaned)
+    commit(cleaned, secText)
+    // Avance automatiquement aux secondes après 2 chiffres.
+    if (cleaned.length === 2 && secText === '') secRef.current?.focus()
+  }
+
+  const onSecChange = (raw: string) => {
+    const cleaned = raw.replace(/[^0-9]/g, '').slice(0, 2)
+    setSecText(cleaned)
+    commit(minText, cleaned)
+  }
+
+  const inputCls =
+    'tabular w-full min-w-0 bg-transparent text-center text-base font-semibold outline-none placeholder:font-normal placeholder:text-muted/60'
+
+  // Tout sélectionner au focus : la frappe remplace proprement la valeur
+  // (sinon l'insertion au milieu + la longueur fixe mangent les caractères).
+  const selectAll = (e: React.FocusEvent<HTMLInputElement>) => {
+    e.target.select()
+  }
+
+  return (
+    <div
+      className={cn(
+        'flex h-9 min-w-0 items-center justify-center gap-0.5 rounded-xl border border-line bg-surface-2/70 px-1 transition-colors focus-within:border-accent',
+        className,
+      )}
+      title="Durée en minutes : secondes"
+    >
+      <input
+        ref={minRef}
+        aria-label={ariaLabel ? `${ariaLabel} (minutes)` : 'Minutes'}
+        inputMode="numeric"
+        autoComplete="off"
+        maxLength={3}
+        value={minText}
+        placeholder="0"
+        onFocus={(e) => {
+          focused.current = 'min'
+          selectAll(e)
+        }}
+        onBlur={() => {
+          focused.current = null
+          commit(minText, secText)
+          const p = toParts(value)
+          setMinText(p.min)
+          setSecText(p.sec)
+        }}
+        onChange={(e) => onMinChange(e.target.value)}
+        className={cn(inputCls, 'flex-[1.2]')}
+      />
+      <span className="shrink-0 font-extrabold text-muted">:</span>
+      <input
+        ref={secRef}
+        aria-label={ariaLabel ? `${ariaLabel} (secondes)` : 'Secondes'}
+        inputMode="numeric"
+        autoComplete="off"
+        maxLength={2}
+        value={secText}
+        placeholder="00"
+        onFocus={(e) => {
+          focused.current = 'sec'
+          selectAll(e)
+        }}
+        onBlur={() => {
+          focused.current = null
+          commit(minText, secText)
+          const p = toParts(value)
+          setMinText(p.min)
+          setSecText(p.sec)
+        }}
+        onChange={(e) => onSecChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Backspace' && secText === '') minRef.current?.focus()
+        }}
+        className={cn(inputCls, 'flex-1')}
+      />
+    </div>
+  )
+})
 
 export function Checkbox({
   checked,
