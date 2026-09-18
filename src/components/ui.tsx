@@ -423,193 +423,86 @@ export interface DurationFieldProps {
 }
 
 /**
- * Saisie de durée en heures:minutes:secondes (idéal cardio) : trois petits
- * champs purement numériques, sans besoin du caractère « : » au clavier du
- * téléphone. Les heures restent vides quand elles sont nulles (affichage
- * compact « m:ss »).
+ * Saisie de durée en continu, style chrono (idéal cardio) : UN seul champ,
+ * chaque chiffre tapé décale les précédents vers la gauche — « 1 » → 0:01,
+ * « 13 » → 0:13, « 130 » → 1:30, « 13045 » → 1:30:45. Pas de « : » à taper,
+ * aucun saut de focus, retour arrière = on retire le dernier chiffre.
  */
 export const DurationField = memo(function DurationField({ value, onChange, className, ariaLabel, phantom }: DurationFieldProps) {
-  const toParts = (v: number | undefined) => {
-    if (v === undefined || v === null || Number.isNaN(v)) return { h: '', min: '', sec: '' }
+  /** Secondes → chiffres bruts (ex. 90 → « 130 », 3723 → « 10203 », 0 → « »). */
+  const digitsOf = (v: number | undefined): string => {
+    if (v === undefined || v === null || Number.isNaN(v)) return ''
     const s = Math.max(0, Math.round(v))
+    if (s === 0) return ''
     const h = Math.floor(s / 3600)
     const m = Math.floor((s % 3600) / 60)
-    return {
-      h: h > 0 ? String(h) : '',
-      min: h > 0 ? String(m).padStart(2, '0') : String(m),
-      sec: String(s % 60).padStart(2, '0'),
-    }
+    const sec = s % 60
+    const tail = `${m}${String(sec).padStart(2, '0')}`
+    return h > 0 ? `${h}${tail}` : tail
   }
 
-  const [hText, setHText] = useState(() => toParts(value).h)
-  const [minText, setMinText] = useState(() => toParts(value).min)
-  const [secText, setSecText] = useState(() => toParts(value).sec)
-  const focused = useRef<'h' | 'min' | 'sec' | null>(null)
-  /** Le champ était-il vide à la prise de focus ? Seul ce cas déclenche l'avance auto. */
-  const wasEmpty = useRef(false)
-  const hRef = useRef<HTMLInputElement>(null)
-  const minRef = useRef<HTMLInputElement>(null)
-  const secRef = useRef<HTMLInputElement>(null)
+  /** Chiffres bruts → secondes (groupés par la droite : SS MM HH). Tout-zéro = vide. */
+  const totalOf = (digits: string): number | undefined => {
+    if (!digits || /^0+$/.test(digits)) return undefined
+    const d = digits.slice(-6).padStart(6, '0')
+    const sec = Number(d.slice(4, 6))
+    const min = Number(d.slice(2, 4))
+    const h = Number(d.slice(0, 2))
+    return h * 3600 + min * 60 + sec
+  }
+
+  const [digits, setDigits] = useState(() => digitsOf(value))
+  const focused = useRef(false)
 
   // Resynchronise depuis le store quand on n'est pas en train de saisir.
   useEffect(() => {
-    if (focused.current) return
-    const p = toParts(value)
-    setHText(p.h)
-    setMinText(p.min)
-    setSecText(p.sec)
+    if (!focused.current) setDigits(digitsOf(value))
   }, [value])
 
-
-
-  const parseParts = (hRaw: string, minRaw: string, secRaw: string): number | undefined => {
-    const h = hRaw.trim() === '' ? null : Number(hRaw)
-    const m = minRaw.trim() === '' ? null : Number(minRaw)
-    const s = secRaw.trim() === '' ? null : Number(secRaw)
-    if (h === null && m === null && s === null) return undefined
-    if ((h !== null && !Number.isFinite(h)) || (m !== null && !Number.isFinite(m)) || (s !== null && !Number.isFinite(s))) {
-      return undefined
-    }
-    const hours = Math.min(99, Math.max(0, Math.floor(h ?? 0)))
-    const minutes = Math.min(59, Math.max(0, Math.floor(m ?? 0)))
-    const seconds = Math.min(59, Math.max(0, Math.floor(s ?? 0)))
-    return hours * 3600 + minutes * 60 + seconds
-  }
-
-  const commit = (hRaw: string, minRaw: string, secRaw: string) => {
-    onChange(parseParts(hRaw, minRaw, secRaw))
-  }
-
-  const onHChange = (raw: string) => {
-    const cleaned = raw.replace(/[^0-9]/g, '').slice(0, 2)
-    setHText(cleaned)
-    commit(cleaned, minText, secText)
-    // Avance auto aux minutes après 2 chiffres saisis dans un champ vide.
-    if (cleaned.length === 2 && wasEmpty.current) {
-      wasEmpty.current = false
-      minRef.current?.focus()
-    }
-  }
-
-  const onMinChange = (raw: string) => {
-    const cleaned = raw.replace(/[^0-9]/g, '').slice(0, 2)
-    setMinText(cleaned)
-    commit(hText, cleaned, secText)
-    // Avance auto aux secondes après 2 chiffres saisis dans un champ vide.
-    if (cleaned.length === 2 && wasEmpty.current) {
-      wasEmpty.current = false
-      secRef.current?.focus()
-    }
-  }
-
-  const onSecChange = (raw: string) => {
-    const cleaned = raw.replace(/[^0-9]/g, '').slice(0, 2)
-    setSecText(cleaned)
-    commit(hText, minText, cleaned)
-  }
-
-  const inputCls = cn(
-    'tabular w-full min-w-0 bg-transparent text-center text-base font-semibold outline-none placeholder:font-normal placeholder:text-muted/60',
-    phantom && 'font-medium text-muted/70',
-  )
-
-  // Tout sélectionner au focus : la frappe remplace proprement la valeur
-  // (sinon l'insertion au milieu + la longueur fixe mangent les caractères).
-  const onFocus = (which: 'h' | 'min' | 'sec', current: string) => (e: React.FocusEvent<HTMLInputElement>) => {
-    focused.current = which
-    // Un champ vide OU rempli de zéros (issu du formatage « 00 ») se comporte
-    // comme un champ vierge : 2 chiffres saisis → avance auto au suivant.
-    wasEmpty.current = current === '' || /^0+$/.test(current)
-    e.target.select()
-  }
-  // Au blur on relit le DOM (réfs) puis on reformate depuis le total calculé :
-  // jamais depuis un état périmé (le blur du champ A se joue pendant le focus
-  // du champ B, avec des closures de l'ancien rendu — c'est ce qui écrasait
-  // la frappe, ex. « 30 » redevenu « 03 »).
-  const onBlur = () => {
-    focused.current = null
-    const h = hRef.current?.value ?? ''
-    const m = minRef.current?.value ?? ''
-    const s = secRef.current?.value ?? ''
-    const total = parseParts(h, m, s)
-    onChange(total)
-    const p = toParts(total)
-    setHText(p.h)
-    setMinText(p.min)
-    setSecText(p.sec)
-  }
-
-  const seg = (which: 'h' | 'min' | 'sec') => {
-    if (which === 'h')
-      return (
-        <input
-          ref={hRef}
-          aria-label={ariaLabel ? `${ariaLabel} (heures)` : 'Heures'}
-          inputMode="numeric"
-          autoComplete="off"
-          maxLength={2}
-          value={hText}
-          placeholder="0"
-          onFocus={onFocus('h', hText)}
-          onBlur={onBlur}
-          onChange={(e) => onHChange(e.target.value)}
-          className={cn(inputCls, 'flex-[0.8]')}
-        />
-      )
-    if (which === 'min')
-      return (
-        <input
-          ref={minRef}
-          aria-label={ariaLabel ? `${ariaLabel} (minutes)` : 'Minutes'}
-          inputMode="numeric"
-          autoComplete="off"
-          maxLength={2}
-          value={minText}
-          placeholder="0"
-          onFocus={onFocus('min', minText)}
-          onBlur={onBlur}
-          onChange={(e) => onMinChange(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Backspace' && minText === '') hRef.current?.focus()
-          }}
-          className={cn(inputCls, 'flex-1')}
-        />
-      )
-    return (
-      <input
-        ref={secRef}
-        aria-label={ariaLabel ? `${ariaLabel} (secondes)` : 'Secondes'}
-        inputMode="numeric"
-        autoComplete="off"
-        maxLength={2}
-        value={secText}
-        placeholder="00"
-        onFocus={onFocus('sec', secText)}
-        onBlur={onBlur}
-        onChange={(e) => onSecChange(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key !== 'Backspace' || secText !== '') return
-          if (minText === '') hRef.current?.focus()
-          else minRef.current?.focus()
-        }}
-        className={cn(inputCls, 'flex-1')}
-      />
-    )
-  }
+  const display = digits ? formatClock(totalOf(digits) ?? 0) : ''
 
   return (
     <div
       className={cn(
-        'flex h-9 min-w-0 items-center justify-center gap-0.5 rounded-xl border border-line bg-surface-2/70 px-1 transition-colors focus-within:border-accent',
+        'flex h-9 min-w-0 items-center justify-center rounded-xl border border-line bg-surface-2/70 px-1 transition-colors focus-within:border-accent',
         className,
       )}
-      title="Durée en heures : minutes : secondes"
+      title="Durée : tapez les chiffres en continu (ex. 130 = 1:30, 13045 = 1:30:45)"
     >
-      {seg('h')}
-      <span className="shrink-0 font-extrabold text-muted">:</span>
-      {seg('min')}
-      <span className="shrink-0 font-extrabold text-muted">:</span>
-      {seg('sec')}
+      <input
+        aria-label={ariaLabel}
+        inputMode="numeric"
+        autoComplete="off"
+        value={display}
+        placeholder="0:00"
+        onFocus={(e) => {
+          focused.current = true
+          // Remplacement direct : pas besoin d'effacer la valeur pré-remplie.
+          e.target.select()
+        }}
+        onBlur={() => {
+          focused.current = false
+          // Renormalise l'affichage (ex. « 199 » → 2:39).
+          setDigits(digitsOf(totalOf(digits)))
+        }}
+        onChange={(e) => {
+          // On ne garde que les 6 derniers chiffres : la frappe décale tout seule.
+          // Tout-zéro (ex. restes du rembourrage « 00 » après effacements) = vide,
+          // sinon on ne pourrait jamais tout effacer au retour arrière.
+          const next = e.target.value.replace(/[^0-9]/g, '').slice(-6)
+          if (!next || /^0+$/.test(next)) {
+            setDigits('')
+            onChange(undefined)
+            return
+          }
+          setDigits(next)
+          onChange(totalOf(next))
+        }}
+        className={cn(
+          'tabular w-full min-w-0 bg-transparent px-1 text-center text-base font-semibold outline-none placeholder:font-normal placeholder:text-muted/60',
+          phantom && 'font-medium text-muted/70',
+        )}
+      />
     </div>
   )
 })
