@@ -25,6 +25,7 @@ import {
   Link2,
   ListChecks,
   MoreVertical,
+  Pause,
   Pencil,
   Play,
   Plus,
@@ -45,13 +46,14 @@ import {
   Input,
   Menu,
   Modal,
+  NumberField,
   Stat,
   Textarea,
 } from '@/components/ui'
 import { ExercisePicker } from '@/components/ExercisePicker'
 import { WorkoutExerciseCard } from '@/components/WorkoutLogger'
 import { useStore } from '@/store/store'
-import { workoutSets, workoutVolume } from '@/lib/calc'
+import { workoutDurationSeconds, workoutSets, workoutVolume } from '@/lib/calc'
 import { cn, formatDuration, formatVolume, inputToKg, kgToInput } from '@/lib/utils'
 import { useBottomBar, useInterval } from '@/hooks/app'
 
@@ -197,6 +199,8 @@ export default function ActiveWorkoutPage() {
   const discardWorkout = useStore((s) => s.discardWorkout)
   const toggleSuperset = useStore((s) => s.toggleSuperset)
   const saveWorkoutAsRoutine = useStore((s) => s.saveWorkoutAsRoutine)
+  const resumeWorkoutClock = useStore((s) => s.resumeWorkoutClock)
+  const setWorkoutDuration = useStore((s) => s.setWorkoutDuration)
   const notify = useStore((s) => s.notify)
   const settings = useStore((s) => s.settings)
 
@@ -209,10 +213,13 @@ export default function ActiveWorkoutPage() {
   const [confirmDiscard, setConfirmDiscard] = useState(false)
   const [confirmFinish, setConfirmFinish] = useState(false)
   const [linkAnchor, setLinkAnchor] = useState<string | null>(null)
+  const [durationOpen, setDurationOpen] = useState(false)
+  const [durationDraft, setDurationDraft] = useState(0)
   const [, force] = useState(0)
   const bottomBarRef = useBottomBar()
 
-  useInterval(workout ? () => force((n) => n + 1) : () => {}, workout ? 1000 : null)
+  const clockPaused = Boolean(workout && workout.finishedAt)
+  useInterval(workout && !clockPaused ? () => force((n) => n + 1) : () => {}, workout && !clockPaused ? 1000 : null)
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
@@ -223,7 +230,9 @@ export default function ActiveWorkoutPage() {
   if (!workout) return <StartScreen />
 
   const exerciseMap = new Map(exercises.map((e) => [e.id, e]))
-  const elapsed = Math.round((Date.now() - new Date(workout.startedAt).getTime()) / 1000)
+  // Si la séance a été rouverte (modification), finishedAt est conservé :
+  // le chrono reste bloqué sur la durée d'origine, modifiable et relançable.
+  const elapsed = workoutDurationSeconds(workout)
   const doneSets = workoutSets(workout)
   const totalSets = workoutSets(workout, false)
   const volume = workoutVolume(workout)
@@ -289,6 +298,28 @@ export default function ActiveWorkoutPage() {
       />
 
       <Page className="max-w-3xl space-y-3">
+        {clockPaused && (
+          <div className="animate-slide-up flex flex-wrap items-center gap-2 rounded-xl border border-warning/50 bg-warning/10 px-3 py-2 text-[13px]">
+            <Pause size={15} className="text-warning" />
+            <span className="font-semibold">Modification — chrono en pause ({formatDuration(elapsed)})</span>
+            <span className="ml-auto flex gap-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setDurationDraft(Math.round(elapsed / 60))
+                  setDurationOpen(true)
+                }}
+              >
+                Modifier
+              </Button>
+              <Button size="sm" variant="primary" onClick={() => resumeWorkoutClock(workout.id)}>
+                <Play size={13} /> Reprendre
+              </Button>
+            </span>
+          </div>
+        )}
+
         {linkAnchor && (
           <div className="animate-slide-up flex items-center gap-2 rounded-xl border border-info/50 bg-info/10 px-3 py-2 text-[13px]">
             <Link2 size={15} className="text-info" />
@@ -446,6 +477,37 @@ export default function ActiveWorkoutPage() {
           }
         }}
       />
+
+      <Modal open={durationOpen} onClose={() => setDurationOpen(false)} title="Durée de la séance" size="sm">
+        <p className="mb-2 text-sm text-muted">
+          {clockPaused ? 'Chrono en pause — ajustez la durée figée.' : 'Ajustez la durée écoulée.'}
+        </p>
+        <NumberField
+          value={durationDraft}
+          onChange={(v) => setDurationDraft(v ?? 0)}
+          step={1}
+          min={0}
+          max={1440}
+          decimals={0}
+          suffix="min"
+          ariaLabel="Durée de la séance en minutes"
+        />
+        <div className="mt-4 flex gap-2">
+          <Button block onClick={() => setDurationOpen(false)}>
+            Annuler
+          </Button>
+          <Button
+            block
+            variant="primary"
+            onClick={() => {
+              setWorkoutDuration(workout.id, durationDraft * 60)
+              setDurationOpen(false)
+            }}
+          >
+            Enregistrer
+          </Button>
+        </div>
+      </Modal>
 
       <Modal open={renameOpen} onClose={() => setRenameOpen(false)} title="Renommer la séance" size="sm">
         <Input value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} autoFocus />

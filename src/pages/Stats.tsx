@@ -3,10 +3,10 @@ import { Link } from 'react-router-dom'
 import {
   Bar,
   BarChart,
+  CartesianGrid,
   Cell,
-  PolarAngleAxis,
-  RadialBar,
-  RadialBarChart,
+  Line,
+  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -27,6 +27,7 @@ import {
   weeklySeries,
 } from '@/lib/calc'
 import { CATEGORY_META } from '@/types'
+import { ChartTooltipContent, chartCursor, chartLineCursor, chartTooltipWrapper } from '@/components/charts'
 import { addDays, cn, formatDuration, formatVolume, formatWeight, kgToDisplay, startOfWeek, toDateKey } from '@/lib/utils'
 
 type Range = '30j' | '90j' | '6m' | 'tout'
@@ -230,19 +231,44 @@ export default function StatsPage() {
           <SectionTitle>Volume par semaine ({settings.unit})</SectionTitle>
           <div className="h-52">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={series} margin={{ top: 4, right: 4, left: -22, bottom: 0 }}>
-                <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--muted)' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 10, fill: 'var(--muted)' }} axisLine={false} tickLine={false} width={46} />
-                <Tooltip
-                  contentStyle={{
-                    background: 'var(--surface)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 12,
-                    fontSize: 12,
-                  }}
-                  formatter={(v: number) => [`${Math.round(v).toLocaleString('fr-FR')} ${settings.unit}`, 'Volume']}
+              <BarChart data={series} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                <XAxis
+                  dataKey="label"
+                  tick={{ fontSize: 10, fill: 'var(--muted)' }}
+                  axisLine={false}
+                  tickLine={false}
+                  interval="preserveStartEnd"
+                  minTickGap={24}
                 />
-                <Bar dataKey="volume" radius={[6, 6, 0, 0]} fill="var(--accent)" />
+                <YAxis
+                  tick={{ fontSize: 10, fill: 'var(--muted)' }}
+                  axisLine={false}
+                  tickLine={false}
+                  width={44}
+                  tickFormatter={(v: number) => (v >= 1000 ? `${Math.round(v / 1000)}k` : `${v}`)}
+                />
+                <Tooltip
+                  cursor={chartCursor}
+                  wrapperStyle={chartTooltipWrapper}
+                  content={
+                    <ChartTooltipContent
+                      format={(p, datum) =>
+                        p.dataKey === 'volume'
+                          ? `${Math.round(Number(p.value)).toLocaleString('fr-FR')} ${settings.unit} · ${String(datum.sets ?? 0)} séries`
+                          : null
+                      }
+                    />
+                  }
+                />
+                <Bar dataKey="volume" name="Volume" radius={[6, 6, 2, 2]} fill="var(--accent)" minPointSize={2} maxBarSize={34}>
+                  {series.map((s, i) => (
+                    <Cell
+                      key={i}
+                      fill="var(--accent)"
+                      fillOpacity={s.volume > 0 ? 0.65 + (0.35 * s.volume) / Math.max(1, ...series.map((x) => x.volume)) : 0.25}
+                    />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -275,7 +301,13 @@ export default function StatsPage() {
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={muscles} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 0 }}>
-                  <XAxis type="number" tick={{ fontSize: 10, fill: 'var(--muted)' }} axisLine={false} tickLine={false} />
+                  <XAxis
+                    type="number"
+                    tick={{ fontSize: 10, fill: 'var(--muted)' }}
+                    axisLine={false}
+                    tickLine={false}
+                    allowDecimals={false}
+                  />
                   <YAxis
                     type="category"
                     dataKey="muscle"
@@ -285,17 +317,19 @@ export default function StatsPage() {
                     width={96}
                   />
                   <Tooltip
-                    contentStyle={{
-                      background: 'var(--surface)',
-                      border: '1px solid var(--border)',
-                      borderRadius: 12,
-                      fontSize: 12,
-                    }}
-                    formatter={(v: number) => [`${v} séries`, '']}
+                    cursor={chartCursor}
+                    wrapperStyle={chartTooltipWrapper}
+                    content={
+                      <ChartTooltipContent
+                        format={(p, datum) =>
+                          `${p.value} séries · ${Math.round(kgToDisplay(Number(datum.volume ?? 0), settings.unit)).toLocaleString('fr-FR')} ${settings.unit}`
+                        }
+                      />
+                    }
                   />
-                  <Bar dataKey="sets" radius={[0, 6, 6, 0]}>
+                  <Bar dataKey="sets" name="Séries" radius={[0, 6, 6, 0]} barSize={14} maxBarSize={18}>
                     {muscles.map((_, i) => (
-                      <Cell key={i} fill="var(--accent)" fillOpacity={1 - i * 0.06} />
+                      <Cell key={i} fill="var(--accent)" fillOpacity={Math.max(0.35, 1 - i * 0.06)} />
                     ))}
                   </Bar>
                 </BarChart>
@@ -359,22 +393,52 @@ export default function StatsPage() {
         {/* Poids de corps */}
         {bodyweightSeries.length > 1 && (
           <Card className="p-4">
-            <SectionTitle>Poids de corps</SectionTitle>
+            <SectionTitle>Évolution du poids de corps ({settings.unit})</SectionTitle>
             <div className="h-44">
               <ResponsiveContainer width="100%" height="100%">
-                <RadialBarChart
-                  data={[{ name: 'poids', value: bodyweightSeries.at(-1)?.poids ?? 0, fill: 'var(--accent)' }]}
-                  innerRadius="45%"
-                  outerRadius="100%"
-                  startAngle={210}
-                  endAngle={-30}
+                <LineChart
+                  data={bodyweightSeries.map((p) => ({
+                    label: p.label,
+                    poids: Math.round(kgToDisplay(p.poids ?? 0, settings.unit) * 10) / 10,
+                  }))}
+                  margin={{ top: 8, right: 8, left: -8, bottom: 0 }}
                 >
-                  <PolarAngleAxis type="number" domain={[0, (bodyweightSeries.at(-1)?.poids ?? 100) * 1.3]} tick={false} />
-                  <RadialBar dataKey="value" cornerRadius={12} background />
-                </RadialBarChart>
+                  <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
+                  <XAxis
+                    dataKey="label"
+                    tick={{ fontSize: 10, fill: 'var(--muted)' }}
+                    axisLine={false}
+                    tickLine={false}
+                    interval="preserveStartEnd"
+                    minTickGap={32}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 10, fill: 'var(--muted)' }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={44}
+                    domain={['auto', 'auto']}
+                  />
+                  <Tooltip
+                    cursor={chartLineCursor}
+                    wrapperStyle={chartTooltipWrapper}
+                    content={
+                      <ChartTooltipContent format={(p) => `${p.value} ${settings.unit}`} />
+                    }
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="poids"
+                    name="Poids"
+                    stroke="var(--accent)"
+                    strokeWidth={2.5}
+                    dot={{ r: 3, fill: 'var(--accent)' }}
+                    activeDot={{ r: 5 }}
+                  />
+                </LineChart>
               </ResponsiveContainer>
             </div>
-            <p className="text-center text-sm font-bold">
+            <p className="mt-1 text-center text-sm font-bold">
               {formatWeight(bodyweightSeries.at(-1)?.poids, settings.unit)}
               <span className="ml-2 text-[11px] font-normal text-muted">dernier relevé</span>
             </p>

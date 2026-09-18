@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import type { Exercise, SetType, Workout, WorkoutExercise, WorkoutSet } from '@/types'
 import { SET_TYPE_META } from '@/types'
-import { Button, CheckBadge, IconButton, Menu, NumberField, Textarea } from '@/components/ui'
+import { Button, CheckBadge, IconButton, Menu, Modal, NumberField, Textarea } from '@/components/ui'
 import { CategoryBadge } from '@/components/ExerciseFormModal'
 import { ExerciseAvatar } from '@/components/ExercisePicker'
 import { useStore, trackingFieldsOf } from '@/store/store'
@@ -61,21 +61,31 @@ export function SetRow({ workoutId, we, set, index, exercise, unit, distanceUnit
   return (
     <div
       className={cn(
-        'group flex items-center gap-1 rounded-lg px-1 py-1 transition-colors',
+        'group flex min-w-0 items-center gap-1 rounded-lg px-1 py-1 transition-colors',
         set.completed ? 'bg-success/5' : 'hover:bg-surface-2',
         isWarmup && 'opacity-80',
       )}
     >
-      <CheckBadge done={set.completed} onClick={() => toggleSetCompleted(workoutId, we.id, set.id)} size={30} />
+      {/* Le n° de série est affiché dans la case à cocher (gain de place). */}
+      <CheckBadge
+        done={set.completed}
+        onClick={() => toggleSetCompleted(workoutId, we.id, set.id)}
+        size={32}
+        label={meta.short || index + 1}
+        title={set.completed ? 'Série validée — toucher pour décocher' : `Série ${index + 1} — toucher pour valider`}
+      />
 
       <button
         type="button"
         onClick={cycleType}
-        title={`Type : ${meta.label}`}
-        style={{ color: meta.color }}
-        className="flex h-7 w-6 shrink-0 items-center justify-center rounded text-[11px] font-extrabold"
+        title={`Type : ${meta.label} (toucher pour changer)`}
+        style={set.type === 'normal' ? undefined : { color: meta.color }}
+        className={cn(
+          'flex h-7 w-5 shrink-0 items-center justify-center rounded text-[10px] font-extrabold transition-colors hover:bg-surface-3',
+          set.type === 'normal' ? 'text-muted/30' : '',
+        )}
       >
-        {meta.short || index + 1}
+        {meta.short || '·'}
       </button>
 
       {fields.map((field) => {
@@ -83,6 +93,7 @@ export function SetRow({ workoutId, we, set, index, exercise, unit, distanceUnit
           return (
             <NumberField
               key={field}
+              compact
               ariaLabel={`Poids série ${index + 1}`}
               value={kgToInput(set.weight, unit)}
               onChange={(v) => patch({ weight: inputToKg(v, unit) })}
@@ -90,7 +101,7 @@ export function SetRow({ workoutId, we, set, index, exercise, unit, distanceUnit
               decimals={unit === 'kg' ? 2 : 1}
               placeholder={exercise?.tracking === 'bodyweight_reps' ? 'PDC' : '0'}
               suffix={unit}
-              className="h-9 flex-[1.15] border-transparent bg-surface-2/70"
+              className="h-9 min-w-0 flex-[1.15] border-transparent bg-surface-2/70"
             />
           )
         }
@@ -98,13 +109,14 @@ export function SetRow({ workoutId, we, set, index, exercise, unit, distanceUnit
           return (
             <NumberField
               key={field}
+              compact
               ariaLabel={`Répétitions série ${index + 1}`}
               value={set.reps}
               onChange={(v) => patch({ reps: v })}
               step={1}
               decimals={0}
               placeholder="0"
-              className="h-9 flex-1 border-transparent bg-surface-2/70"
+              className="h-9 min-w-0 flex-1 border-transparent bg-surface-2/70"
             />
           )
         }
@@ -112,6 +124,7 @@ export function SetRow({ workoutId, we, set, index, exercise, unit, distanceUnit
           return (
             <NumberField
               key={field}
+              compact
               ariaLabel={`Durée série ${index + 1}`}
               value={set.duration}
               onChange={(v) => patch({ duration: v })}
@@ -119,13 +132,14 @@ export function SetRow({ workoutId, we, set, index, exercise, unit, distanceUnit
               decimals={0}
               placeholder="0"
               suffix="s"
-              className="h-9 flex-1 border-transparent bg-surface-2/70"
+              className="h-9 min-w-0 flex-1 border-transparent bg-surface-2/70"
             />
           )
         }
         return (
           <NumberField
             key={field}
+            compact
             ariaLabel={`Distance série ${index + 1}`}
             value={distanceInDisplay}
             onChange={(v) =>
@@ -135,13 +149,14 @@ export function SetRow({ workoutId, we, set, index, exercise, unit, distanceUnit
             decimals={2}
             placeholder="0"
             suffix={distanceUnit}
-            className="h-9 flex-[1.15] border-transparent bg-surface-2/70"
+            className="h-9 min-w-0 flex-[1.15] border-transparent bg-surface-2/70"
           />
         )
       })}
 
       {showRpe && (
         <NumberField
+          compact
           ariaLabel={`RPE série ${index + 1}`}
           value={set.rpe}
           onChange={(v) => patch({ rpe: v })}
@@ -150,7 +165,7 @@ export function SetRow({ workoutId, we, set, index, exercise, unit, distanceUnit
           max={10}
           decimals={1}
           placeholder="RPE"
-          className="h-9 w-16 border-transparent bg-surface-2/70"
+          className="h-9 w-14 shrink-0 border-transparent bg-surface-2/70"
         />
       )}
 
@@ -166,6 +181,7 @@ export function SetRow({ workoutId, we, set, index, exercise, unit, distanceUnit
           </IconButton>
         )}
         items={[
+          { label: `Type : ${meta.label} (changer)`, onClick: cycleType },
           { label: 'Dupliquer la série', icon: <Copy size={14} />, onClick: () => duplicateSet(workoutId, we.id, set.id) },
           { label: 'Remplacer l’exercice', icon: <Replace size={14} />, onClick: onReplace },
           { label: 'Supprimer la série', icon: <Trash2 size={14} />, danger: true, onClick: () => removeSet(workoutId, we.id, set.id) },
@@ -212,6 +228,8 @@ export function WorkoutExerciseCard({
   const workouts = useStore((s) => s.workouts)
   const startRest = useStore((s) => s.startRest)
   const [showNotes, setShowNotes] = useState(Boolean(we.notes))
+  const [restEditOpen, setRestEditOpen] = useState(false)
+  const [restDraft, setRestDraft] = useState(we.restSeconds)
 
   const reference = useMemo(
     () => (exercise ? lastPerformance(workouts, exercise.id, workout.id) : undefined),
@@ -298,16 +316,16 @@ export function WorkoutExerciseCard({
         />
       </header>
 
-      {/* Colonnes */}
+      {/* Colonnes (le n° de série est dans la case à cocher) */}
       <div className="flex items-center gap-1 px-2 pb-1 text-[10px] font-bold tracking-wide text-muted uppercase">
-        <span className="w-[30px]" />
-        <span className="w-6 text-center">#</span>
+        <span className="w-[32px]" />
+        <span className="w-5" />
         {trackingFieldsOf(exercise).map((f) => (
-          <span key={f} className={cn('flex-1 text-center', f === 'weight' || f === 'distance' ? 'flex-[1.15]' : '')}>
+          <span key={f} className={cn('min-w-0 flex-1 text-center', f === 'weight' || f === 'distance' ? 'flex-[1.15]' : '')}>
             {{ weight: settings.unit, reps: 'reps', duration: 'durée', distance: settings.distanceUnit }[f]}
           </span>
         ))}
-        {settings.showRpe && <span className="w-16 text-center">rpe</span>}
+        {settings.showRpe && <span className="w-14 shrink-0 text-center">rpe</span>}
         <span className="w-8" />
       </div>
 
@@ -358,14 +376,26 @@ export function WorkoutExerciseCard({
         >
           {allDone ? 'Tout décocher' : 'Tout valider'}
         </Button>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => {
+              setRestDraft(we.restSeconds)
+              setRestEditOpen(true)
+            }}
+            className="tabular rounded-lg bg-surface-2 px-2 py-1 text-[11px] font-semibold text-muted transition-colors hover:text-ink"
+            title="Modifier le temps de repos"
+          >
+            ⏱ {we.restSeconds}s
+          </button>
           <button
             type="button"
             onClick={() => startRest(we.restSeconds, { label: exercise?.name, exerciseId: exercise?.id })}
-            className="tabular rounded-lg bg-surface-2 px-2 py-1 text-[11px] font-semibold text-muted transition-colors hover:text-ink"
-            title="Lancer le repos"
+            className="tabular flex h-7 min-w-7 items-center justify-center rounded-lg bg-surface-2 px-2 text-[11px] font-semibold text-accent transition-colors hover:brightness-110"
+            title="Lancer le chrono de repos"
+            aria-label="Lancer le chrono de repos"
           >
-            ⏱ {we.restSeconds}s
+            ▶
           </button>
           {volume > 0 && <span className="tabular text-[11px] text-muted">{formatVolume(volume, settings.unit)}</span>}
           {bestE1rm > 0 && (
@@ -375,6 +405,69 @@ export function WorkoutExerciseCard({
           )}
         </div>
       </footer>
+
+      {/* Édition du temps de repos (le ▶ lance le chrono sans ouvrir) */}
+      <Modal
+        open={restEditOpen}
+        onClose={() => setRestEditOpen(false)}
+        title={`Repos — ${exercise?.name ?? 'exercice'}`}
+        size="sm"
+      >
+        <p className="mb-2 text-xs font-semibold text-muted">Temps de repos par défaut pour cet exercice</p>
+        <NumberField
+          value={restDraft}
+          onChange={(v) => setRestDraft(v ?? 0)}
+          step={15}
+          min={0}
+          max={600}
+          decimals={0}
+          suffix="s"
+          ariaLabel="Temps de repos en secondes"
+        />
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {[30, 60, 90, 120, 180].map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setRestDraft(s)}
+              className={cn(
+                'tabular rounded-lg border px-2.5 py-1.5 text-xs font-bold transition-colors',
+                restDraft === s
+                  ? 'border-accent-solid bg-accent-solid text-accent-contrast'
+                  : 'border-line bg-surface-2 text-muted hover:text-ink',
+              )}
+            >
+              {s}s
+            </button>
+          ))}
+        </div>
+        <div className="mt-4 flex gap-2">
+          <Button block onClick={() => setRestEditOpen(false)}>
+            Annuler
+          </Button>
+          <Button
+            block
+            onClick={() => {
+              updateWorkoutExercise(workout.id, we.id, { restSeconds: Math.max(0, Math.round(restDraft)) })
+              setRestEditOpen(false)
+            }}
+          >
+            Enregistrer
+          </Button>
+          <Button
+            block
+            variant="primary"
+            onClick={() => {
+              const secs = Math.max(0, Math.round(restDraft))
+              updateWorkoutExercise(workout.id, we.id, { restSeconds: secs })
+              setRestEditOpen(false)
+              if (secs > 0) startRest(secs, { label: exercise?.name, exerciseId: exercise?.id })
+            }}
+          >
+            ▶ Lancer
+          </Button>
+        </div>
+      </Modal>
     </section>
   )
 }

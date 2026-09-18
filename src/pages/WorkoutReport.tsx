@@ -27,6 +27,7 @@ import {
   Weight,
 } from 'lucide-react'
 import { useStore } from '@/store/store'
+import { ChartTooltipContent, chartCursor, chartTooltipWrapper } from '@/components/charts'
 import { Page, PageHeader } from '@/components/PageHeader'
 import {
   Button,
@@ -298,7 +299,7 @@ export default function WorkoutReportPage() {
             <SectionTitle>Répartition des séries par muscle</SectionTitle>
             <div className="h-44">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} margin={{ top: 4, right: 4, left: -28, bottom: 0 }}>
+                <BarChart data={chartData} margin={{ top: 4, right: 4, left: -8, bottom: 0 }}>
                   <XAxis
                     dataKey="name"
                     tick={{ fontSize: 10, fill: 'var(--muted)' }}
@@ -309,19 +310,27 @@ export default function WorkoutReportPage() {
                     textAnchor="end"
                     height={50}
                   />
-                  <YAxis tick={{ fontSize: 10, fill: 'var(--muted)' }} axisLine={false} tickLine={false} width={40} />
-                  <Tooltip
-                    contentStyle={{
-                      background: 'var(--surface)',
-                      border: '1px solid var(--border)',
-                      borderRadius: 12,
-                      fontSize: 12,
-                    }}
-                    formatter={(v: number) => [`${v} séries`, 'Travail']}
+                  <YAxis
+                    tick={{ fontSize: 10, fill: 'var(--muted)' }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={36}
+                    allowDecimals={false}
                   />
-                  <Bar dataKey="sets" radius={[6, 6, 0, 0]}>
+                  <Tooltip
+                    cursor={chartCursor}
+                    wrapperStyle={chartTooltipWrapper}
+                    content={
+                      <ChartTooltipContent
+                        format={(p, datum) =>
+                          `${p.value} séries · ${formatVolume(Number(datum.volume ?? 0), settings.unit)}`
+                        }
+                      />
+                    }
+                  />
+                  <Bar dataKey="sets" name="Séries" radius={[6, 6, 2, 2]} maxBarSize={40} minPointSize={2}>
                     {chartData.map((_, i) => (
-                      <Cell key={i} fill="var(--accent)" fillOpacity={1 - i * 0.08} />
+                      <Cell key={i} fill="var(--accent)" fillOpacity={Math.max(0.45, 1 - i * 0.08)} />
                     ))}
                   </Bar>
                 </BarChart>

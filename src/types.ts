@@ -255,6 +255,8 @@ export interface RestTimerState {
   label?: string
   exerciseId?: string
   setId?: string
+  /** Secondes restantes figées quand le chrono est en pause (null = en cours). */
+  pausedSeconds?: number | null
 }
 
 export interface AppData {

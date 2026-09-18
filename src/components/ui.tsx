@@ -273,6 +273,8 @@ export interface NumberFieldProps {
   inputClassName?: string
   decimals?: number
   ariaLabel?: string
+  /** Version dense pour les lignes de séries (boutons + texte réduits). */
+  compact?: boolean
 }
 
 /** Champ numérique tactile : saisie directe + boutons +/- */
@@ -288,6 +290,7 @@ export function NumberField({
   inputClassName,
   decimals = 1,
   ariaLabel,
+  compact,
 }: NumberFieldProps) {
   const [text, setText] = useState(value === undefined ? '' : String(value))
   const focused = useRef(false)
@@ -319,10 +322,14 @@ export function NumberField({
     setText(String(next))
   }
 
+  const btnCls = compact
+    ? 'flex h-7 w-6 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-surface-3 hover:text-ink active:scale-90'
+    : 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-3 hover:text-ink active:scale-90'
+
   return (
     <div
       className={cn(
-        'flex h-11 items-center rounded-xl border border-line bg-surface-2 px-1 transition-colors focus-within:border-accent',
+        'flex h-11 min-w-0 items-center rounded-xl border border-line bg-surface-2 px-1 transition-colors focus-within:border-accent',
         className,
       )}
     >
@@ -330,11 +337,12 @@ export function NumberField({
         type="button"
         tabIndex={-1}
         onClick={() => bump(-1)}
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-3 hover:text-ink active:scale-90"
+        className={btnCls}
+        aria-label="Diminuer"
       >
-        <Minus size={14} />
+        <Minus size={compact ? 12 : 14} />
       </button>
-      <div className="relative flex-1">
+      <div className="relative min-w-0 flex-1">
         <input
           aria-label={ariaLabel}
           inputMode="decimal"
@@ -350,12 +358,14 @@ export function NumberField({
             commit(e.target.value)
           }}
           className={cn(
-            'tabular w-full bg-transparent text-center text-[15px] font-semibold outline-none placeholder:font-normal placeholder:text-muted/60',
+            'tabular w-full min-w-0 bg-transparent text-center font-semibold outline-none placeholder:font-normal placeholder:text-muted/60',
+            compact ? 'px-0.5 text-sm' : 'text-[15px]',
+            suffix ? 'pr-7 pl-1' : 'px-1',
             inputClassName,
           )}
         />
         {suffix && (
-          <span className="pointer-events-none absolute top-1/2 right-1 -translate-y-1/2 text-[10px] font-semibold text-muted">
+          <span className="pointer-events-none absolute top-1/2 right-1 -translate-y-1/2 text-[10px] font-semibold whitespace-nowrap text-muted">
             {suffix}
           </span>
         )}
@@ -364,9 +374,10 @@ export function NumberField({
         type="button"
         tabIndex={-1}
         onClick={() => bump(1)}
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-3 hover:text-ink active:scale-90"
+        className={btnCls}
+        aria-label="Augmenter"
       >
-        <Plus size={14} />
+        <Plus size={compact ? 12 : 14} />
       </button>
     </div>
   )
@@ -547,7 +558,7 @@ export function ConfirmDialog({
   )
 }
 
-/** Menu contextuel ancré, fermé au clic extérieur. */
+/** Menu contextuel ancré (rendu en portal pour passer au-dessus de tout). */
 export function Menu({
   trigger,
   items,
@@ -558,30 +569,69 @@ export function Menu({
   align?: 'left' | 'right'
 }) {
   const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState<{ top: number; left?: number; right?: number }>({ top: 0, right: 0 })
+  const anchorRef = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  const computePos = () => {
+    const el = anchorRef.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    const top = Math.min(r.bottom + 6, window.innerHeight - 8)
+    if (align === 'right') {
+      setPos({ top, right: Math.max(8, window.innerWidth - r.right) })
+    } else {
+      setPos({ top, left: Math.max(8, r.left) })
+    }
+  }
 
   useEffect(() => {
     if (!open) return
+    computePos()
     const onDoc = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      const t = e.target as Node
+      if (anchorRef.current?.contains(t)) return
+      if (menuRef.current?.contains(t)) return
+      setOpen(false)
     }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    // Un scroll / resize referme le menu (position ancrée devenue fausse).
+    const onScroll = () => setOpen(false)
     document.addEventListener('mousedown', onDoc)
-    return () => document.removeEventListener('mousedown', onDoc)
+    document.addEventListener('keydown', onKey)
+    window.addEventListener('resize', onScroll)
+    window.addEventListener('scroll', onScroll, true)
+    return () => {
+      document.removeEventListener('mousedown', onDoc)
+      document.removeEventListener('keydown', onKey)
+      window.removeEventListener('resize', onScroll)
+      window.removeEventListener('scroll', onScroll, true)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
+  const visible = items.filter((i) => !i.hidden)
+
   return (
-    <div ref={ref} className="relative">
+    <div ref={anchorRef} className="relative shrink-0">
       {trigger({ open, toggle: () => setOpen((v) => !v) })}
-      {open && (
-        <div
-          className={cn(
-            'animate-pop absolute top-full z-40 mt-1 min-w-52 overflow-hidden rounded-xl border border-line bg-surface py-1 shadow-xl',
-            align === 'right' ? 'right-0' : 'left-0',
-          )}
-        >
-          {items
-            .filter((i) => !i.hidden)
-            .map((item) => (
+      {open &&
+        createPortal(
+          <div
+            ref={menuRef}
+            style={{
+              position: 'fixed',
+              top: pos.top,
+              left: pos.left,
+              right: pos.right,
+              zIndex: 80,
+              maxWidth: 'calc(100vw - 16px)',
+            }}
+            className="animate-pop min-w-52 overflow-hidden rounded-xl border border-line bg-surface py-1 shadow-2xl"
+          >
+            {visible.map((item) => (
               <button
                 key={item.label}
                 type="button"
@@ -590,7 +640,7 @@ export function Menu({
                   item.onClick()
                 }}
                 className={cn(
-                  'flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors hover:bg-surface-2',
+                  'flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm whitespace-nowrap transition-colors hover:bg-surface-2',
                   item.danger ? 'text-danger' : 'text-ink',
                 )}
               >
@@ -598,8 +648,9 @@ export function Menu({
                 {item.label}
               </button>
             ))}
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </div>
   )
 }
@@ -749,21 +800,41 @@ export function Tabs<T extends string>({
   )
 }
 
-export function CheckBadge({ done, onClick, size = 30 }: { done: boolean; onClick: () => void; size?: number }) {
+export function CheckBadge({
+  done,
+  onClick,
+  size = 30,
+  label,
+  title,
+}: {
+  done: boolean
+  onClick: () => void
+  size?: number
+  /** Numéro affiché quand la série n'est pas validée (ex. n° de série). */
+  label?: ReactNode
+  title?: string
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={done}
+      title={title}
       style={{ width: size, height: size }}
       className={cn(
         'flex shrink-0 items-center justify-center rounded-lg border transition-all active:scale-90',
         done
           ? 'border-success bg-success text-white'
-          : 'border-line bg-surface-2 text-transparent hover:border-success/60',
+          : 'border-line bg-surface-2 text-muted hover:border-success/60',
       )}
     >
-      <Check size={size * 0.55} strokeWidth={3} />
+      {done ? (
+        <Check size={size * 0.55} strokeWidth={3} />
+      ) : label !== undefined ? (
+        <span className="tabular text-[13px] font-extrabold">{label}</span>
+      ) : (
+        <Check size={size * 0.55} strokeWidth={3} className="text-transparent" />
+      )}
     </button>
   )
 }

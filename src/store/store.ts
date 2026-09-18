@@ -87,6 +87,10 @@ export interface StoreState extends AppData {
   deleteWorkout: (id: string) => void
   finishWorkout: (id: string, patch?: Partial<Workout>) => void
   reopenWorkout: (id: string) => void
+  /** Relance le chrono d'une séance rouverte (chrono resté en pause). */
+  resumeWorkoutClock: (id: string) => void
+  /** Ajuste la durée affichée (chrono en pause ou en cours). */
+  setWorkoutDuration: (id: string, seconds: number) => void
   updateWorkout: (id: string, patch: Partial<Workout>) => void
   addExerciseToWorkout: (
     workoutId: string,
@@ -125,6 +129,8 @@ export interface StoreState extends AppData {
   startRest: (seconds: number, meta?: { label?: string; exerciseId?: string; setId?: string }) => void
   stopRest: () => void
   adjustRest: (deltaSeconds: number) => void
+  pauseRest: () => void
+  resumeRest: () => void
 
   /* ------- toasts ------- */
   notify: (message: string, tone?: 'success' | 'error' | 'info') => void
@@ -350,6 +356,13 @@ export const useStore = create<StoreState>()(
       },
 
       updateExercise: (id, patch) => {
+        const target = get().exercises.find((e) => e.id === id)
+        // Seuls les exercices personnalisés sont modifiables : la base
+        // intégrée reste en lecture seule (dupliquez pour personnaliser).
+        if (!target || !target.isCustom) {
+          if (target) get().notify('Exercice de la base : dupliquez-le pour le personnaliser', 'info')
+          return
+        }
         set({
           exercises: get().exercises.map((e) =>
             e.id === id ? { ...e, ...patch, id: e.id, isCustom: e.isCustom || patch.isCustom === true } : e,
@@ -358,6 +371,11 @@ export const useStore = create<StoreState>()(
       },
 
       deleteExercise: (id) => {
+        const target = get().exercises.find((e) => e.id === id)
+        if (target && !target.isCustom) {
+          get().notify('Impossible de supprimer un exercice de la base', 'error')
+          return
+        }
         set({ exercises: get().exercises.filter((e) => e.id !== id) })
       },
 
@@ -478,7 +496,7 @@ export const useStore = create<StoreState>()(
             ...w,
             ...patch,
             status: 'completed',
-            finishedAt: w.finishedAt ?? new Date().toISOString(),
+            finishedAt: new Date().toISOString(),
           })),
           activeWorkoutId: get().activeWorkoutId === id ? null : get().activeWorkoutId,
           restTimer: { endsAt: null, totalSeconds: 0 },
@@ -486,10 +504,45 @@ export const useStore = create<StoreState>()(
       },
 
       reopenWorkout: (id) => {
+        // On rouvre sans effacer finishedAt : le chrono reste bloqué sur la
+        // durée d'origine (modifiable, relançable). Idéal après un arrêt
+        // accidentel : aucune série ni seconde n'est perdue.
+        const target = get().workouts.find((w) => w.id === id)
+        if (!target) return
+        const base = target.finishedAt
+          ? get().workouts
+          : workoutPatch(get().workouts, id, (w) => ({
+              ...w,
+              finishedAt: new Date().toISOString(),
+            }))
         set({
-          workouts: workoutPatch(get().workouts, id, (w) => ({ ...w, status: 'active', finishedAt: undefined })),
+          workouts: workoutPatch(base, id, (w) => ({ ...w, status: 'active' })),
           activeWorkoutId: id,
         })
+        get().notify('Séance rouverte — chrono en pause', 'info')
+      },
+
+      resumeWorkoutClock: (id) => {
+        const w = get().workouts.find((x) => x.id === id)
+        if (!w || !w.finishedAt) return
+        const durationMs = Math.max(0, new Date(w.finishedAt).getTime() - new Date(w.startedAt).getTime())
+        const startedAt = new Date(Date.now() - durationMs).toISOString()
+        set({
+          workouts: workoutPatch(get().workouts, id, (x) => ({ ...x, startedAt, finishedAt: undefined })),
+        })
+      },
+
+      setWorkoutDuration: (id, seconds) => {
+        const w = get().workouts.find((x) => x.id === id)
+        if (!w) return
+        const clamped = Math.max(0, Math.round(seconds))
+        if (w.finishedAt) {
+          const startedAt = new Date(new Date(w.finishedAt).getTime() - clamped * 1000).toISOString()
+          set({ workouts: workoutPatch(get().workouts, id, (x) => ({ ...x, startedAt })) })
+        } else {
+          const startedAt = new Date(Date.now() - clamped * 1000).toISOString()
+          set({ workouts: workoutPatch(get().workouts, id, (x) => ({ ...x, startedAt })) })
+        }
       },
 
       updateWorkout: (id, patch) => {
@@ -836,17 +889,42 @@ export const useStore = create<StoreState>()(
             label: meta?.label,
             exerciseId: meta?.exerciseId,
             setId: meta?.setId,
+            pausedSeconds: null,
           },
         })
       },
 
-      stopRest: () => set({ restTimer: { endsAt: null, totalSeconds: 0 } }),
+      stopRest: () => set({ restTimer: { endsAt: null, totalSeconds: 0, pausedSeconds: null } }),
 
       adjustRest: (delta) => {
         const t = get().restTimer
+        // Chrono en pause : on ajuste le temps figé.
+        if (t.pausedSeconds != null) {
+          const pausedSeconds = Math.max(1, Math.round(t.pausedSeconds + delta))
+          set({ restTimer: { ...t, pausedSeconds, totalSeconds: Math.max(1, t.totalSeconds + delta) } })
+          return
+        }
         if (!t.endsAt) return
         const endsAt = Math.max(Date.now() + 1000, t.endsAt + delta * 1000)
         set({ restTimer: { ...t, endsAt, totalSeconds: Math.max(1, t.totalSeconds + delta) } })
+      },
+
+      pauseRest: () => {
+        const t = get().restTimer
+        if (!t.endsAt || t.pausedSeconds != null) return
+        const remaining = Math.max(0, Math.round((t.endsAt - Date.now()) / 1000))
+        set({ restTimer: { ...t, endsAt: null, pausedSeconds: remaining } })
+      },
+
+      resumeRest: () => {
+        const t = get().restTimer
+        if (t.pausedSeconds == null) return
+        const remaining = Math.max(0, Math.round(t.pausedSeconds))
+        if (remaining <= 0) {
+          set({ restTimer: { ...t, endsAt: Date.now(), pausedSeconds: null } })
+          return
+        }
+        set({ restTimer: { ...t, endsAt: Date.now() + remaining * 1000, pausedSeconds: null } })
       },
 
       /* -------------------------------------------------------- toasts */

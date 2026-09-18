@@ -15,6 +15,7 @@ import {
   X,
 } from 'lucide-react'
 import { cn, formatDuration, playBeep, vibrate } from '@/lib/utils'
+import { workoutDurationSeconds } from '@/lib/calc'
 import { selectActiveWorkout, useStore } from '@/store/store'
 import { Button, IconButton, Toaster } from '@/components/ui'
 import { ScrollTargetProvider } from '@/components/ui'
@@ -44,18 +45,25 @@ export function RestTimerBar() {
   const restTimer = useStore((s) => s.restTimer)
   const stopRest = useStore((s) => s.stopRest)
   const adjustRest = useStore((s) => s.adjustRest)
+  const pauseRest = useStore((s) => s.pauseRest)
+  const resumeRest = useStore((s) => s.resumeRest)
   const soundEnabled = useStore((s) => s.settings.restSoundEnabled)
   const [fired, setFired] = useState(false)
 
-  const active = Boolean(restTimer.endsAt)
-  useTick(active)
+  const paused = restTimer.pausedSeconds != null
+  const active = Boolean(restTimer.endsAt) || paused
+  useTick(active && !paused)
 
-  const remaining = restTimer.endsAt ? Math.max(0, Math.round((restTimer.endsAt - Date.now()) / 1000)) : 0
-  const finished = active && remaining <= 0
+  const remaining = paused
+    ? Math.max(0, Math.round(restTimer.pausedSeconds ?? 0))
+    : restTimer.endsAt
+      ? Math.max(0, Math.round((restTimer.endsAt - Date.now()) / 1000))
+      : 0
+  const finished = active && !paused && remaining <= 0
 
   useEffect(() => {
     setFired(false)
-  }, [restTimer.endsAt])
+  }, [restTimer.endsAt, restTimer.pausedSeconds])
 
   useEffect(() => {
     if (active && finished && !fired) {
@@ -79,26 +87,35 @@ export function RestTimerBar() {
         )}
       >
         <div className="flex items-center gap-3 px-3 py-2.5">
-          <div
+          <button
+            type="button"
+            onClick={() => (paused ? resumeRest() : pauseRest())}
+            title={paused ? 'Reprendre le chrono' : 'Mettre en pause'}
+            aria-label={paused ? 'Reprendre le chrono' : 'Mettre en pause'}
             className={cn(
-              'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl',
-              finished ? 'bg-success text-white' : 'bg-accent-soft text-accent',
+              'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-transform active:scale-95',
+              finished ? 'bg-success text-white' : paused ? 'bg-warning/20 text-warning' : 'bg-accent-soft text-accent',
             )}
           >
-            {finished ? <Timer size={18} /> : <Pause size={18} />}
-          </div>
+            {finished ? <Timer size={18} /> : paused ? <Play size={18} /> : <Pause size={18} />}
+          </button>
           <div className="min-w-0 flex-1">
             <div className="flex items-baseline gap-2">
               <span className="tabular text-xl font-extrabold">
                 {finished ? 'Repos terminé' : formatDuration(remaining)}
               </span>
+              {paused && !finished && (
+                <span className="rounded bg-warning/15 px-1.5 py-0.5 text-[10px] font-bold text-warning uppercase">
+                  pause
+                </span>
+              )}
               {restTimer.label && !finished && (
                 <span className="truncate text-[11px] text-muted">{restTimer.label}</span>
               )}
             </div>
             <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-surface-3">
               <div
-                className={cn('h-full rounded-full transition-[width] duration-300', finished ? 'bg-success' : 'bg-accent')}
+                className={cn('h-full rounded-full transition-[width] duration-300', finished ? 'bg-success' : paused ? 'bg-warning' : 'bg-accent')}
                 style={{ width: `${pct}%` }}
               />
             </div>
@@ -127,9 +144,10 @@ export function RestTimerBar() {
 function ActiveWorkoutPill({ compact }: { compact?: boolean }) {
   const workout = useStore(selectActiveWorkout)
   const navigate = useNavigate()
-  useTick(Boolean(workout), 1000)
+  const clockPaused = Boolean(workout?.finishedAt)
+  useTick(Boolean(workout) && !clockPaused, 1000)
 
-  const elapsed = workout ? Math.round((Date.now() - new Date(workout.startedAt).getTime()) / 1000) : 0
+  const elapsed = workout ? workoutDurationSeconds(workout) : 0
   const doneSets = workout
     ? workout.exercises.reduce((n, we) => n + we.sets.filter((s) => s.completed).length, 0)
     : 0

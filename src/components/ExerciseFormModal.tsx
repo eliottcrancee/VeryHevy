@@ -26,6 +26,9 @@ export function ExerciseFormModal({ open, onClose, exercise, onCreated }: Props)
   const addExercise = useStore((s) => s.addExercise)
   const updateExercise = useStore((s) => s.updateExercise)
   const deleteExercise = useStore((s) => s.deleteExercise)
+  const notify = useStore((s) => s.notify)
+
+  const readOnly = Boolean(exercise && !exercise.isCustom)
 
   const [name, setName] = useState('')
   const [altName, setAltName] = useState('')
@@ -83,6 +86,14 @@ export function ExerciseFormModal({ open, onClose, exercise, onCreated }: Props)
       isFavorite: favorite,
     }
     if (exercise) {
+      if (!exercise.isCustom) {
+        // Base intégrée en lecture seule : on crée une copie personnalisée.
+        const created = addExercise({ ...payload, name: `${name.trim()} (copie)` })
+        onCreated?.(created)
+        notify('Copie personnalisée créée', 'success')
+        onClose()
+        return
+      }
       updateExercise(exercise.id, payload)
     } else {
       const created = addExercise(payload)
@@ -115,12 +126,18 @@ export function ExerciseFormModal({ open, onClose, exercise, onCreated }: Props)
             Annuler
           </Button>
           <Button variant="primary" className="flex-1" onClick={save} disabled={!name.trim()}>
-            {exercise ? 'Enregistrer' : 'Créer'}
+            {exercise ? (readOnly ? 'Dupliquer et enregistrer' : 'Enregistrer') : 'Créer'}
           </Button>
         </div>
       }
     >
       <div className="space-y-4">
+        {readOnly && (
+          <p className="rounded-xl border border-accent-line bg-accent-soft px-3 py-2.5 text-[13px] font-medium text-accent">
+            Exercice de la base VeryHevy (lecture seule). L’enregistrement créera une copie personnalisée
+            modifiable.
+          </p>
+        )}
         <Field label="Nom de l’exercice">
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex. Développé incliné" autoFocus />
         </Field>

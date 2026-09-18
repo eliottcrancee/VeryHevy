@@ -13,6 +13,7 @@ import {
   ArrowLeft,
   ChevronLeft,
   ChevronRight,
+  Copy,
   Dumbbell,
   Pencil,
   Play,
@@ -22,6 +23,7 @@ import {
 } from 'lucide-react'
 import { useStore } from '@/store/store'
 import { Page, PageHeader } from '@/components/PageHeader'
+import { ChartTooltipContent, chartLineCursor, chartTooltipWrapper } from '@/components/charts'
 import { Button, Card, EmptyState, IconButton, SectionTitle, Stat, Tabs } from '@/components/ui'
 import { ExerciseFormModal } from '@/components/ExerciseFormModal'
 import { CATEGORY_META, TRACKING_TYPES } from '@/types'
@@ -37,6 +39,7 @@ export default function ExerciseDetailPage() {
   const workouts = useStore((s) => s.workouts)
   const settings = useStore((s) => s.settings)
   const toggleFavorite = useStore((s) => s.toggleFavorite)
+  const addExercise = useStore((s) => s.addExercise)
   const addExerciseToWorkout = useStore((s) => s.addExerciseToWorkout)
   const activeWorkout = useStore((s) => s.workouts.find((w) => w.id === s.activeWorkoutId))
   const notify = useStore((s) => s.notify)
@@ -48,6 +51,25 @@ export default function ExerciseDetailPage() {
   const sessions = useMemo(() => (exercise ? getExerciseSessions(workouts, exercise.id) : []), [workouts, exercise])
   const progress = useMemo(() => (exercise ? getExerciseProgress(workouts, exercise.id) : []), [workouts, exercise])
   const records = useMemo(() => (exercise ? getPersonalRecords(workouts, exercise.id) : []), [workouts, exercise])
+
+  const duplicateAsCustom = () => {
+    if (!exercise) return
+    const copy = addExercise({
+      name: `${exercise.name} (copie)`,
+      category: exercise.category,
+      tracking: exercise.tracking,
+      primaryMuscles: [...exercise.primaryMuscles],
+      secondaryMuscles: [...exercise.secondaryMuscles],
+      equipment: exercise.equipment,
+      level: exercise.level,
+      instructions: [...exercise.instructions],
+      images: [...exercise.images],
+      tips: exercise.tips,
+      isFavorite: false,
+    })
+    notify('Copie personnalisée créée — à vous de la modifier', 'success')
+    navigate(`/exercices/${copy.id}`)
+  }
 
   if (!exercise) {
     return (
@@ -104,9 +126,15 @@ export default function ExerciseDetailPage() {
             >
               <Star size={18} fill={exercise.isFavorite ? 'currentColor' : 'none'} />
             </IconButton>
-            <IconButton label="Modifier" onClick={() => setEditOpen(true)}>
-              <Pencil size={17} />
-            </IconButton>
+            {exercise.isCustom ? (
+              <IconButton label="Modifier" onClick={() => setEditOpen(true)}>
+                <Pencil size={17} />
+              </IconButton>
+            ) : (
+              <IconButton label="Dupliquer pour personnaliser" onClick={duplicateAsCustom}>
+                <Copy size={17} />
+              </IconButton>
+            )}
           </>
         }
       />
@@ -176,10 +204,19 @@ export default function ExerciseDetailPage() {
           <span className="rounded-lg bg-surface-2 px-2 py-1 text-[11px] font-medium text-muted">
             {TRACKING_TYPES[exercise.tracking].label}
           </span>
-          {exercise.isCustom && (
+          {exercise.isCustom ? (
             <span className="rounded-lg bg-accent-soft px-2 py-1 text-[11px] font-bold text-accent">
               personnalisé
             </span>
+          ) : (
+            <button
+              type="button"
+              onClick={duplicateAsCustom}
+              className="rounded-lg bg-surface-2 px-2 py-1 text-[11px] font-bold text-muted transition-colors hover:text-accent"
+              title="Créer une copie modifiable"
+            >
+              base VeryHevy · lecture seule — dupliquer pour modifier
+            </button>
           )}
         </div>
 
@@ -268,19 +305,44 @@ export default function ExerciseDetailPage() {
                 <SectionTitle>Évolution</SectionTitle>
                 <div className="h-60">
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={chartData} margin={{ top: 8, right: 8, left: -22, bottom: 0 }}>
+                    <LineChart data={chartData} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
                       <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--muted)' }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 10, fill: 'var(--muted)' }} axisLine={false} tickLine={false} width={44} />
-                      <Tooltip
-                        contentStyle={{
-                          background: 'var(--surface)',
-                          border: '1px solid var(--border)',
-                          borderRadius: 12,
-                          fontSize: 12,
-                        }}
+                      <XAxis
+                        dataKey="label"
+                        tick={{ fontSize: 10, fill: 'var(--muted)' }}
+                        axisLine={false}
+                        tickLine={false}
+                        interval="preserveStartEnd"
+                        minTickGap={28}
                       />
-                      <Line type="monotone" dataKey={mainKey} stroke="var(--accent)" strokeWidth={2.5} dot={{ r: 3 }} />
+                      <YAxis
+                        tick={{ fontSize: 10, fill: 'var(--muted)' }}
+                        axisLine={false}
+                        tickLine={false}
+                        width={44}
+                        domain={['auto', 'auto']}
+                      />
+                      <Tooltip
+                        cursor={chartLineCursor}
+                        wrapperStyle={chartTooltipWrapper}
+                        content={
+                          <ChartTooltipContent
+                            format={(p) =>
+                              p.dataKey === '1RM estimé'
+                                ? `1RM ~${p.value} ${settings.unit}`
+                                : `${p.dataKey} : ${p.value}${hasWeight || p.dataKey === '1RM estimé' ? ` ${settings.unit}` : ''}`
+                            }
+                          />
+                        }
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey={mainKey}
+                        stroke="var(--accent)"
+                        strokeWidth={2.5}
+                        dot={{ r: 3, fill: 'var(--accent)' }}
+                        activeDot={{ r: 5 }}
+                      />
                       {showE1rm && (
                         <Line
                           type="monotone"
@@ -289,6 +351,7 @@ export default function ExerciseDetailPage() {
                           strokeWidth={2}
                           strokeDasharray="4 3"
                           dot={false}
+                          activeDot={{ r: 4 }}
                         />
                       )}
                     </LineChart>
@@ -409,8 +472,12 @@ export default function ExerciseDetailPage() {
               ) : (
                 <p className="text-sm text-muted">
                   Pas d’instructions pour cet exercice.{' '}
-                  <button type="button" className="font-semibold text-accent" onClick={() => setEditOpen(true)}>
-                    En ajouter
+                  <button
+                    type="button"
+                    className="font-semibold text-accent"
+                    onClick={() => (exercise.isCustom ? setEditOpen(true) : duplicateAsCustom())}
+                  >
+                    {exercise.isCustom ? 'En ajouter' : 'Dupliquer pour en ajouter'}
                   </button>
                 </p>
               )}
