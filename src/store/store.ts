@@ -494,13 +494,35 @@ export const useStore = create<StoreState>()(
       },
 
       replaceLibraryWith: (list) => {
-        set({ exercises: list })
+        // Remplacement brutal : tout ce qui disparaît est enterré, sinon la
+        // prochaine synchro le ressusciterait depuis le serveur.
+        const kept = new Set(list.map((e) => e.id))
+        const tombs = get().exercises
+          .filter((e) => !kept.has(e.id))
+          .reduce((acc, e) => addTomb(acc, 'exercise', e.id), get().syncDeleted)
+        set({ exercises: list, syncDeleted: tombs })
       },
 
       restoreBuiltinExercises: () => {
+        const before = new Set(get().exercises.map((e) => e.id))
         const result = mergeExercises(get().exercises, SEED_EXERCISES)
-        set({ exercises: result.exercises })
-        get().notify(`${result.added} exercice(s) réintégré(s)`, 'success')
+        const restoredIds = result.exercises.filter((e) => !before.has(e.id)).map((e) => e.id)
+        if (!restoredIds.length) {
+          get().notify('Base par défaut déjà complète', 'info')
+          return
+        }
+        // Les réintégrés sont horodatés à maintenant et désenterrés : sans ça,
+        // la synchro les supprimerait à nouveau (tombstone plus récente) ou ne
+        // les pousserait jamais (horodatage d'origine trop vieux).
+        const now = new Date().toISOString()
+        const restored = new Set(restoredIds)
+        set({
+          exercises: result.exercises.map((e) => (restored.has(e.id) ? { ...e, updatedAt: now } : e)),
+          syncDeleted: get().syncDeleted.filter(
+            (t) => !(t.kind === 'exercise' && restored.has(t.id)),
+          ),
+        })
+        get().notify(`${restoredIds.length} exercice(s) réintégré(s)`, 'success')
       },
 
       removeImportedExercises: () => {

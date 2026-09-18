@@ -240,9 +240,20 @@ async function main() {
 
     await step('Import de la base complète depuis internet', async () => {
       const before = await page.evaluate(() => window.__veryhevy.getState().exercises.length)
+      // Nouveau flux : Réglages → « Gérer la bibliothèque » → modale → « Compléter ».
+      await page.evaluate(() => {
+        const link = [...document.querySelectorAll('a')].find((a) =>
+          a.textContent?.includes('Gérer la bibliothèque'),
+        )
+        link?.click()
+      })
+      await page.waitForFunction(
+        () => document.body.innerText.includes('Compléter avec la base illustrée'),
+        { timeout: 10000 },
+      )
       await page.evaluate(() => {
         const btn = [...document.querySelectorAll('button')].find((b) =>
-          b.textContent?.includes('Importer free-exercise-db'),
+          b.textContent?.includes('Compléter avec la base illustrée'),
         )
         btn?.click()
       })

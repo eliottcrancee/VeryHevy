@@ -31,7 +31,6 @@ type SortKey = 'nom' | 'recent' | 'favoris'
 export default function ExercisesPage() {
   const exercises = useStore((s) => s.exercises)
   const importExercises = useStore((s) => s.importExercises)
-  const replaceLibraryWith = useStore((s) => s.replaceLibraryWith)
   const restoreBuiltinExercises = useStore((s) => s.restoreBuiltinExercises)
   const removeImportedExercises = useStore((s) => s.removeImportedExercises)
   const notify = useStore((s) => s.notify)
@@ -52,6 +51,9 @@ export default function ExercisesPage() {
   const [confirmPrune, setConfirmPrune] = useState(false)
 
   const importedCount = exercises.filter((e) => !e.isCustom && !SEED_IDS.has(e.id)).length
+  const seedPresent = exercises.filter((e) => SEED_IDS.has(e.id)).length
+  const seedMissing = SEED_EXERCISES.length - seedPresent
+  const fedbCount = exercises.filter((e) => e.source === 'free-exercise-db').length
 
   const isDefault = exercises.length > 0 && exercises.every((e) => e.source === 'veryhevy')
   const hasPhotos = exercises.some((e) => e.images.length > 0)
@@ -96,22 +98,17 @@ export default function ExercisesPage() {
 
   /* -------------------------------- import -------------------------------- */
 
-  const runImport = async (mode: 'merge' | 'replace') => {
+  const runImport = async () => {
     setImporting(true)
     setImportLog(['Téléchargement de la base free-exercise-db…'])
     try {
       const list = await fetchFreeExerciseDb()
       setImportLog((l) => [...l, `${list.length} exercices reçus, import en cours…`])
-      if (mode === 'replace') {
-        replaceLibraryWith(list)
-        setImportLog((l) => [...l, `✓ Bibliothèque remplacée par ${list.length} exercices.`])
-      } else {
-        const result = importExercises(list)
-        setImportLog((l) => [
-          ...l,
-          `✓ ${result.added} ajoutés, ${result.updated} enrichis (photos), ${result.skipped} déjà présents.`,
-        ])
-      }
+      const result = importExercises(list)
+      setImportLog((l) => [
+        ...l,
+        `✓ ${result.added} ajoutés, ${result.updated} enrichis (photos), ${result.skipped} déjà présents.`,
+      ])
       notify(`${list.length} exercices importés`, 'success')
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Erreur inconnue'
@@ -324,43 +321,42 @@ export default function ExercisesPage() {
       <Modal open={importOpen} onClose={() => setImportOpen(false)} title="Bibliothèque : importer / restaurer" size="md">
         <div className="space-y-4">
           <Card className="border-accent-line bg-accent-soft p-3.5">
-            <p className="text-sm font-bold">Base libre free-exercise-db</p>
+            <p className="text-sm font-bold">Base VeryHevy ({SEED_EXERCISES.length} exercices en français)</p>
             <p className="mt-1 text-xs text-muted">
-              876 exercices (musculation, cardio, étirements, pliométrie, haltérophilie…) avec photos animées et
-              instructions. Domaine public, téléchargé depuis GitHub.
+              {seedMissing === 0
+                ? '✓ Base complète, rien à faire.'
+                : `${seedPresent}/${SEED_EXERCISES.length} présents — ${seedMissing} manquant(s), jamais effacés par les autres imports.`}
             </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Button variant="primary" size="sm" disabled={importing} onClick={() => runImport('merge')}>
-                {importing ? <RefreshCw size={14} className="animate-spin" /> : <CloudDownload size={14} />}
-                Compléter ma bibliothèque
-              </Button>
-              <Button size="sm" disabled={importing} onClick={() => runImport('replace')}>
-                Remplacer tout
-              </Button>
-            </div>
-            <p className="mt-2 text-[11px] text-muted">
-              « Remplacer tout » efface la bibliothèque actuelle (y compris vos exercices personnalisés).
-              Préférez « Compléter », qui détecte les doublons par nom.
-            </p>
+            {seedMissing > 0 && (
+              <div className="mt-3">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  disabled={importing}
+                  onClick={() => {
+                    restoreBuiltinExercises()
+                    setImportOpen(false)
+                  }}
+                >
+                  <RefreshCw size={14} />
+                  Restaurer les {seedMissing} manquants
+                </Button>
+              </div>
+            )}
           </Card>
 
           <Card className="p-3.5">
-            <p className="text-sm font-bold">Exercices par défaut VeryHevy</p>
+            <p className="text-sm font-bold">Base illustrée free-exercise-db</p>
             <p className="mt-1 text-xs text-muted">
-              Réintègre les {SEED_EXERCISES.length} exercices français intégrés, sans toucher au reste
-              de la bibliothèque.
+              {fedbCount > 0 ? `${fedbCount} exercice(s) illustré(s) déjà installé(s). ` : ''}
+              876 exercices (musculation, cardio, étirements, pliométrie, haltérophilie…) avec photos animées et
+              instructions. Domaine public, téléchargé depuis GitHub. L’import complète sans doublon et ne
+              supprime jamais rien.
             </p>
             <div className="mt-3">
-              <Button
-                size="sm"
-                disabled={importing}
-                onClick={() => {
-                  restoreBuiltinExercises()
-                  setImportOpen(false)
-                }}
-              >
-                <RefreshCw size={14} />
-                Restaurer les exercices par défaut
+              <Button variant="primary" size="sm" disabled={importing} onClick={() => runImport()}>
+                {importing ? <RefreshCw size={14} className="animate-spin" /> : <CloudDownload size={14} />}
+                Compléter avec la base illustrée
               </Button>
             </div>
           </Card>

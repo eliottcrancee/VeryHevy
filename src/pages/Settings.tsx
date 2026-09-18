@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   CloudDownload,
   Database,
@@ -12,7 +13,7 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react'
-import type { AppData, Exercise } from '@/types'
+import type { AppData } from '@/types'
 import { useStore } from '@/store/store'
 import { syncNow } from '@/lib/sync'
 import { Page, PageHeader } from '@/components/PageHeader'
@@ -28,7 +29,7 @@ import {
   Segmented,
   Select,
 } from '@/components/ui'
-import { fetchFreeExerciseDb, parseExternalExercises } from '@/lib/importers'
+import { parseExternalExercises } from '@/lib/importers'
 import { cn, downloadJSON, pluralize } from '@/lib/utils'
 
 const ACCENTS = [
@@ -53,11 +54,9 @@ export default function SettingsPage() {
   const importData = useStore((s) => s.importData)
   const resetAll = useStore((s) => s.resetAll)
   const importExercises = useStore((s) => s.importExercises)
-  const replaceLibraryWith = useStore((s) => s.replaceLibraryWith)
   const notify = useStore((s) => s.notify)
 
   const [confirmReset, setConfirmReset] = useState(false)
-  const [confirmReplace, setConfirmReplace] = useState(false)
   const [pendingRestore, setPendingRestore] = useState<{
     name: string
     workouts: number
@@ -134,19 +133,6 @@ export default function SettingsPage() {
       }
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Fichier illisible', 'error')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const loadFullLibrary = async () => {
-    setBusy(true)
-    try {
-      const list = await fetchFreeExerciseDb()
-      const res = importExercises(list)
-      notify(`${res.added} exercices ajoutés (${res.updated} enrichis)`, 'success')
-    } catch {
-      notify('Import impossible : vérifiez votre connexion', 'error')
     } finally {
       setBusy(false)
     }
@@ -306,19 +292,13 @@ export default function SettingsPage() {
             {exercises.filter((e) => e.images.length > 0).length} avec photos
           </p>
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant="primary" disabled={busy} onClick={loadFullLibrary}>
-              {busy ? <RefreshCw size={14} className="animate-spin" /> : <CloudDownload size={14} />}
-              Importer free-exercise-db
-            </Button>
+            <Link to="/exercices">
+              <Button size="sm" variant="primary">
+                <Database size={14} /> Gérer la bibliothèque
+              </Button>
+            </Link>
             <Button size="sm" disabled={busy} onClick={exportExercises}>
               <Download size={14} /> Exporter la bibliothèque
-            </Button>
-            <Button
-              size="sm"
-              disabled={busy}
-              onClick={() => setConfirmReplace(true)}
-            >
-              Remplacer par la base complète
             </Button>
           </div>
         </Card>
@@ -426,28 +406,6 @@ export default function SettingsPage() {
           </p>
         </Card>
       </Page>
-
-      <ConfirmDialog
-        open={confirmReplace}
-        title="Remplacer toute la bibliothèque ?"
-        message="Vos exercices personnalisés et la base française seront effacés, puis remplacés par les 876 exercices de free-exercise-db."
-        confirmLabel="Remplacer"
-        danger
-        onCancel={() => setConfirmReplace(false)}
-        onConfirm={async () => {
-          setConfirmReplace(false)
-          setBusy(true)
-          try {
-            const list = await fetchFreeExerciseDb()
-            replaceLibraryWith(list as Exercise[])
-            notify('Bibliothèque remplacée', 'success')
-          } catch {
-            notify('Import impossible', 'error')
-          } finally {
-            setBusy(false)
-          }
-        }}
-      />
 
       <ConfirmDialog
         open={pendingRestore !== null}
