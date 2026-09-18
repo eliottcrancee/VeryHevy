@@ -2,11 +2,9 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   CloudDownload,
-  Database,
   Dumbbell,
   FileJson,
   Filter,
-  MoreVertical,
   Plus,
   RefreshCw,
   Search,
@@ -19,7 +17,7 @@ import type { ExerciseCategory } from '@/types'
 import { CATEGORY_META, MUSCLE_GROUPS } from '@/types'
 import { useStore } from '@/store/store'
 import { Page, PageHeader } from '@/components/PageHeader'
-import { Button, Card, Chip, ConfirmDialog, EmptyState, Field, IconButton, Input, Menu, Modal, Segmented } from '@/components/ui'
+import { Button, Card, Chip, ConfirmDialog, EmptyState, Field, IconButton, Input, Modal, Segmented } from '@/components/ui'
 import { ExerciseRow } from '@/components/ExercisePicker'
 import { ExerciseFormModal } from '@/components/ExerciseFormModal'
 import { fetchFreeExerciseDb, parseExternalExercises } from '@/lib/importers'
@@ -150,33 +148,9 @@ export default function ExercisesPage() {
         title="Exercices"
         subtitle={`${exercises.length} exercices · ${exercises.filter((e) => e.isCustom).length} personnalisés`}
         actions={
-          <>
-            <IconButton label="Importer" onClick={() => setImportOpen(true)}>
-              <CloudDownload size={18} />
-            </IconButton>
-            <Menu
-              align="right"
-              trigger={({ toggle }) => (
-                <IconButton label="Options" onClick={toggle}>
-                  <MoreVertical size={18} />
-                </IconButton>
-              )}
-              items={[
-                {
-                  label: 'Bibliothèque : importer / restaurer',
-                  icon: <Database size={15} />,
-                  onClick: () => setImportOpen(true),
-                },
-                {
-                  label: `Retirer les exercices importés (${importedCount})`,
-                  icon: <Trash2 size={15} />,
-                  danger: true,
-                  hidden: importedCount === 0,
-                  onClick: () => setConfirmPrune(true),
-                },
-              ]}
-            />
-          </>
+          <IconButton label="Importer" onClick={() => setImportOpen(true)}>
+            <CloudDownload size={18} />
+          </IconButton>
         }
       />
 
@@ -412,6 +386,30 @@ export default function ExercisesPage() {
             Formats acceptés : export VeryHevy, ou tableau d’objets au format free-exercise-db (name, category,
             primaryMuscles, equipment, images…). Les doublons sont détectés par nom.
           </p>
+
+          {importedCount > 0 && (
+            <Card className="border-danger/40 bg-danger/10 p-3.5">
+              <p className="text-sm font-bold">Retirer les exercices importés ({importedCount})</p>
+              <p className="mt-1 text-xs text-muted">
+                Retire les exercices issus de la base libre. La base VeryHevy et vos exercices
+                personnalisés sont conservés, vos séances passées ne sont pas touchées.
+              </p>
+              <div className="mt-3">
+                <Button
+                  size="sm"
+                  variant="danger"
+                  disabled={importing}
+                  onClick={() => {
+                    setImportOpen(false)
+                    setConfirmPrune(true)
+                  }}
+                >
+                  <Trash2 size={14} />
+                  Retirer
+                </Button>
+              </div>
+            </Card>
+          )}
 
           {importLog.length > 0 && (
             <pre className="max-h-40 overflow-auto rounded-xl bg-surface-2 p-3 text-[11px] whitespace-pre-wrap text-muted">
