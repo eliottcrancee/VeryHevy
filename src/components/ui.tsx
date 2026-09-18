@@ -429,7 +429,7 @@ export interface DurationFieldProps {
  * aucun saut de focus, retour arrière = on retire le dernier chiffre.
  */
 export const DurationField = memo(function DurationField({ value, onChange, className, ariaLabel, phantom }: DurationFieldProps) {
-  /** Secondes → chiffres bruts (ex. 90 → « 130 », 3723 → « 10203 », 0 → « »). */
+  /** Secondes → chiffres bruts, sans zéros de tête (90 → « 130 », 3723 → « 10203 », 5 → « 5 »). */
   const digitsOf = (v: number | undefined): string => {
     if (v === undefined || v === null || Number.isNaN(v)) return ''
     const s = Math.max(0, Math.round(v))
@@ -437,8 +437,9 @@ export const DurationField = memo(function DurationField({ value, onChange, clas
     const h = Math.floor(s / 3600)
     const m = Math.floor((s % 3600) / 60)
     const sec = s % 60
-    const tail = `${m}${String(sec).padStart(2, '0')}`
-    return h > 0 ? `${h}${tail}` : tail
+    if (h > 0) return `${h}${String(m).padStart(2, '0')}${String(sec).padStart(2, '0')}`
+    if (m > 0) return `${m}${String(sec).padStart(2, '0')}`
+    return String(sec)
   }
 
   /** Chiffres bruts → secondes (groupés par la droite : SS MM HH). Tout-zéro = vide. */
@@ -459,7 +460,22 @@ export const DurationField = memo(function DurationField({ value, onChange, clas
     if (!focused.current) setDigits(digitsOf(value))
   }, [value])
 
-  const display = digits ? formatClock(totalOf(digits) ?? 0) : ''
+  // Affichage BRUT groupé (sans report de retenue) pendant la saisie : taper
+  // « 5923 » montre transitoirement « 5:92 » puis « 59:23 ». Si on normalisait
+  // en direct (« 5:92 » → « 6:32 »), la suite de la frappe repartirait d'un
+  // texte différent de ce qui a été tapé et tout serait corrompu (« 1:03:23 »).
+  // La normalisation n'a lieu qu'au blur (et pour les valeurs du store).
+  const rawDisplay = (d: string): string => {
+    if (!d) return ''
+    const sec = d.slice(-2).padStart(2, '0')
+    const rest = d.slice(0, -2)
+    if (!rest) return `0:${sec}`
+    const min = rest.slice(-2)
+    const h = rest.slice(0, -2)
+    return h ? `${h}:${min}:${sec}` : `${min}:${sec}`
+  }
+
+  const display = rawDisplay(digits)
 
   return (
     <div
@@ -486,11 +502,12 @@ export const DurationField = memo(function DurationField({ value, onChange, clas
           setDigits(digitsOf(totalOf(digits)))
         }}
         onChange={(e) => {
-          // On ne garde que les 6 derniers chiffres : la frappe décale tout seule.
+          // Chiffres seuls, sans zéros de tête, 6 derniers max : la frappe
+          // décale tout seule (« 0:05 » + « 9 » → « 59 », pas « 0059 »).
           // Tout-zéro (ex. restes du rembourrage « 00 » après effacements) = vide,
           // sinon on ne pourrait jamais tout effacer au retour arrière.
-          const next = e.target.value.replace(/[^0-9]/g, '').slice(-6)
-          if (!next || /^0+$/.test(next)) {
+          const next = e.target.value.replace(/[^0-9]/g, '').replace(/^0+/, '').slice(-6)
+          if (!next) {
             setDigits('')
             onChange(undefined)
             return
