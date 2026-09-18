@@ -10,6 +10,7 @@ import {
   RefreshCw,
   Search,
   Star,
+  Trash2,
   Upload,
   X,
 } from 'lucide-react'
@@ -17,11 +18,14 @@ import type { ExerciseCategory } from '@/types'
 import { CATEGORY_META, MUSCLE_GROUPS } from '@/types'
 import { useStore } from '@/store/store'
 import { Page, PageHeader } from '@/components/PageHeader'
-import { Button, Card, Chip, EmptyState, Field, IconButton, Input, Menu, Modal, Segmented } from '@/components/ui'
+import { Button, Card, Chip, ConfirmDialog, EmptyState, Field, IconButton, Input, Menu, Modal, Segmented } from '@/components/ui'
 import { ExercisePicker, ExerciseRow } from '@/components/ExercisePicker'
 import { ExerciseFormModal } from '@/components/ExerciseFormModal'
 import { fetchFreeExerciseDb, parseExternalExercises } from '@/lib/importers'
+import { SEED_EXERCISES } from '@/lib/seed'
 import { normalize } from '@/lib/utils'
+
+const SEED_IDS = new Set(SEED_EXERCISES.map((e) => e.id))
 
 type SortKey = 'nom' | 'recent' | 'favoris'
 
@@ -30,6 +34,7 @@ export default function ExercisesPage() {
   const importExercises = useStore((s) => s.importExercises)
   const replaceLibraryWith = useStore((s) => s.replaceLibraryWith)
   const restoreBuiltinExercises = useStore((s) => s.restoreBuiltinExercises)
+  const removeImportedExercises = useStore((s) => s.removeImportedExercises)
   const notify = useStore((s) => s.notify)
 
   const [query, setQuery] = useState('')
@@ -46,6 +51,9 @@ export default function ExercisesPage() {
   const [importOpen, setImportOpen] = useState(false)
   const [importing, setImporting] = useState(false)
   const [importLog, setImportLog] = useState<string[]>([])
+  const [confirmPrune, setConfirmPrune] = useState(false)
+
+  const importedCount = exercises.filter((e) => !e.isCustom && !SEED_IDS.has(e.id)).length
 
   const isDefault = exercises.length > 0 && exercises.every((e) => e.source === 'veryhevy')
   const hasPhotos = exercises.some((e) => e.images.length > 0)
@@ -161,6 +169,13 @@ export default function ExercisesPage() {
                   label: 'Restaurer les exercices par défaut',
                   icon: <RefreshCw size={15} />,
                   onClick: restoreBuiltinExercises,
+                },
+                {
+                  label: `Retirer les exercices importés (${importedCount})`,
+                  icon: <Trash2 size={15} />,
+                  danger: true,
+                  hidden: importedCount === 0,
+                  onClick: () => setConfirmPrune(true),
                 },
               ]}
             />
@@ -389,6 +404,28 @@ export default function ExercisesPage() {
           )}
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={confirmPrune}
+        title="Retirer les exercices importés ?"
+        message={
+          <>
+            {importedCount > 1
+              ? `${importedCount} exercices issus de la base libre seront retirés de la bibliothèque.`
+              : `1 exercice issu de la base libre sera retiré de la bibliothèque.`}{' '}
+            La base VeryHevy et vos exercices personnalisés sont conservés.
+            <br />
+            Vos séances passées ne sont pas touchées (leurs séries restent enregistrées).
+          </>
+        }
+        confirmLabel="Retirer"
+        danger
+        onCancel={() => setConfirmPrune(false)}
+        onConfirm={() => {
+          removeImportedExercises()
+          setConfirmPrune(false)
+        }}
+      />
     </div>
   )
 }

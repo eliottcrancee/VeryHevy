@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { CalendarDays, ChevronRight, Dumbbell, Search, Star, TrendingUp } from 'lucide-react'
+import { ChevronRight, Dumbbell, Search, Star } from 'lucide-react'
 import { useStore } from '@/store/store'
 import { Page, PageHeader } from '@/components/PageHeader'
-import { Button, Card, Chip, EmptyState, Input, Stat } from '@/components/ui'
+import { Button, Card, Chip, EmptyState, Input } from '@/components/ui'
 import {
   completedWorkouts,
   muscleBreakdown,
@@ -11,7 +11,7 @@ import {
   workoutSets,
   workoutVolume,
 } from '@/lib/calc'
-import { formatDate, formatDuration, formatVolume, kgToDisplay, normalize } from '@/lib/utils'
+import { formatDate, formatDuration, formatVolume, normalize } from '@/lib/utils'
 
 type Period = 'tout' | '30j' | '90j' | 'annee'
 
@@ -48,8 +48,6 @@ export default function HistoryPage() {
   }, [workouts, exercises, query, period])
 
   const all = completedWorkouts(workouts)
-  const totalVolume = all.reduce((n, w) => n + workoutVolume(w), 0)
-  const totalTime = all.reduce((n, w) => n + workoutDurationSeconds(w), 0)
 
   const grouped = useMemo(() => {
     const map = new Map<string, typeof filtered>()
@@ -67,17 +65,6 @@ export default function HistoryPage() {
       <PageHeader title="Historique" subtitle={`${all.length} séance${all.length > 1 ? 's' : ''} enregistrée${all.length > 1 ? 's' : ''}`} />
 
       <Page className="space-y-5">
-        <div className="grid grid-cols-3 gap-2">
-          <Stat label="Séances" value={all.length} icon={<CalendarDays size={12} />} />
-          <Stat
-            label="Volume"
-            value={`${Math.round(kgToDisplay(totalVolume, settings.unit) / 1000).toLocaleString('fr-FR')}k`}
-            sub={settings.unit}
-            icon={<TrendingUp size={12} />}
-          />
-          <Stat label="Temps" value={formatDuration(totalTime, 'compact')} icon={<Dumbbell size={12} />} />
-        </div>
-
         <div className="space-y-2">
           <div className="relative">
             <Search size={16} className="absolute top-1/2 left-3 -translate-y-1/2 text-muted" />

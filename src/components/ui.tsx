@@ -412,55 +412,89 @@ export interface DurationFieldProps {
 }
 
 /**
- * Saisie de durée en minutes:secondes (idéal cardio) : deux petits champs
- * purement numériques, sans besoin du caractère « : » au clavier du téléphone.
+ * Saisie de durée en heures:minutes:secondes (idéal cardio) : trois petits
+ * champs purement numériques, sans besoin du caractère « : » au clavier du
+ * téléphone. Les heures restent vides quand elles sont nulles (affichage
+ * compact « m:ss »).
  */
 export const DurationField = memo(function DurationField({ value, onChange, className, ariaLabel }: DurationFieldProps) {
   const toParts = (v: number | undefined) => {
-    if (v === undefined || v === null || Number.isNaN(v)) return { min: '', sec: '' }
+    if (v === undefined || v === null || Number.isNaN(v)) return { h: '', min: '', sec: '' }
     const s = Math.max(0, Math.round(v))
-    return { min: String(Math.floor(s / 60)), sec: String(s % 60).padStart(2, '0') }
+    const h = Math.floor(s / 3600)
+    const m = Math.floor((s % 3600) / 60)
+    return {
+      h: h > 0 ? String(h) : '',
+      min: h > 0 ? String(m).padStart(2, '0') : String(m),
+      sec: String(s % 60).padStart(2, '0'),
+    }
   }
 
+  const [hText, setHText] = useState(() => toParts(value).h)
   const [minText, setMinText] = useState(() => toParts(value).min)
   const [secText, setSecText] = useState(() => toParts(value).sec)
-  const focused = useRef<'min' | 'sec' | null>(null)
-  const secRef = useRef<HTMLInputElement>(null)
+  const focused = useRef<'h' | 'min' | 'sec' | null>(null)
+  /** Le champ était-il vide à la prise de focus ? Seul ce cas déclenche l'avance auto. */
+  const wasEmpty = useRef(false)
+  const hRef = useRef<HTMLInputElement>(null)
   const minRef = useRef<HTMLInputElement>(null)
+  const secRef = useRef<HTMLInputElement>(null)
 
   // Resynchronise depuis le store quand on n'est pas en train de saisir.
   useEffect(() => {
     if (focused.current) return
     const p = toParts(value)
+    setHText(p.h)
     setMinText(p.min)
     setSecText(p.sec)
   }, [value])
 
-  const commit = (minRaw: string, secRaw: string) => {
+
+
+  const parseParts = (hRaw: string, minRaw: string, secRaw: string): number | undefined => {
+    const h = hRaw.trim() === '' ? null : Number(hRaw)
     const m = minRaw.trim() === '' ? null : Number(minRaw)
     const s = secRaw.trim() === '' ? null : Number(secRaw)
-    if (m === null && s === null) {
-      onChange(undefined)
-      return
+    if (h === null && m === null && s === null) return undefined
+    if ((h !== null && !Number.isFinite(h)) || (m !== null && !Number.isFinite(m)) || (s !== null && !Number.isFinite(s))) {
+      return undefined
     }
-    if ((m !== null && !Number.isFinite(m)) || (s !== null && !Number.isFinite(s))) return
-    const minutes = Math.min(999, Math.max(0, Math.floor(m ?? 0)))
+    const hours = Math.min(99, Math.max(0, Math.floor(h ?? 0)))
+    const minutes = Math.min(59, Math.max(0, Math.floor(m ?? 0)))
     const seconds = Math.min(59, Math.max(0, Math.floor(s ?? 0)))
-    onChange(minutes * 60 + seconds)
+    return hours * 3600 + minutes * 60 + seconds
+  }
+
+  const commit = (hRaw: string, minRaw: string, secRaw: string) => {
+    onChange(parseParts(hRaw, minRaw, secRaw))
+  }
+
+  const onHChange = (raw: string) => {
+    const cleaned = raw.replace(/[^0-9]/g, '').slice(0, 2)
+    setHText(cleaned)
+    commit(cleaned, minText, secText)
+    // Avance auto aux minutes après 2 chiffres saisis dans un champ vide.
+    if (cleaned.length === 2 && wasEmpty.current) {
+      wasEmpty.current = false
+      minRef.current?.focus()
+    }
   }
 
   const onMinChange = (raw: string) => {
-    const cleaned = raw.replace(/[^0-9]/g, '').slice(0, 3)
+    const cleaned = raw.replace(/[^0-9]/g, '').slice(0, 2)
     setMinText(cleaned)
-    commit(cleaned, secText)
-    // Avance automatiquement aux secondes après 2 chiffres.
-    if (cleaned.length === 2 && secText === '') secRef.current?.focus()
+    commit(hText, cleaned, secText)
+    // Avance auto aux secondes après 2 chiffres saisis dans un champ vide.
+    if (cleaned.length === 2 && wasEmpty.current) {
+      wasEmpty.current = false
+      secRef.current?.focus()
+    }
   }
 
   const onSecChange = (raw: string) => {
     const cleaned = raw.replace(/[^0-9]/g, '').slice(0, 2)
     setSecText(cleaned)
-    commit(minText, cleaned)
+    commit(hText, minText, cleaned)
   }
 
   const inputCls =
@@ -468,41 +502,67 @@ export const DurationField = memo(function DurationField({ value, onChange, clas
 
   // Tout sélectionner au focus : la frappe remplace proprement la valeur
   // (sinon l'insertion au milieu + la longueur fixe mangent les caractères).
-  const selectAll = (e: React.FocusEvent<HTMLInputElement>) => {
+  const onFocus = (which: 'h' | 'min' | 'sec', current: string) => (e: React.FocusEvent<HTMLInputElement>) => {
+    focused.current = which
+    // Un champ vide OU rempli de zéros (issu du formatage « 00 ») se comporte
+    // comme un champ vierge : 2 chiffres saisis → avance auto au suivant.
+    wasEmpty.current = current === '' || /^0+$/.test(current)
     e.target.select()
   }
+  // Au blur on relit le DOM (réfs) puis on reformate depuis le total calculé :
+  // jamais depuis un état périmé (le blur du champ A se joue pendant le focus
+  // du champ B, avec des closures de l'ancien rendu — c'est ce qui écrasait
+  // la frappe, ex. « 30 » redevenu « 03 »).
+  const onBlur = () => {
+    focused.current = null
+    const h = hRef.current?.value ?? ''
+    const m = minRef.current?.value ?? ''
+    const s = secRef.current?.value ?? ''
+    const total = parseParts(h, m, s)
+    onChange(total)
+    const p = toParts(total)
+    setHText(p.h)
+    setMinText(p.min)
+    setSecText(p.sec)
+  }
 
-  return (
-    <div
-      className={cn(
-        'flex h-9 min-w-0 items-center justify-center gap-0.5 rounded-xl border border-line bg-surface-2/70 px-1 transition-colors focus-within:border-accent',
-        className,
-      )}
-      title="Durée en minutes : secondes"
-    >
-      <input
-        ref={minRef}
-        aria-label={ariaLabel ? `${ariaLabel} (minutes)` : 'Minutes'}
-        inputMode="numeric"
-        autoComplete="off"
-        maxLength={3}
-        value={minText}
-        placeholder="0"
-        onFocus={(e) => {
-          focused.current = 'min'
-          selectAll(e)
-        }}
-        onBlur={() => {
-          focused.current = null
-          commit(minText, secText)
-          const p = toParts(value)
-          setMinText(p.min)
-          setSecText(p.sec)
-        }}
-        onChange={(e) => onMinChange(e.target.value)}
-        className={cn(inputCls, 'flex-[1.2]')}
-      />
-      <span className="shrink-0 font-extrabold text-muted">:</span>
+  const seg = (which: 'h' | 'min' | 'sec') => {
+    if (which === 'h')
+      return (
+        <input
+          ref={hRef}
+          aria-label={ariaLabel ? `${ariaLabel} (heures)` : 'Heures'}
+          inputMode="numeric"
+          autoComplete="off"
+          maxLength={2}
+          value={hText}
+          placeholder="0"
+          onFocus={onFocus('h', hText)}
+          onBlur={onBlur}
+          onChange={(e) => onHChange(e.target.value)}
+          className={cn(inputCls, 'flex-[0.8]')}
+        />
+      )
+    if (which === 'min')
+      return (
+        <input
+          ref={minRef}
+          aria-label={ariaLabel ? `${ariaLabel} (minutes)` : 'Minutes'}
+          inputMode="numeric"
+          autoComplete="off"
+          maxLength={2}
+          value={minText}
+          placeholder="0"
+          onFocus={onFocus('min', minText)}
+          onBlur={onBlur}
+          onChange={(e) => onMinChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Backspace' && minText === '') hRef.current?.focus()
+          }}
+          className={cn(inputCls, 'flex-1')}
+        />
+      )
+    return (
       <input
         ref={secRef}
         aria-label={ariaLabel ? `${ariaLabel} (secondes)` : 'Secondes'}
@@ -511,23 +571,32 @@ export const DurationField = memo(function DurationField({ value, onChange, clas
         maxLength={2}
         value={secText}
         placeholder="00"
-        onFocus={(e) => {
-          focused.current = 'sec'
-          selectAll(e)
-        }}
-        onBlur={() => {
-          focused.current = null
-          commit(minText, secText)
-          const p = toParts(value)
-          setMinText(p.min)
-          setSecText(p.sec)
-        }}
+        onFocus={onFocus('sec', secText)}
+        onBlur={onBlur}
         onChange={(e) => onSecChange(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === 'Backspace' && secText === '') minRef.current?.focus()
+          if (e.key !== 'Backspace' || secText !== '') return
+          if (minText === '') hRef.current?.focus()
+          else minRef.current?.focus()
         }}
         className={cn(inputCls, 'flex-1')}
       />
+    )
+  }
+
+  return (
+    <div
+      className={cn(
+        'flex h-9 min-w-0 items-center justify-center gap-0.5 rounded-xl border border-line bg-surface-2/70 px-1 transition-colors focus-within:border-accent',
+        className,
+      )}
+      title="Durée en heures : minutes : secondes"
+    >
+      {seg('h')}
+      <span className="shrink-0 font-extrabold text-muted">:</span>
+      {seg('min')}
+      <span className="shrink-0 font-extrabold text-muted">:</span>
+      {seg('sec')}
     </div>
   )
 })
@@ -953,14 +1022,11 @@ export function CheckBadge({
   done,
   onClick,
   size = 30,
-  label,
   title,
 }: {
   done: boolean
   onClick: () => void
   size?: number
-  /** Numéro affiché quand la série n'est pas validée (ex. n° de série). */
-  label?: ReactNode
   title?: string
 }) {
   return (
@@ -974,16 +1040,10 @@ export function CheckBadge({
         'flex shrink-0 items-center justify-center rounded-lg border transition-all active:scale-90',
         done
           ? 'border-success bg-success text-white'
-          : 'border-line bg-surface-2 text-muted hover:border-success/60',
+          : 'border-line bg-surface-2 text-transparent hover:border-success/60',
       )}
     >
-      {done ? (
-        <Check size={size * 0.55} strokeWidth={3} />
-      ) : label !== undefined ? (
-        <span className="tabular text-[13px] font-extrabold">{label}</span>
-      ) : (
-        <Check size={size * 0.55} strokeWidth={3} className="text-transparent" />
-      )}
+      <Check size={size * 0.55} strokeWidth={3} />
     </button>
   )
 }

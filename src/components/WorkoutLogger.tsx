@@ -18,7 +18,7 @@ import { Button, CheckBadge, DurationField, IconButton, Menu, Modal, NumberField
 import { CategoryBadge } from '@/components/ExerciseFormModal'
 import { ExerciseAvatar } from '@/components/ExercisePicker'
 import { useStore, trackingFieldsOf } from '@/store/store'
-import { estimate1RM, lastPerformance, setVolume } from '@/lib/calc'
+import { estimate1RM, lastPerformance, lastPerformanceInTemplate, setVolume } from '@/lib/calc'
 import { cn, displayToMeters, formatVolume, formatWeight, inputToKg, kgToInput, metersToDisplay } from '@/lib/utils'
 
 /* ------------------------------------------------------------------ */
@@ -202,26 +202,22 @@ export function SetRow({ workoutId, we, set, index, exercise, unit, distanceUnit
         isWarmup && 'opacity-80',
       )}
     >
-      {/* Le n° de série est affiché dans la case à cocher (gain de place). */}
       <CheckBadge
         done={set.completed}
         onClick={() => toggleSetCompleted(workoutId, we.id, set.id)}
         size={32}
-        label={meta.short || index + 1}
         title={set.completed ? 'Série validée — toucher pour décocher' : `Série ${index + 1} — toucher pour valider`}
       />
 
+      {/* N° de série juste à côté de la case (comme E / D / X). */}
       <button
         type="button"
         onClick={cycleType}
-        title={`Type : ${meta.label} (toucher pour changer)`}
-        style={set.type === 'normal' ? undefined : { color: meta.color }}
-        className={cn(
-          'flex h-7 w-5 shrink-0 items-center justify-center rounded text-[10px] font-extrabold transition-colors hover:bg-surface-3',
-          set.type === 'normal' ? 'text-muted/30' : '',
-        )}
+        title={`Série ${index + 1} · ${meta.label} (toucher pour changer le type)`}
+        style={{ color: meta.color }}
+        className="flex h-7 w-6 shrink-0 items-center justify-center rounded text-[12px] font-extrabold transition-colors hover:bg-surface-3"
       >
-        {meta.short || '·'}
+        {meta.short || index + 1}
       </button>
 
       {fields.map((field) => (
@@ -313,10 +309,15 @@ export function WorkoutExerciseCard({
   const [restEditOpen, setRestEditOpen] = useState(false)
   const [restDraft, setRestDraft] = useState(we.restSeconds)
 
-  const reference = useMemo(
-    () => (exercise ? lastPerformance(workouts, exercise.id, workout.id) : undefined),
-    [workouts, exercise, workout.id],
-  )
+  // Rappel « précédent » : en priorité la dernière fois DANS CE programme,
+  // sinon la dernière performance globale.
+  const reference = useMemo(() => {
+    if (!exercise) return undefined
+    return (
+      lastPerformanceInTemplate(workouts, exercise.id, workout.templateId, workout.id) ??
+      lastPerformance(workouts, exercise.id, workout.id)
+    )
+  }, [workouts, exercise, workout.id, workout.templateId])
 
   const doneSets = we.sets.filter((s) => s.completed)
   const volume = doneSets.reduce((n, s) => n + setVolume(s), 0)
@@ -398,10 +399,10 @@ export function WorkoutExerciseCard({
         />
       </header>
 
-      {/* Colonnes (le n° de série est dans la case à cocher) */}
+      {/* Colonnes */}
       <div className="flex items-center gap-1 px-2 pb-1 text-[10px] font-bold tracking-wide text-muted uppercase">
         <span className="w-[32px]" />
-        <span className="w-5" />
+        <span className="w-6 text-center">#</span>
         {trackingFieldsOf(exercise).map((f) => (
           <span key={f} className={cn('min-w-0 flex-1 text-center', f === 'weight' || f === 'distance' ? 'flex-[1.15]' : '')}>
             {{ weight: settings.unit, reps: 'reps', duration: 'durée', distance: settings.distanceUnit }[f]}

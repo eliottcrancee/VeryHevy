@@ -172,6 +172,24 @@ export function lastPerformance(
   )[0]
 }
 
+/**
+ * Dernière fois que l'exercice a été fait DANS LE MÊME programme (template).
+ * Permet de pré-remplir une séance avec ce qui a vraiment été fait la
+ * dernière fois dans ce programme (plutôt que le global multi-programmes).
+ */
+export function lastPerformanceInTemplate(
+  workouts: Workout[],
+  exerciseId: string,
+  templateId?: string,
+  excludeWorkoutId?: string,
+): ExerciseSession | undefined {
+  if (!templateId) return undefined
+  return getExerciseSessions(
+    workouts.filter((w) => w.id !== excludeWorkoutId && w.templateId === templateId),
+    exerciseId,
+  )[0]
+}
+
 export interface PersonalRecord {
   kind: 'weight' | 'e1rm' | 'reps' | 'volume' | 'duration' | 'distance'
   value: number

@@ -19,6 +19,7 @@ import {
   duplicateSet,
   emptySet,
   lastPerformance,
+  lastPerformanceInTemplate,
   workoutSets,
 } from '@/lib/calc'
 import { createSeedRoutines, SEED_EXERCISES } from '@/lib/seed'
@@ -75,6 +76,8 @@ export interface StoreState extends AppData {
   importExercises: (list: Exercise[], opts?: { replace?: boolean }) => ImportResult
   restoreBuiltinExercises: () => void
   replaceLibraryWith: (list: Exercise[]) => void
+  /** Retire les exercices importés (base libre…) : ne garde que la base VeryHevy + vos customs. */
+  removeImportedExercises: () => number
 
   /* ------- séances ------- */
   startWorkout: (opts?: {
@@ -87,6 +90,8 @@ export interface StoreState extends AppData {
   deleteWorkout: (id: string) => void
   finishWorkout: (id: string, patch?: Partial<Workout>) => void
   reopenWorkout: (id: string) => void
+  /** Met le chrono en pause (durée figée, modifiable, relançable). */
+  pauseWorkoutClock: (id: string) => void
   /** Relance le chrono d'une séance rouverte (chrono resté en pause). */
   resumeWorkoutClock: (id: string) => void
   /** Ajuste la durée affichée (chrono en pause ou en cours). */
@@ -236,7 +241,13 @@ export function routineToWorkoutExercises(
 ): WorkoutExercise[] {
   return routine.exercises.map((re) => {
     const ex = exercises.find((e) => e.id === re.exerciseId)
-    const history = useHistory && ex ? lastPerformance(workouts, ex.id)?.sets : undefined
+    // Priorité 1 : ce qui a été fait la dernière fois DANS CE programme
+    // (répété intelligemment si le nombre de séries a changé).
+    // Sinon : strictement les valeurs prescrites par le programme (le rappel
+    // « précédent » sous le nom de l'exercice montre quand même le global).
+    const sameProgram = useHistory && ex ? lastPerformanceInTemplate(workouts, ex.id, routine.id)?.sets : undefined
+    const pickFrom = (arr: WorkoutSet[] | undefined, i: number) =>
+      arr?.length ? arr[Math.min(i, arr.length - 1)] : undefined
     const sets = re.sets.map((t) => {
       const s = emptySet(t.type)
       if (t.weight !== undefined && t.weight > 0) s.weight = t.weight
@@ -245,13 +256,17 @@ export function routineToWorkoutExercises(
       if (t.distance !== undefined) s.distance = t.distance
       return s
     })
-    // si la série type n'a pas de charge, on tente de reprendre l'historique
+    // Remplit intelligemment, même si le nombre de séries a changé :
+    // on mappe par index, et on répète la dernière série connue au-delà.
     const merged = sets.map((s, i) => {
-      const base = history?.[Math.min(i, Math.max(0, history.length - 1))]
-      if (base && s.weight === undefined && base.weight !== undefined) s.weight = base.weight
-      if (base && s.reps === undefined && base.reps !== undefined) s.reps = base.reps
-      if (base && s.duration === undefined && base.duration !== undefined) s.duration = base.duration
-      if (base && s.distance === undefined && base.distance !== undefined) s.distance = base.distance
+      const prev = pickFrom(sameProgram, i)
+      // Déjà fait dans ce programme : on reprend tel quel (visible d'un coup
+      // d'œil avant de valider) ; le prescrit ne sert que de repli champ par champ.
+      if (!prev) return s
+      if (prev.weight !== undefined) s.weight = prev.weight
+      if (prev.reps !== undefined) s.reps = prev.reps
+      if (prev.duration !== undefined) s.duration = prev.duration
+      if (prev.distance !== undefined) s.distance = prev.distance
       return s
     })
     return {
@@ -408,6 +423,22 @@ export const useStore = create<StoreState>()(
         get().notify(`${result.added} exercice(s) réintégré(s)`, 'success')
       },
 
+      removeImportedExercises: () => {
+        const seedIds = new Set(SEED_EXERCISES.map((e) => e.id))
+        const before = get().exercises.length
+        // On garde la base VeryHevy + tous les exercices personnalisés.
+        // Les séances passées ne sont pas touchées : elles conservent leurs
+        // séries (l'exercice manquant s'affiche « Exercice supprimé »).
+        const kept = get().exercises.filter((e) => e.isCustom || seedIds.has(e.id))
+        set({ exercises: kept })
+        const removed = before - kept.length
+        get().notify(
+          removed > 0 ? `${removed} exercice(s) importé(s) retiré(s)` : 'Aucun exercice importé à retirer',
+          removed > 0 ? 'success' : 'info',
+        )
+        return removed
+      },
+
       /* ------------------------------------------------------ séances */
       startWorkout: (opts = {}) => {
         const { exercises, workouts, routines, settings } = get()
@@ -440,7 +471,11 @@ export const useStore = create<StoreState>()(
         } else if (opts.exercises?.length) {
           weList = opts.exercises.map((item) => {
             const ex = exercises.find((e) => e.id === item.exerciseId)
-            const history = lastPerformance(base, item.exerciseId)?.sets
+            // Même logique que depuis un programme : on préfère ce qui a été
+            // fait dans ce programme, sinon la dernière performance globale.
+            const history =
+              lastPerformanceInTemplate(base, item.exerciseId, opts.templateId)?.sets ??
+              lastPerformance(base, item.exerciseId)?.sets
             return blankWorkoutExercise(
               item.exerciseId,
               buildSets(ex, history, item.setCount ?? settings.defaultSets),
@@ -522,6 +557,15 @@ export const useStore = create<StoreState>()(
         get().notify('Séance rouverte — chrono en pause', 'info')
       },
 
+      pauseWorkoutClock: (id) => {
+        const w = get().workouts.find((x) => x.id === id)
+        if (!w || w.status !== 'active' || w.finishedAt) return
+        set({
+          workouts: workoutPatch(get().workouts, id, (x) => ({ ...x, finishedAt: new Date().toISOString() })),
+        })
+        get().notify('Chrono en pause', 'info')
+      },
+
       resumeWorkoutClock: (id) => {
         const w = get().workouts.find((x) => x.id === id)
         if (!w || !w.finishedAt) return
@@ -554,7 +598,13 @@ export const useStore = create<StoreState>()(
         const workout = workouts.find((w) => w.id === workoutId)
         if (!workout) return undefined
         const ex = exercises.find((e) => e.id === exerciseId)
-        const ref = opts.useHistory === false ? undefined : lastPerformance(workouts, exerciseId, workoutId)?.sets
+        const ref =
+          opts.useHistory === false
+            ? undefined
+            : (
+                lastPerformanceInTemplate(workouts, exerciseId, workout.templateId, workoutId)?.sets ??
+                lastPerformance(workouts, exerciseId, workoutId)?.sets
+              )
         const we = blankWorkoutExercise(
           exerciseId,
           buildSets(ex, ref, opts.setCount ?? get().settings.defaultSets),

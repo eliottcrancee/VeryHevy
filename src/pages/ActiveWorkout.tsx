@@ -199,6 +199,7 @@ export default function ActiveWorkoutPage() {
   const discardWorkout = useStore((s) => s.discardWorkout)
   const toggleSuperset = useStore((s) => s.toggleSuperset)
   const saveWorkoutAsRoutine = useStore((s) => s.saveWorkoutAsRoutine)
+  const pauseWorkoutClock = useStore((s) => s.pauseWorkoutClock)
   const resumeWorkoutClock = useStore((s) => s.resumeWorkoutClock)
   const setWorkoutDuration = useStore((s) => s.setWorkoutDuration)
   const notify = useStore((s) => s.notify)
@@ -301,7 +302,7 @@ export default function ActiveWorkoutPage() {
         {clockPaused && (
           <div className="animate-slide-up flex flex-wrap items-center gap-2 rounded-xl border border-warning/50 bg-warning/10 px-3 py-2 text-[13px]">
             <Pause size={15} className="text-warning" />
-            <span className="font-semibold">Modification — chrono en pause ({formatDuration(elapsed)})</span>
+            <span className="font-semibold">Chrono en pause ({formatDuration(elapsed)})</span>
             <span className="ml-auto flex gap-2">
               <Button
                 size="sm"
@@ -421,7 +422,38 @@ export default function ActiveWorkoutPage() {
         </Card>
 
         <div className="grid grid-cols-3 gap-2">
-          <Stat label="Durée" value={formatDuration(elapsed, 'compact')} icon={<Timer size={12} />} />
+          {/* Chrono : toucher la durée pour la corriger à la main, ⏸/▶ pour la pauser. */}
+          <div className="rounded-2xl border border-line bg-surface p-3.5">
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold tracking-wide text-muted uppercase">
+              <Timer size={12} />
+              Durée
+              {clockPaused && (
+                <span className="rounded bg-warning/15 px-1 py-px text-[9px] font-bold text-warning">pause</span>
+              )}
+            </div>
+            <div className="mt-1.5 flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setDurationDraft(Math.round(elapsed / 60))
+                  setDurationOpen(true)
+                }}
+                title="Modifier la durée à la main"
+                className="tabular min-w-0 flex-1 truncate text-left text-xl font-extrabold transition-colors hover:text-accent"
+              >
+                {formatDuration(elapsed, 'compact')}
+              </button>
+              {clockPaused ? (
+                <IconButton label="Reprendre le chrono" onClick={() => resumeWorkoutClock(workout.id)} className="h-8 w-8 text-success">
+                  <Play size={15} />
+                </IconButton>
+              ) : (
+                <IconButton label="Mettre le chrono en pause" onClick={() => pauseWorkoutClock(workout.id)} className="h-8 w-8">
+                  <Pause size={15} />
+                </IconButton>
+              )}
+            </div>
+          </div>
           <Stat label="Séries" value={`${doneSets}/${totalSets}`} icon={<Check size={12} />} />
           <Stat label="Volume" value={formatVolume(volume, settings.unit)} icon={<Flag size={12} />} />
         </div>
