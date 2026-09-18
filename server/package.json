@@ -1,0 +1,10 @@
+{
+  "name": "veryhevy-sync",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Serveur de synchro maison VeryHevy (zéro dépendance)",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs"
+  }
+}

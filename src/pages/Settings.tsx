@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import type { AppData, Exercise } from '@/types'
 import { useStore } from '@/store/store'
+import { syncNow } from '@/lib/sync'
 import { Page, PageHeader } from '@/components/PageHeader'
 import {
   Button,
@@ -21,6 +22,7 @@ import {
   Checkbox,
   ConfirmDialog,
   Field,
+  Input,
   NumberField,
   SectionTitle,
   Segmented,
@@ -57,7 +59,27 @@ export default function SettingsPage() {
   const [confirmReset, setConfirmReset] = useState(false)
   const [confirmReplace, setConfirmReplace] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [syncing, setSyncing] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+
+  const syncState = settings.sync.enabled && settings.sync.url.trim() ? 'ready' : 'off'
+  const lastSync = settings.lastSyncAt
+    ? new Date(settings.lastSyncAt).toLocaleString('fr-FR')
+    : 'jamais'
+
+  const runSync = async () => {
+    setSyncing(true)
+    try {
+      const res = await syncNow()
+      if (res.status === 'ok') {
+        notify(`Synchro OK : ${res.pushed ?? 0} envoyé(s), ${res.pulled ?? 0} reçu(s)`, 'success')
+      } else if (res.status === 'error') {
+        notify(res.error ?? 'Échec de synchro', 'error')
+      }
+    } finally {
+      setSyncing(false)
+    }
+  }
 
   const totalSets = workouts.reduce((n, w) => n + w.exercises.reduce((m, we) => m + we.sets.length, 0), 0)
 
@@ -287,7 +309,10 @@ export default function SettingsPage() {
           <p className="text-sm text-muted">
             {pluralize(workouts.length, 'séance')} · {pluralize(routines.length, 'programme')} ·{' '}
             {pluralize(totalSets, 'série')} enregistrées. Tout est stocké localement dans votre navigateur
-            (IndexedDB) — aucune donnée n’est envoyée sur un serveur.
+            (IndexedDB)
+            {syncState === 'ready'
+              ? ' et synchronisé avec votre serveur quand internet est disponible.'
+              : ' — aucune donnée n’est envoyée ailleurs.'}
           </p>
           <div className="flex flex-wrap gap-2">
             <Button size="sm" variant="primary" onClick={exportAll}>
@@ -310,6 +335,55 @@ export default function SettingsPage() {
             <Button size="sm" variant="danger" onClick={() => setConfirmReset(true)}>
               <Trash2 size={14} /> Tout réinitialiser
             </Button>
+          </div>
+        </Card>
+
+        {/* Synchronisation serveur maison */}
+        <Card className="space-y-4 p-4">
+          <SectionTitle className="mb-0">
+            <span className="inline-flex items-center gap-1.5">
+              <CloudDownload size={13} /> Synchronisation (serveur maison)
+            </span>
+          </SectionTitle>
+          <p className="text-sm text-muted">
+            Sauvegarde et réconcilie vos données avec votre serveur quand internet est disponible.
+            100 % local par défaut — rien ne part tant que ce n’est pas configuré. La séance en
+            cours et le chrono ne sont jamais synchronisés.
+          </p>
+          <Checkbox
+            checked={settings.sync.enabled}
+            onChange={(v) => updateSettings({ sync: { ...settings.sync, enabled: v } })}
+            label="Activer la synchronisation automatique"
+          />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="URL du serveur" hint="Ex. https://serveur.tailnet.ts.net:8443">
+              <Input
+                value={settings.sync.url}
+                onChange={(e) => updateSettings({ sync: { ...settings.sync, url: e.target.value } })}
+                placeholder="https://…"
+                inputMode="url"
+                autoComplete="off"
+              />
+            </Field>
+            <Field label="Jeton (SYNC_TOKEN)" hint="Défini côté serveur, gardé sur cet appareil">
+              <Input
+                type="password"
+                value={settings.sync.token}
+                onChange={(e) => updateSettings({ sync: { ...settings.sync, token: e.target.value } })}
+                placeholder="••••••••"
+                autoComplete="off"
+              />
+            </Field>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" variant="primary" disabled={syncing || syncState === 'off'} onClick={runSync}>
+              {syncing ? <RefreshCw size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+              Synchroniser maintenant
+            </Button>
+            <span className="text-xs text-muted">
+              Dernière synchro : {lastSync}
+              {settings.lastSyncError ? ` · ⚠ ${settings.lastSyncError}` : ''}
+            </span>
           </div>
         </Card>
 

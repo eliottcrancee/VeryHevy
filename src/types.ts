@@ -147,6 +147,8 @@ export interface Exercise {
   /** Source d'import (ex. free-exercise-db). */
   source?: string
   createdAt: string
+  /** Dernière modification (synchro) ; absent = jamais modifié depuis la création. */
+  updatedAt?: string
 }
 
 export type SetType = 'normal' | 'echauffement' | 'degressive' | 'echec'
@@ -247,6 +249,21 @@ export interface Routine {
   updatedAt: string
 }
 
+/** Trace d'une suppression pour la synchro (anti-résurrection). */
+export interface SyncTombstone {
+  kind: 'workout' | 'routine' | 'exercise'
+  id: string
+  deletedAt: string
+}
+
+export interface SyncSettings {
+  /** URL du serveur maison, ex. https://serveur.tailnet.ts.net:8443 */
+  url: string
+  /** Jeton long généré côté serveur (SYNC_TOKEN). */
+  token: string
+  enabled: boolean
+}
+
 export interface Settings {
   unit: 'kg' | 'lb'
   distanceUnit: 'km' | 'mi'
@@ -260,6 +277,12 @@ export interface Settings {
   defaultSets: number
   showRpe: boolean
   firstDayOfWeek: 0 | 1
+  /** Synchro serveur maison (désactivée par défaut, 100 % local sinon). */
+  sync: SyncSettings
+  /** Horodatage serveur de la dernière synchro réussie (ISO). */
+  lastSyncAt: string | null
+  /** Dernière erreur de synchro (affichage Réglages). */
+  lastSyncError?: string
 }
 
 export interface RestTimerState {
@@ -279,4 +302,6 @@ export interface AppData {
   settings: Settings
   activeWorkoutId: string | null
   version: number
+  /** Traces de suppressions en attente de synchro (anti-résurrection). */
+  syncDeleted: SyncTombstone[]
 }

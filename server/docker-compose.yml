@@ -1,0 +1,15 @@
+services:
+  veryhevy-sync:
+    build: .
+    container_name: veryhevy-sync
+    restart: unless-stopped
+    environment:
+      # Jeton partagé avec l'app (Réglages → Synchronisation).
+      # Générez-le avec : openssl rand -hex 32
+      SYNC_TOKEN: ${SYNC_TOKEN:?définissez SYNC_TOKEN dans .env}
+    volumes:
+      - ./data:/data
+    # En accès distant, préférez Tailscale (rien à exposer).
+    # Sans VPN : reverse-proxy HTTPS (Caddy) devant ce port.
+    ports:
+      - "127.0.0.1:8443:8443"

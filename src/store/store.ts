@@ -10,6 +10,7 @@ import type {
   RoutineSetTemplate,
   Settings,
   SetType,
+  SyncTombstone,
   Workout,
   WorkoutExercise,
   WorkoutSet,
@@ -48,6 +49,8 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultSets: 3,
   showRpe: false,
   firstDayOfWeek: 1,
+  sync: { url: '', token: '', enabled: false },
+  lastSyncAt: null,
 }
 
 interface ImportResult {
@@ -130,6 +133,16 @@ export interface StoreState extends AppData {
   /* ------- réglages ------- */
   updateSettings: (patch: Partial<Settings>) => void
 
+  /* ------- synchro serveur maison ------- */
+  applyPulledData: (pull: {
+    workouts: Workout[]
+    routines: Routine[]
+    exercises: Exercise[]
+    deleted: SyncTombstone[]
+  }) => { applied: number; deleted: number }
+  markTombstonesSynced: (upTo: string) => void
+  setLastSync: (time: string | null, error?: string) => void
+
   /* ------- repos ------- */
   startRest: (seconds: number, meta?: { label?: string; exerciseId?: string; setId?: string }) => void
   stopRest: () => void
@@ -180,6 +193,16 @@ function moveItem<T>(list: T[], from: number, to: number): T[] {
   const [item] = copy.splice(from, 1)
   copy.splice(to, 0, item)
   return copy
+}
+
+/** Ajoute une trace de suppression pour la synchro (anti-résurrection). */
+function addTomb(
+  tombs: SyncTombstone[],
+  kind: SyncTombstone['kind'],
+  id: string,
+): SyncTombstone[] {
+  if (tombs.some((t) => t.kind === kind && t.id === id)) return tombs
+  return [...tombs, { kind, id, deletedAt: new Date().toISOString() }]
 }
 
 /** Pré-remplit les séries d'après la dernière performance connue. */
@@ -297,6 +320,7 @@ export const useStore = create<StoreState>()(
       hydrated: false,
       restTimer: { endsAt: null, totalSeconds: 0 },
       toasts: [],
+      syncDeleted: [],
 
       /* -------------------------------------------------- cycle de vie */
       bootstrap: () => {
@@ -305,6 +329,20 @@ export const useStore = create<StoreState>()(
         }
         if (get().routines.length === 0) {
           set({ routines: createSeedRoutines(get().exercises) })
+        }
+        // Migration douce : les réglages/synchro d'anciennes sauvegardes
+        // n'ont pas forcément les nouvelles clés.
+        const s = get().settings as Partial<Settings>
+        if (!s.sync || s.lastSyncAt === undefined || !Array.isArray(get().syncDeleted)) {
+          set({
+            settings: {
+              ...DEFAULT_SETTINGS,
+              ...s,
+              sync: { ...DEFAULT_SETTINGS.sync, ...(s.sync ?? {}) },
+              lastSyncAt: s.lastSyncAt ?? null,
+            },
+            syncDeleted: Array.isArray(get().syncDeleted) ? get().syncDeleted : [],
+          })
         }
         // Nettoie les supersets orphelins hérités d'anciennes données.
         const current = get()
@@ -316,12 +354,23 @@ export const useStore = create<StoreState>()(
       },
 
       resetAll: () => {
+        // Tout-effacer global : on enterre aussi ce qui part, pour que le
+        // serveur suive (sinon il ressusciterait tout au prochain pull).
+        // Les graines recréées sont horodatées après les tombstones pour survivre.
+        const now = new Date().toISOString()
+        const tombstones: SyncTombstone[] = [
+          ...get().workouts.map((w) => ({ kind: 'workout' as const, id: w.id, deletedAt: now })),
+          ...get().routines.map((r) => ({ kind: 'routine' as const, id: r.id, deletedAt: now })),
+          ...get().exercises.map((e) => ({ kind: 'exercise' as const, id: e.id, deletedAt: now })),
+        ]
+        const fresh = new Date(Date.now() + 1000).toISOString()
         set({
-          exercises: SEED_EXERCISES.map((e) => ({ ...e })),
+          exercises: SEED_EXERCISES.map((e) => ({ ...e, updatedAt: fresh })),
           workouts: [],
           routines: [],
           activeWorkoutId: null,
           restTimer: { endsAt: null, totalSeconds: 0 },
+          syncDeleted: [...get().syncDeleted, ...tombstones],
         })
         set({ routines: createSeedRoutines(get().exercises) })
         void del(STORAGE_KEY)
@@ -366,6 +415,7 @@ export const useStore = create<StoreState>()(
           isFavorite: input.isFavorite ?? false,
           source: 'custom',
           createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
         }
         set({ exercises: [ex, ...get().exercises] })
         return ex
@@ -379,9 +429,12 @@ export const useStore = create<StoreState>()(
           if (target) get().notify('Exercice de la base : dupliquez-le pour le personnaliser', 'info')
           return
         }
+        const now = new Date().toISOString()
         set({
           exercises: get().exercises.map((e) =>
-            e.id === id ? { ...e, ...patch, id: e.id, isCustom: e.isCustom || patch.isCustom === true } : e,
+            e.id === id
+              ? { ...e, ...patch, id: e.id, isCustom: e.isCustom || patch.isCustom === true, updatedAt: now }
+              : e,
           ),
         })
       },
@@ -404,6 +457,7 @@ export const useStore = create<StoreState>()(
           exercises: get().exercises.filter((e) => e.id !== id),
           workouts: get().workouts.map((w) => ({ ...w, exercises: stamp(w.exercises) })),
           routines: get().routines.map((r) => ({ ...r, exercises: stamp(r.exercises) })),
+          syncDeleted: addTomb(get().syncDeleted, 'exercise', id),
         })
         get().notify(
           target ? `« ${target.name} » supprimé (l'historique garde sa trace)` : 'Exercice supprimé',
@@ -445,9 +499,16 @@ export const useStore = create<StoreState>()(
         const before = get().exercises.length
         // On garde la base VeryHevy + tous les exercices personnalisés.
         // Les séances passées ne sont pas touchées : elles conservent leurs
-        // séries (l'exercice manquant s'affiche « Exercice supprimé »).
+        // séries (le nom reste figé en trace).
         const kept = get().exercises.filter((e) => e.isCustom || seedIds.has(e.id))
-        set({ exercises: kept })
+        const removedIds = get().exercises.filter((e) => !kept.includes(e)).map((e) => e.id)
+        set({
+          exercises: kept,
+          syncDeleted: removedIds.reduce(
+            (tombs, id) => addTomb(tombs, 'exercise', id),
+            get().syncDeleted,
+          ),
+        })
         const removed = before - kept.length
         get().notify(
           removed > 0 ? `${removed} exercice(s) importé(s) retiré(s)` : 'Aucun exercice importé à retirer',
@@ -531,6 +592,7 @@ export const useStore = create<StoreState>()(
           activeWorkoutId: get().activeWorkoutId === id ? null : get().activeWorkoutId,
           // le chrono de repos n'a plus de sens une fois la séance annulée
           restTimer: get().activeWorkoutId === id ? { endsAt: null, totalSeconds: 0 } : get().restTimer,
+          syncDeleted: addTomb(get().syncDeleted, 'workout', id),
         })
       },
 
@@ -539,6 +601,7 @@ export const useStore = create<StoreState>()(
           workouts: get().workouts.filter((w) => w.id !== id),
           activeWorkoutId: get().activeWorkoutId === id ? null : get().activeWorkoutId,
           restTimer: get().activeWorkoutId === id ? { endsAt: null, totalSeconds: 0 } : get().restTimer,
+          syncDeleted: addTomb(get().syncDeleted, 'workout', id),
         })
         get().notify('Séance supprimée', 'info')
       },
@@ -842,7 +905,10 @@ export const useStore = create<StoreState>()(
       },
 
       deleteRoutine: (id) => {
-        set({ routines: get().routines.filter((r) => r.id !== id) })
+        set({
+          routines: get().routines.filter((r) => r.id !== id),
+          syncDeleted: addTomb(get().syncDeleted, 'routine', id),
+        })
         get().notify('Programme supprimé', 'info')
       },
 
@@ -962,6 +1028,70 @@ export const useStore = create<StoreState>()(
         set({ settings: { ...get().settings, ...patch } })
       },
 
+      /* ------------------------------------------- synchro serveur maison */
+      applyPulledData: (pull) => {
+        const cur = get()
+        let applied = 0
+        let removed = 0
+        const localTombs = new Map(cur.syncDeleted.map((t) => [`${t.kind}:${t.id}`, t.deletedAt]))
+
+        const mergeList = <T extends { id: string; updatedAt?: string; createdAt?: string }>(
+          kind: SyncTombstone['kind'],
+          local: T[],
+          remote: T[],
+        ): T[] => {
+          const map = new Map(local.map((x) => [x.id, x]))
+          for (const r of remote) {
+            const rt = syncTs(r)
+            // Supprimé localement : on garde la suppression (le push la propagera).
+            if (localTombs.has(`${kind}:${r.id}`)) continue
+            const l = map.get(r.id)
+            if (!l) {
+              map.set(r.id, r)
+              applied += 1
+            } else if (rt > syncTs(l)) {
+              map.set(r.id, r)
+              applied += 1
+            }
+          }
+          return [...map.values()]
+        }
+
+        const workouts = mergeList('workout', cur.workouts, pull.workouts)
+        const routines = mergeList('routine', cur.routines, pull.routines)
+        const exercises = mergeList('exercise', cur.exercises, pull.exercises)
+
+        // Suppressions distantes (sauf si le local est plus récent → il ressuscitera au push).
+        const drop = <T extends { id: string; updatedAt?: string; createdAt?: string }>(
+          kind: SyncTombstone['kind'],
+          list: T[],
+        ): T[] =>
+          list.filter((x) => {
+            const tomb = pull.deleted.find((d) => d.kind === kind && d.id === x.id)
+            if (!tomb) return true
+            if (localTombs.has(`${kind}:${x.id}`)) return false
+            if (syncTs(x) > tomb.deletedAt) return true
+            removed += 1
+            return false
+          })
+
+        set({
+          workouts: drop('workout', workouts),
+          routines: drop('routine', routines),
+          exercises: drop('exercise', exercises),
+        })
+        return { applied, deleted: removed }
+      },
+
+      markTombstonesSynced: (upTo) => {
+        const kept = get().syncDeleted.filter((t) => t.deletedAt > upTo)
+        if (kept.length !== get().syncDeleted.length) set({ syncDeleted: kept })
+      },
+
+      setLastSync: (time, error) => {
+        set({ settings: { ...get().settings, lastSyncAt: time, lastSyncError: error } })
+      },
+
       /* --------------------------------------------------------- repos */
       startRest: (seconds, meta) => {
         if (!seconds || seconds <= 0) return
@@ -1031,6 +1161,7 @@ export const useStore = create<StoreState>()(
         activeWorkoutId: state.activeWorkoutId,
         version: state.version,
         restTimer: state.restTimer,
+        syncDeleted: state.syncDeleted,
       }),
       onRehydrateStorage: () => (state) => {
         state?.bootstrap()
@@ -1043,6 +1174,11 @@ function mergeById<T extends { id: string }>(current: T[], incoming: T[]): T[] {
   const map = new Map(current.map((x) => [x.id, x]))
   for (const item of incoming) map.set(item.id, item)
   return [...map.values()]
+}
+
+/** Horodatage de référence pour la synchro (dernier écrit gagne). */
+export function syncTs(e: { updatedAt?: string; createdAt?: string }): string {
+  return e.updatedAt ?? e.createdAt ?? ''
 }
 
 /**

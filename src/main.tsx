@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { HashRouter } from 'react-router-dom'
 import App from './App'
 import './index.css'
+import { startAutoSync } from './lib/sync'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -11,6 +12,9 @@ createRoot(document.getElementById('root')!).render(
     </HashRouter>
   </StrictMode>,
 )
+
+// Synchro auto serveur maison (no-op tant qu'elle n'est pas configurée).
+startAutoSync()
 
 // Installation hors ligne (PWA) — uniquement sur la version compilée.
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {

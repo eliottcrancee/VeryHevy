@@ -171,7 +171,7 @@ export function mergeExercises(existing: Exercise[], incoming: Exercise[]) {
     const dup = byName.get(ex.name.toLowerCase())
     if (dup) {
       if (dup.images.length === 0 && ex.images.length > 0) {
-        result[result.indexOf(dup)] = { ...dup, images: ex.images, instructions: dup.instructions.length ? dup.instructions : ex.instructions }
+        result[result.indexOf(dup)] = { ...dup, images: ex.images, instructions: dup.instructions.length ? dup.instructions : ex.instructions, updatedAt: new Date().toISOString() }
         updated += 1
       } else {
         skipped += 1
