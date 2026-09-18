@@ -18,7 +18,7 @@ import { Button, CheckBadge, DurationField, IconButton, Menu, Modal, NumberField
 import { CategoryBadge } from '@/components/ExerciseFormModal'
 import { ExerciseAvatar } from '@/components/ExercisePicker'
 import { useStore, trackingFieldsOf } from '@/store/store'
-import { estimate1RM, lastPerformance, lastPerformanceInTemplate, setVolume } from '@/lib/calc'
+import { estimate1RM, isSetValidatable, lastPerformance, lastPerformanceInTemplate, setVolume } from '@/lib/calc'
 import { cn, displayToMeters, formatVolume, formatWeight, inputToKg, kgToInput, metersToDisplay } from '@/lib/utils'
 
 /* ------------------------------------------------------------------ */
@@ -225,9 +225,16 @@ export function SetRow({ workoutId, we, set, index, exercise, unit, distanceUnit
     >
       <CheckBadge
         done={set.completed}
+        disabled={!set.completed && !isSetValidatable(set)}
         onClick={() => toggleSetCompleted(workoutId, we.id, set.id)}
         size={32}
-        title={set.completed ? 'Série validée — toucher pour décocher' : `Série ${index + 1} — toucher pour valider`}
+        title={
+          set.completed
+            ? 'Série validée — toucher pour décocher'
+            : isSetValidatable(set)
+              ? `Série ${index + 1} — toucher pour valider`
+              : `Série ${index + 1} — renseigne reps, durée ou distance pour valider`
+        }
       />
 
       {/* N° de série juste à côté de la case (comme E / D / X). */}

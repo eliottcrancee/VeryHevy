@@ -949,11 +949,13 @@ export function CheckBadge({
   onClick,
   size = 30,
   title,
+  disabled,
 }: {
   done: boolean
   onClick: () => void
   size?: number
   title?: string
+  disabled?: boolean
 }) {
   return (
     <button
@@ -961,12 +963,15 @@ export function CheckBadge({
       onClick={onClick}
       aria-pressed={done}
       title={title}
+      disabled={disabled}
       style={{ width: size, height: size }}
       className={cn(
         'flex shrink-0 items-center justify-center rounded-lg border transition-all active:scale-90',
         done
           ? 'border-success bg-success text-white'
-          : 'border-line bg-surface-2 text-transparent hover:border-success/60',
+          : disabled
+            ? 'cursor-not-allowed border-line bg-surface-2 text-transparent opacity-40'
+            : 'border-line bg-surface-2 text-transparent hover:border-success/60',
       )}
     >
       <Check size={size * 0.55} strokeWidth={3} />

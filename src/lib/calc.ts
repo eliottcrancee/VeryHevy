@@ -25,6 +25,15 @@ export function isSetEmpty(set: WorkoutSet) {
   return set.weight === undefined && set.reps === undefined && set.duration === undefined && set.distance === undefined
 }
 
+/**
+ * Une série n'est validable que si un effort est renseigné : reps, durée ou
+ * distance > 0. Le poids seul ne suffit pas (ex. charge saisie sans reps),
+ * et `NaN` ne valide jamais (`NaN > 0` est faux).
+ */
+export function isSetValidatable(set: WorkoutSet) {
+  return (set.reps ?? 0) > 0 || (set.duration ?? 0) > 0 || (set.distance ?? 0) > 0
+}
+
 /** Libellé compact d'une série, adapté à son type de suivi. */
 export function describeSet(set: WorkoutSet, unit: 'kg' | 'lb', distanceUnit: 'km' | 'mi') {
   const parts: string[] = []

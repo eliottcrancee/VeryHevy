@@ -610,19 +610,23 @@ export default function ActiveWorkoutPage() {
             {doneSets} série{doneSets > 1 ? 's' : ''} validée{doneSets > 1 ? 's' : ''} ·{' '}
             {formatVolume(volume, settings.unit)} de volume.
             <br />
-            Les séries non validées seront ignorées dans les statistiques.
+            Les séries non validées seront supprimées définitivement.
           </>
         }
         confirmLabel="Terminer"
         onCancel={() => setConfirmFinish(false)}
         onConfirm={() => {
-          // on nettoie les séries totalement vides
+          // Seul le travail validé est conservé : les séries non validées
+          // sont supprimées, ainsi que les exercices devenus vides.
+          const st = useStore.getState()
           workout.exercises.forEach((we) => {
             we.sets.forEach((s) => {
-              if (!s.completed && s.weight === undefined && s.reps === undefined && s.duration === undefined && s.distance === undefined) {
-                useStore.getState().removeSet(workout.id, we.id, s.id)
-              }
+              if (!s.completed) st.removeSet(workout.id, we.id, s.id)
             })
+          })
+          const cleaned = useStore.getState().workouts.find((w) => w.id === workout.id)
+          cleaned?.exercises.forEach((we) => {
+            if (we.sets.length === 0) st.removeWorkoutExercise(workout.id, we.id)
           })
           finishWorkout(workout.id)
           setConfirmFinish(false)

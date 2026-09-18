@@ -19,6 +19,7 @@ import {
   blankWorkoutExercise,
   duplicateSet,
   emptySet,
+  isSetValidatable,
   lastPerformance,
   lastPerformanceInTemplate,
   workoutSets,
@@ -830,13 +831,19 @@ export const useStore = create<StoreState>()(
         const touchedKeys = (['weight', 'reps', 'duration', 'distance', 'rpe'] as const).filter(
           (k) => k in patch,
         )
+        // Un `NaN` ne doit jamais entrer en base (`NaN ?? 0` vaut `NaN` et
+        // empoisonne tous les calculs) : on le convertit en champ vide.
+        const clean: Partial<WorkoutSet> = { ...patch }
+        for (const k of touchedKeys) {
+          if (typeof clean[k] === 'number' && Number.isNaN(clean[k])) clean[k] = undefined
+        }
         set({
           workouts: workoutPatch(get().workouts, workoutId, (w) =>
             setPatch(w, weId, setId, (s) => {
-              if (!touchedKeys.length) return { ...s, ...patch }
+              if (!touchedKeys.length) return { ...s, ...clean }
               const touched = { ...s.touched }
               for (const k of touchedKeys) touched[k] = true
-              return { ...s, ...patch, touched }
+              return { ...s, ...clean, touched }
             }),
           ),
         })
@@ -872,6 +879,13 @@ export const useStore = create<StoreState>()(
         if (!workout || !we || !s) return
         const nextCompleted = force ?? !s.completed
 
+        // Pas de validation dans le vide : il faut au moins reps, durée ou
+        // distance (le poids seul ne suffit pas, `NaN` jamais).
+        if (nextCompleted && !isSetValidatable(s)) {
+          get().notify('Renseigne au moins reps, durée ou distance avant de valider', 'error')
+          return
+        }
+
         set({
           workouts: workoutPatch(workouts, workoutId, (w) =>
             setPatch(w, weId, setId, (x) => ({
@@ -904,10 +918,20 @@ export const useStore = create<StoreState>()(
         const workout = workouts.find((w) => w.id === workoutId)
         const we = workout?.exercises.find((e) => e.id === weId)
         if (!we) return
-        const anyIncomplete = we.sets.some((s) => !s.completed)
+        // Seules les séries renseignées participent : les vides restent décochées.
+        const valid = we.sets.filter((s) => isSetValidatable(s))
+        if (!valid.length) {
+          get().notify('Aucune série renseignée à valider', 'error')
+          return
+        }
+        const anyIncomplete = valid.some((s) => !s.completed)
+        const validIds = new Set(valid.map((s) => s.id))
         set({
           workouts: workoutPatch(workouts, workoutId, (w) =>
-            exercisePatch(w, weId, (x) => ({ ...x, sets: x.sets.map((s) => ({ ...s, completed: anyIncomplete })) })),
+            exercisePatch(w, weId, (x) => ({
+              ...x,
+              sets: x.sets.map((s) => (validIds.has(s.id) ? { ...s, completed: anyIncomplete } : s)),
+            })),
           ),
         })
         if (anyIncomplete && settings.autoStartRest) {
