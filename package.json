@@ -13,7 +13,8 @@
     "test:regress": "node scripts/regress.mjs",
     "test:pages": "node scripts/check-pages.mjs",
     "test:sync": "node scripts/check-sync.mjs",
-    "test:all": "npm run build && node scripts/smoke.mjs && node scripts/audit.mjs && node scripts/regress.mjs && node scripts/check-pages.mjs && node scripts/check-sync.mjs"
+    "test:mcp": "node scripts/check-mcp.mjs",
+    "test:all": "npm run build && node scripts/smoke.mjs && node scripts/audit.mjs && node scripts/regress.mjs && node scripts/check-pages.mjs && node scripts/check-sync.mjs && node scripts/check-mcp.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

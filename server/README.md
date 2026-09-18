@@ -41,3 +41,31 @@ Toutes les entités portent `id`, `createdAt`, `updatedAt` : un agent peut
 donc lire l'historique (`pull?since=…`) pour analyser l'entraînement, ou
 même proposer des programmes (les routines poussées apparaîtront dans
 l'app à la prochaine synchro).
+
+## MCP local (agent IA sur ce PC)
+
+`POST /mcp` — JSON-RPC 2.0, transport *streamable HTTP*, même auth Bearer.
+Outils : `sync_pull`, `list_workouts`, `workout_detail`, `stats_summary`,
+`list_exercises`, `exercise_detail`, `create_program`, `delete_program`
+(suppression propagée aux téléphones via tombstone).
+
+Exemple rapide :
+
+```bash
+H="Authorization: Bearer $SYNC_TOKEN"
+curl -s localhost:8443/mcp -H "$H" -H 'Content-Type: application/json' -d \
+  '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"0"}}}'
+# -> récupérez Mcp-Session-Id, puis :
+curl -s localhost:8443/mcp -H "$H" -H 'Content-Type: application/json' \
+  -H "Mcp-Session-Id: <id>" -d \
+  '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"stats_summary","arguments":{"days":30}}}'
+```
+
+Branchement type (Claude Code, script agent…) :
+
+```
+claude mcp add --transport http veryhevy http://localhost:8443/mcp \
+  --header "Authorization: Bearer $SYNC_TOKEN"
+```
+
+Test automatisé : `node scripts/check-mcp.mjs` (côté dépôt VeryHevy).
