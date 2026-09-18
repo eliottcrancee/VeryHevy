@@ -307,7 +307,7 @@ export function AppShell() {
         {showNav && (
           <div
             ref={bottomStackRef}
-            className="safe-b fixed inset-x-0 bottom-0 z-40 flex flex-col border-t border-line bg-surface lg:hidden"
+            className="glass safe-b fixed inset-x-0 bottom-0 z-40 flex flex-col border-t border-line lg:hidden"
           >
             {showActivePill && (
               <div className="border-b border-line px-3 py-2">

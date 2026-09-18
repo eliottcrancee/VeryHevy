@@ -462,7 +462,7 @@ export default function ActiveWorkoutPage() {
       {/* Barre de validation */}
       <div
         ref={bottomBarRef}
-        className="safe-b fixed inset-x-0 bottom-[var(--bottom-stack,0px)] z-30 border-t border-line bg-surface px-4 py-3 lg:left-64"
+        className="safe-b glass fixed inset-x-0 bottom-[var(--bottom-stack,0px)] z-30 border-t border-line px-4 py-3 lg:left-64"
       >
         <div className="mx-auto flex max-w-3xl items-center gap-3">
           <div className="hidden flex-1 sm:block">

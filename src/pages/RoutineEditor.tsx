@@ -389,7 +389,7 @@ export default function RoutineEditorPage() {
       {/* Barre d'action : posée au-dessus de la navigation mobile, jamais dessous */}
       <div
         ref={bottomBarRef}
-        className="safe-b fixed inset-x-0 bottom-[var(--bottom-stack,62px)] z-30 border-t border-line bg-surface px-4 py-3 lg:left-64"
+        className="safe-b glass fixed inset-x-0 bottom-[var(--bottom-stack,62px)] z-30 border-t border-line px-4 py-3 lg:left-64"
       >
         <div className="mx-auto flex max-w-3xl gap-2">
           <Button variant="ghost" onClick={() => navigate('/programmes')}>

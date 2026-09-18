@@ -1,6 +1,37 @@
 import { useEffect, useState } from 'react'
 import { useStore } from '@/store/store'
 
+/* ------------------------------------------------------------------ */
+/* Manifest dynamique : en PWA installée, Android peint la barre de    */
+/* statut ET la barre des boutons système (retour / home / applis)     */
+/* avec `theme_color` / `background_color` du manifest — en ignorant    */
+/* la balise meta. Le manifest statique est figé en sombre : on le     */
+/* régénère ici aux couleurs du thème pour que les boutons système     */
+/* suivent (blanc en clair, noir en sombre).                           */
+/* ------------------------------------------------------------------ */
+
+let manifestTemplate: string | null = null
+let manifestUrl: string | null = null
+
+async function syncManifestTheme(dark: boolean) {
+  try {
+    if (!manifestTemplate) {
+      const res = await fetch('./manifest.webmanifest', { cache: 'no-cache' })
+      if (!res.ok) return
+      manifestTemplate = await res.text()
+    }
+    const color = dark ? '#0a0b0f' : '#f3f4f7'
+    const json = JSON.parse(manifestTemplate) as Record<string, unknown>
+    json.theme_color = color
+    json.background_color = color
+    if (manifestUrl) URL.revokeObjectURL(manifestUrl)
+    manifestUrl = URL.createObjectURL(new Blob([JSON.stringify(json)], { type: 'application/manifest+json' }))
+    document.querySelector('link[rel="manifest"]')?.setAttribute('href', manifestUrl)
+  } catch {
+    /* manifest statique conservé */
+  }
+}
+
 export function useThemeEffect() {
   const theme = useStore((s) => s.settings.theme)
   const accent = useStore((s) => s.settings.accent)
@@ -13,6 +44,7 @@ export function useThemeEffect() {
       root.classList.toggle('dark', dark)
       const meta = document.querySelector('meta[name="theme-color"]')
       meta?.setAttribute('content', dark ? '#0a0b0f' : '#f3f4f7')
+      void syncManifestTheme(dark)
     }
     apply()
     if (theme === 'system') {
