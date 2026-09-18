@@ -158,6 +158,9 @@ export const SET_TYPE_META: Record<SetType, { label: string; short: string; colo
   echec: { label: 'Échec', short: 'X', color: 'var(--danger)' },
 }
 
+/** Champs de données d'une série (tout ce que l'utilisateur peut saisir). */
+export type SetDataField = 'weight' | 'reps' | 'duration' | 'distance' | 'rpe'
+
 export interface WorkoutSet {
   id: string
   type: SetType
@@ -171,6 +174,12 @@ export interface WorkoutSet {
   completed: boolean
   /** repos réellement observé après cette série (secondes) */
   restTaken?: number
+  /**
+   * Champs déjà touchés par l'utilisateur dans cette séance. Les valeurs
+   * pré-remplies (programme / dernière fois) non touchées s'affichent en
+   * fantôme (grisé) jusqu'à leur première modification.
+   */
+  touched?: Partial<Record<SetDataField, boolean>>
 }
 
 export interface WorkoutExercise {

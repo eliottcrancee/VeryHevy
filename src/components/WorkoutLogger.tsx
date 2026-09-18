@@ -81,6 +81,22 @@ const SetFieldInput = memo(function SetFieldInput({
         return st.rpe
     }
   })
+  // Fantôme = valeur pré-remplie jamais touchée (et série non validée).
+  const touched = useStore((s) => {
+    const st = s.workouts
+      .find((w) => w.id === workoutId)
+      ?.exercises.find((e) => e.id === weId)
+      ?.sets.find((x) => x.id === setId)
+    return st?.touched?.[field] ?? false
+  })
+  const completed = useStore((s) => {
+    const st = s.workouts
+      .find((w) => w.id === workoutId)
+      ?.exercises.find((e) => e.id === weId)
+      ?.sets.find((x) => x.id === setId)
+    return st?.completed ?? false
+  })
+  const phantom = raw !== undefined && !touched && !completed
 
   const handleNumber = useCallback(
     (v: number | undefined) => {
@@ -111,6 +127,7 @@ const SetFieldInput = memo(function SetFieldInput({
         value={raw}
         onChange={handleNumber}
         ariaLabel={`Durée série ${index + 1}`}
+        phantom={phantom}
         className="min-w-0 flex-1 border-transparent bg-surface-2/70"
       />
     )
@@ -129,6 +146,7 @@ const SetFieldInput = memo(function SetFieldInput({
           decimals={unit === 'kg' ? 2 : 1}
           placeholder={exercise?.tracking === 'bodyweight_reps' ? 'PDC' : '0'}
           suffix={unit}
+          phantom={phantom}
           className="h-9 min-w-0 flex-[1.15] border-transparent bg-surface-2/70"
         />
       )
@@ -142,6 +160,7 @@ const SetFieldInput = memo(function SetFieldInput({
           onChange={handleNumber}
           decimals={0}
           placeholder="0"
+          phantom={phantom}
           className="h-9 min-w-0 flex-1 border-transparent bg-surface-2/70"
         />
       )
@@ -156,6 +175,7 @@ const SetFieldInput = memo(function SetFieldInput({
           decimals={2}
           placeholder="0"
           suffix={distanceUnit}
+          phantom={phantom}
           className="h-9 min-w-0 flex-[1.15] border-transparent bg-surface-2/70"
         />
       )
@@ -171,6 +191,7 @@ const SetFieldInput = memo(function SetFieldInput({
           max={10}
           decimals={1}
           placeholder="RPE"
+          phantom={phantom}
           className="h-9 w-14 shrink-0 border-transparent bg-surface-2/70"
         />
       )

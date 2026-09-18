@@ -278,6 +278,8 @@ export interface NumberFieldProps {
   compact?: boolean
   /** Masque les boutons +/- : toute la largeur est dédiée à la saisie. */
   stepless?: boolean
+  /** Valeur pré-remplie non encore touchée : affichée en fantôme (grisé). */
+  phantom?: boolean
 }
 
 /** Champ numérique tactile : saisie directe + boutons +/- */
@@ -295,6 +297,7 @@ export const NumberField = memo(function NumberField({
   ariaLabel,
   compact,
   stepless,
+  phantom,
 }: NumberFieldProps) {
   const [text, setText] = useState(value === undefined ? '' : String(value))
   const focused = useRef(false)
@@ -355,7 +358,11 @@ export const NumberField = memo(function NumberField({
           autoComplete="off"
           value={text}
           placeholder={placeholder}
-          onFocus={() => (focused.current = true)}
+          onFocus={(e) => {
+            focused.current = true
+            // Remplacement direct : pas besoin d'effacer la valeur pré-remplie.
+            e.target.select()
+          }}
           onBlur={() => {
             focused.current = false
             commit(text)
@@ -367,6 +374,8 @@ export const NumberField = memo(function NumberField({
           className={cn(
             // 16px minimum : iOS ne zoome pas automatiquement au focus.
             'tabular w-full min-w-0 bg-transparent text-center text-base font-semibold outline-none placeholder:font-normal placeholder:text-muted/60',
+            // Fantôme : valeur pré-remplie pas encore touchée.
+            phantom && 'font-medium text-muted/70',
             suffix ? 'pr-7 pl-1' : 'px-1',
             inputClassName,
           )}
@@ -409,6 +418,8 @@ export interface DurationFieldProps {
   onChange: (v: number | undefined) => void
   className?: string
   ariaLabel?: string
+  /** Valeur pré-remplie non encore touchée : affichée en fantôme (grisé). */
+  phantom?: boolean
 }
 
 /**
@@ -417,7 +428,7 @@ export interface DurationFieldProps {
  * téléphone. Les heures restent vides quand elles sont nulles (affichage
  * compact « m:ss »).
  */
-export const DurationField = memo(function DurationField({ value, onChange, className, ariaLabel }: DurationFieldProps) {
+export const DurationField = memo(function DurationField({ value, onChange, className, ariaLabel, phantom }: DurationFieldProps) {
   const toParts = (v: number | undefined) => {
     if (v === undefined || v === null || Number.isNaN(v)) return { h: '', min: '', sec: '' }
     const s = Math.max(0, Math.round(v))
@@ -497,8 +508,10 @@ export const DurationField = memo(function DurationField({ value, onChange, clas
     commit(hText, minText, cleaned)
   }
 
-  const inputCls =
-    'tabular w-full min-w-0 bg-transparent text-center text-base font-semibold outline-none placeholder:font-normal placeholder:text-muted/60'
+  const inputCls = cn(
+    'tabular w-full min-w-0 bg-transparent text-center text-base font-semibold outline-none placeholder:font-normal placeholder:text-muted/60',
+    phantom && 'font-medium text-muted/70',
+  )
 
   // Tout sélectionner au focus : la frappe remplace proprement la valeur
   // (sinon l'insertion au milieu + la longueur fixe mangent les caractères).

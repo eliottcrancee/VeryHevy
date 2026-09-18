@@ -724,9 +724,20 @@ export const useStore = create<StoreState>()(
       },
 
       updateSet: (workoutId, weId, setId, patch) => {
+        // updateSet n'est appelé que depuis les champs de saisie : toute clé
+        // de donnée présente dans le patch marque le champ comme touché par
+        // l'utilisateur (les valeurs pré-remplies restent « fantôme » sinon).
+        const touchedKeys = (['weight', 'reps', 'duration', 'distance', 'rpe'] as const).filter(
+          (k) => k in patch,
+        )
         set({
           workouts: workoutPatch(get().workouts, workoutId, (w) =>
-            setPatch(w, weId, setId, (s) => ({ ...s, ...patch })),
+            setPatch(w, weId, setId, (s) => {
+              if (!touchedKeys.length) return { ...s, ...patch }
+              const touched = { ...s.touched }
+              for (const k of touchedKeys) touched[k] = true
+              return { ...s, ...patch, touched }
+            }),
           ),
         })
       },

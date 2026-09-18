@@ -20,7 +20,7 @@ import { CATEGORY_META, MUSCLE_GROUPS } from '@/types'
 import { useStore } from '@/store/store'
 import { Page, PageHeader } from '@/components/PageHeader'
 import { Button, Card, Chip, ConfirmDialog, EmptyState, Field, IconButton, Input, Menu, Modal, Segmented } from '@/components/ui'
-import { ExercisePicker, ExerciseRow } from '@/components/ExercisePicker'
+import { ExerciseRow } from '@/components/ExercisePicker'
 import { ExerciseFormModal } from '@/components/ExerciseFormModal'
 import { fetchFreeExerciseDb, parseExternalExercises } from '@/lib/importers'
 import { SEED_EXERCISES } from '@/lib/seed'
@@ -48,7 +48,6 @@ export default function ExercisesPage() {
   const [sort, setSort] = useState<SortKey>('nom')
   const [showFilters, setShowFilters] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
-  const [pickerOpen, setPickerOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [importing, setImporting] = useState(false)
   const [importLog, setImportLog] = useState<string[]>([])
@@ -169,7 +168,6 @@ export default function ExercisesPage() {
               )}
               items={[
                 { label: 'Importer la base complète', icon: <Database size={15} />, onClick: () => setImportOpen(true) },
-                { label: 'Parcourir et ajouter', icon: <Dumbbell size={15} />, onClick: () => setPickerOpen(true) },
                 {
                   label: 'Restaurer les exercices par défaut',
                   icon: <RefreshCw size={15} />,
@@ -348,7 +346,6 @@ export default function ExercisesPage() {
       </Page>
 
       <ExerciseFormModal open={createOpen} onClose={() => setCreateOpen(false)} />
-      <ExercisePicker open={pickerOpen} onClose={() => setPickerOpen(false)} multiple onPick={() => {}} />
 
       {/* Import */}
       <Modal open={importOpen} onClose={() => setImportOpen(false)} title="Importer des exercices" size="md">
