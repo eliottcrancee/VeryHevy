@@ -113,8 +113,9 @@ export function blankWorkoutExercise(
   exerciseId: string,
   sets: WorkoutSet[],
   restSeconds: number,
+  exerciseName?: string,
 ): WorkoutExercise {
-  return { id: uid('we'), exerciseId, sets, restSeconds, supersetId: null }
+  return { id: uid('we'), exerciseId, exerciseName, sets, restSeconds, supersetId: null }
 }
 
 /* ------------------------------------------------------------------

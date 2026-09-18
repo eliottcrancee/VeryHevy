@@ -224,7 +224,7 @@ export default function RoutineEditorPage() {
                             </button>
                             {ex && <ExerciseAvatar exercise={ex} size={32} />}
                             <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-bold">{ex?.name ?? 'Exercice supprimé'}</p>
+                              <p className="truncate text-sm font-bold">{ex?.name ?? re.exerciseName ?? 'Exercice supprimé'}</p>
                               {ex && <CategoryBadge category={ex.category} />}
                             </div>
                             <Menu

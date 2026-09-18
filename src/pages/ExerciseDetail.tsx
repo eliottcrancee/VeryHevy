@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   CartesianGrid,
@@ -47,6 +47,15 @@ export default function ExerciseDetailPage() {
   const [tab, setTab] = useState<Tab>('progression')
   const [editOpen, setEditOpen] = useState(false)
   const [imageIndex, setImageIndex] = useState(0)
+
+  // Si l'exercice vient d'être supprimé depuis la modale, on repart vers la bibliothèque.
+  const wasPresent = useRef(!!exercise)
+  useEffect(() => {
+    if (exercise) wasPresent.current = true
+  }, [exercise])
+  useEffect(() => {
+    if (!editOpen && !exercise && wasPresent.current) navigate('/exercices')
+  }, [editOpen, exercise, navigate])
 
   const sessions = useMemo(() => (exercise ? getExerciseSessions(workouts, exercise.id) : []), [workouts, exercise])
   const progress = useMemo(() => (exercise ? getExerciseProgress(workouts, exercise.id) : []), [workouts, exercise])

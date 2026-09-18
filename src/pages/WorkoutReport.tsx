@@ -358,7 +358,9 @@ export default function WorkoutReportPage() {
                             {ex.name}
                           </Link>
                         ) : (
-                          <span className="truncate font-bold">Exercice supprimé</span>
+                          <span className="truncate font-bold" title="Exercice supprimé de la bibliothèque">
+                            {we.exerciseName ?? 'Exercice supprimé'}
+                          </span>
                         )}
                         {ex && (
                           <span className="shrink-0 rounded-md bg-surface-2 px-1.5 py-0.5 text-[10px] font-bold text-muted">

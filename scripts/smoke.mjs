@@ -278,13 +278,9 @@ async function main() {
         input.dispatchEvent(new Event('input', { bubbles: true }))
       })
       await page.evaluate(() => {
-        const btn = [...document.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === 'Options')
+        // « + » de l'en-tête = création directe (le reste est dans le menu « ⋯ »)
+        const btn = [...document.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === 'Créer un exercice')
         btn?.click()
-      })
-      await new Promise((r) => setTimeout(r, 300))
-      await page.evaluate(() => {
-        const item = [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Créer un exercice')
-        item?.click()
       })
       await page.waitForFunction(() => document.body.innerText.toLowerCase().includes('nouvel exercice'), { timeout: 8000 })
       await page.evaluate(() => {

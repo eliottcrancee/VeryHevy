@@ -6,6 +6,7 @@ import {
   Dumbbell,
   FileJson,
   Filter,
+  MoreVertical,
   Plus,
   RefreshCw,
   Search,
@@ -151,6 +152,11 @@ export default function ExercisesPage() {
         subtitle={`${exercises.length} exercices · ${exercises.filter((e) => e.isCustom).length} personnalisés`}
         actions={
           <>
+            {/* Cohérence avec le reste de l'app : « + » = créer (action directe),
+                les actions secondaires vivent dans le menu « ⋯ ». */}
+            <IconButton label="Créer un exercice" onClick={() => setCreateOpen(true)}>
+              <Plus size={19} />
+            </IconButton>
             <IconButton label="Importer" onClick={() => setImportOpen(true)}>
               <CloudDownload size={18} />
             </IconButton>
@@ -158,11 +164,10 @@ export default function ExercisesPage() {
               align="right"
               trigger={({ toggle }) => (
                 <IconButton label="Options" onClick={toggle}>
-                  <Plus size={19} />
+                  <MoreVertical size={18} />
                 </IconButton>
               )}
               items={[
-                { label: 'Créer un exercice', icon: <Plus size={15} />, onClick: () => setCreateOpen(true) },
                 { label: 'Importer la base complète', icon: <Database size={15} />, onClick: () => setImportOpen(true) },
                 { label: 'Parcourir et ajouter', icon: <Dumbbell size={15} />, onClick: () => setPickerOpen(true) },
                 {

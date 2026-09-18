@@ -40,7 +40,9 @@ export default function HistoryPage() {
           w.name,
           w.notes ?? '',
           w.templateName ?? '',
-          ...w.exercises.map((we) => exercises.find((e) => e.id === we.exerciseId)?.name ?? ''),
+          ...w.exercises.map(
+            (we) => exercises.find((e) => e.id === we.exerciseId)?.name ?? we.exerciseName ?? '',
+          ),
         ]
         return haystack.some((h) => normalize(h).includes(q))
       })

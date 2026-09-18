@@ -176,6 +176,8 @@ export interface WorkoutSet {
 export interface WorkoutExercise {
   id: string
   exerciseId: string
+  /** Nom figé à l'ajout : garde la trace même si l'exercice est supprimé de la bibliothèque. */
+  exerciseName?: string
   sets: WorkoutSet[]
   notes?: string
   /** identifiant de superset (les exercices partageant la valeur s'enchaînent) */
@@ -215,6 +217,8 @@ export interface RoutineSetTemplate {
 export interface RoutineExercise {
   id: string
   exerciseId: string
+  /** Nom figé à l'ajout : garde la trace même si l'exercice est supprimé de la bibliothèque. */
+  exerciseName?: string
   sets: RoutineSetTemplate[]
   restSeconds: number
   notes?: string

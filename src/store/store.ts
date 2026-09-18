@@ -272,6 +272,7 @@ export function routineToWorkoutExercises(
     return {
       id: uid('we'),
       exerciseId: re.exerciseId,
+      exerciseName: re.exerciseName ?? ex?.name,
       sets: merged.length ? merged : [emptySet()],
       restSeconds: re.restSeconds,
       notes: re.notes,
@@ -391,7 +392,23 @@ export const useStore = create<StoreState>()(
           get().notify('Impossible de supprimer un exercice de la base', 'error')
           return
         }
-        set({ exercises: get().exercises.filter((e) => e.id !== id) })
+        // La bibliothèque perd l'exercice, mais l'historique garde sa trace :
+        // on fige son nom partout où il est utilisé (séances + programmes).
+        const stamp = <T extends { exerciseId: string; exerciseName?: string }>(items: T[]): T[] =>
+          items.map((it) =>
+            it.exerciseId === id && !it.exerciseName && target
+              ? { ...it, exerciseName: target.name }
+              : it,
+          )
+        set({
+          exercises: get().exercises.filter((e) => e.id !== id),
+          workouts: get().workouts.map((w) => ({ ...w, exercises: stamp(w.exercises) })),
+          routines: get().routines.map((r) => ({ ...r, exercises: stamp(r.exercises) })),
+        })
+        get().notify(
+          target ? `« ${target.name} » supprimé (l'historique garde sa trace)` : 'Exercice supprimé',
+          'info',
+        )
       },
 
       toggleFavorite: (id) => {
@@ -480,6 +497,7 @@ export const useStore = create<StoreState>()(
               item.exerciseId,
               buildSets(ex, history, item.setCount ?? settings.defaultSets),
               item.restSeconds ?? settings.defaultRestSeconds,
+              ex?.name,
             )
           })
         }
@@ -609,6 +627,7 @@ export const useStore = create<StoreState>()(
           exerciseId,
           buildSets(ex, ref, opts.setCount ?? get().settings.defaultSets),
           opts.restSeconds ?? get().settings.defaultRestSeconds,
+          ex?.name,
         )
         set({ workouts: workoutPatch(workouts, workoutId, (w) => ({ ...w, exercises: [...w.exercises, we] })) })
         return we.id
@@ -624,9 +643,10 @@ export const useStore = create<StoreState>()(
       },
 
       replaceWorkoutExercise: (workoutId, weId, exerciseId) => {
+        const name = get().exercises.find((e) => e.id === exerciseId)?.name
         set({
           workouts: workoutPatch(get().workouts, workoutId, (w) =>
-            exercisePatch(w, weId, (we) => ({ ...we, exerciseId })),
+            exercisePatch(w, weId, (we) => ({ ...we, exerciseId, exerciseName: name ?? we.exerciseName })),
           ),
         })
       },
@@ -851,6 +871,7 @@ export const useStore = create<StoreState>()(
                     {
                       id: uid('re'),
                       exerciseId,
+                      exerciseName: ex?.name,
                       sets,
                       restSeconds: get().settings.defaultRestSeconds,
                       supersetId: null,
@@ -903,6 +924,7 @@ export const useStore = create<StoreState>()(
         const exercises: RoutineExercise[] = workout.exercises.map((we) => ({
           id: uid('re'),
           exerciseId: we.exerciseId,
+          exerciseName: we.exerciseName ?? get().exercises.find((e) => e.id === we.exerciseId)?.name,
           restSeconds: we.restSeconds,
           supersetId: we.supersetId ?? null,
           notes: we.notes,

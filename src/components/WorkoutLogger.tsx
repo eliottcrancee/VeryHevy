@@ -345,14 +345,14 @@ export function WorkoutExerciseCard({
           {exercise && <ExerciseAvatar exercise={exercise} size={36} />}
           <span className="min-w-0 flex-1">
             <span className="flex items-center gap-1.5">
-              <span className="truncate text-sm font-bold">{exercise?.name ?? 'Exercice supprimé'}</span>
+              <span className="truncate text-sm font-bold">{exercise?.name ?? we.exerciseName ?? 'Exercice supprimé'}</span>
               {isSuperset && <Link2 size={12} className="shrink-0 text-info" />}
             </span>
             <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted">
               {exercise && <CategoryBadge category={exercise.category} />}
               {reference && reference.sets.length > 0 && (
                 <span className="tabular">
-                  Précédent :{' '}
+                  Précédent{reference.workout.templateId && reference.workout.templateId === workout.templateId ? ' (ce programme)' : ''} :{' '}
                   {reference.sets
                     .slice(0, 3)
                     .map((s) =>
