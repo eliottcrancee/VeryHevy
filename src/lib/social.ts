@@ -223,3 +223,31 @@ export async function amIFollowing(targetId: string): Promise<boolean> {
   if (error) throw new Error(`Follow : ${error.message}`)
   return Boolean(data)
 }
+
+/** Abonnés de userId (qui le suivent), plus récents d'abord. */
+export async function listFollowers(userId: string): Promise<SocialProfile[]> {
+  const sb = sbOrThrow()
+  const { data, error } = await sb
+    .from('follows')
+    .select('follower')
+    .eq('followed', userId)
+    .order('created_at', { ascending: false })
+  if (error) throw new Error(`Abonnés : ${error.message}`)
+  const ids = ((data as { follower: string }[] ?? []).map((f) => f.follower))
+  const map = await fetchSocialProfiles(ids)
+  return ids.map((id) => map.get(id)).filter((p): p is SocialProfile => Boolean(p))
+}
+
+/** Abonnements de userId (qui il suit), plus récents d'abord. */
+export async function listFollowing(userId: string): Promise<SocialProfile[]> {
+  const sb = sbOrThrow()
+  const { data, error } = await sb
+    .from('follows')
+    .select('followed')
+    .eq('follower', userId)
+    .order('created_at', { ascending: false })
+  if (error) throw new Error(`Abonnements : ${error.message}`)
+  const ids = ((data as { followed: string }[] ?? []).map((f) => f.followed))
+  const map = await fetchSocialProfiles(ids)
+  return ids.map((id) => map.get(id)).filter((p): p is SocialProfile => Boolean(p))
+}

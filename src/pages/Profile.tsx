@@ -16,6 +16,8 @@ import {
   followStatus,
   getMyProfile,
   isUsernameAvailable,
+  listFollowers,
+  listFollowing,
   requestFollow,
   unfollowUser,
   updateMyProfile,
@@ -83,6 +85,7 @@ export default function ProfilePage() {
   const [following, setFollowing] = useState<FollowState>('none')
   const [followBusy, setFollowBusy] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
+  const [followList, setFollowList] = useState<{ tab: 'followers' | 'following'; userId: string; title: string } | null>(null)
   const [myPosts, setMyPosts] = useState<Post[]>([])
   const [loadingPosts, setLoadingPosts] = useState(false)
 
@@ -216,7 +219,22 @@ export default function ProfilePage() {
                   {p.bio && <p className="mt-1 text-sm">{p.bio}</p>}
                   {p.city && <p className="mt-0.5 text-xs text-muted">📍 {p.city}</p>}
                   <p className="mt-1.5 text-xs font-semibold text-muted">
-                    {p.followers_count} abonné{p.followers_count > 1 ? 's' : ''} · {p.following_count} abonnement{p.following_count > 1 ? 's' : ''}
+                    {p.followers_count}{' '}
+                    <button
+                      type="button"
+                      className="underline decoration-dotted underline-offset-2"
+                      onClick={() => setFollowList({ tab: 'followers', userId: p.id, title: `Abonnés de @${p.username}` })}
+                    >
+                      abonné{p.followers_count > 1 ? 's' : ''}
+                    </button>
+                    {' · '}{p.following_count}{' '}
+                    <button
+                      type="button"
+                      className="underline decoration-dotted underline-offset-2"
+                      onClick={() => setFollowList({ tab: 'following', userId: p.id, title: `Abonnements de @${p.username}` })}
+                    >
+                      abonnement{p.following_count > 1 ? 's' : ''}
+                    </button>
                   </p>
                 </div>
               </Card>
@@ -240,6 +258,17 @@ export default function ProfilePage() {
             </>
           )}
         </Page>
+        <FollowListModal
+          info={followList}
+          onClose={() => {
+            setFollowList(null)
+            if (publicProfile?.username) {
+              fetchProfileByUsername(publicProfile.username)
+                .then((fresh) => setPublicProfile(fresh))
+                .catch(() => {})
+            }
+          }}
+        />
       </div>
     )
   }
@@ -279,8 +308,25 @@ export default function ProfilePage() {
             {myProfile?.city && <p className="mt-0.5 text-xs text-muted">📍 {myProfile.city}</p>}
             <p className="mt-1.5 text-xs font-semibold text-muted">
               💪 {done.length} séance{done.length > 1 ? 's' : ''}
-              {cloudEnabled && myProfile && (
-                <> · {myProfile.followers_count} abonné{myProfile.followers_count > 1 ? 's' : ''} · {myProfile.following_count} abonnement{myProfile.following_count > 1 ? 's' : ''}</>
+              {cloudEnabled && myProfile && user && (
+                <>
+                  {' · '}{myProfile.followers_count}{' '}
+                  <button
+                    type="button"
+                    className="underline decoration-dotted underline-offset-2"
+                    onClick={() => user && setFollowList({ tab: 'followers', userId: user.id, title: 'Mes abonnés' })}
+                  >
+                    abonné{myProfile.followers_count > 1 ? 's' : ''}
+                  </button>
+                  {' · '}{myProfile.following_count}{' '}
+                  <button
+                    type="button"
+                    className="underline decoration-dotted underline-offset-2"
+                    onClick={() => user && setFollowList({ tab: 'following', userId: user.id, title: 'Mes abonnements' })}
+                  >
+                    abonnement{myProfile.following_count > 1 ? 's' : ''}
+                  </button>
+                </>
               )}
             </p>
           </div>
@@ -337,7 +383,114 @@ export default function ProfilePage() {
         }}
       />
 
+      <FollowListModal
+        info={followList}
+        onClose={() => {
+          setFollowList(null)
+          void refreshMine()
+        }}
+      />
+
     </div>
+  )
+}
+
+/* ------------------------- listes abonnés/abonnements ------------------------- */
+
+export interface FollowListInfo {
+  tab: 'followers' | 'following'
+  userId: string
+  title: string
+}
+
+function FollowListModal({ info, onClose }: { info: FollowListInfo | null; onClose: () => void }) {
+  const navigate = useNavigate()
+  const { user } = useAuth()
+  const notify = useStore((s) => s.notify)
+  const [tab, setTab] = useState<'followers' | 'following'>(info?.tab ?? 'followers')
+  const [lists, setLists] = useState<Partial<Record<'followers' | 'following', SocialProfile[]>>>({})
+  const [loading, setLoading] = useState(false)
+  const [busyId, setBusyId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (info) {
+      setTab(info.tab)
+      setLists({})
+    }
+  }, [info])
+
+  useEffect(() => {
+    if (!info) return
+    if (lists[tab] !== undefined) return
+    setLoading(true)
+    const fn = tab === 'followers' ? listFollowers(info.userId) : listFollowing(info.userId)
+    fn.then((l) => setLists((prev) => ({ ...prev, [tab]: l })))
+      .catch((err) => notify(err instanceof Error ? err.message : 'Liste illisible', 'error'))
+      .finally(() => setLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [info, tab])
+
+  if (!info) return null
+
+  const mine = user?.id === info.userId
+  const rows = lists[tab] ?? []
+
+  const go = (p: SocialProfile) => {
+    if (!p.username) return
+    onClose()
+    navigate(p.id === user?.id ? '/profil' : `/profil/${p.username}`)
+  }
+
+  const remove = async (id: string) => {
+    setBusyId(id)
+    try {
+      await unfollowUser(id)
+      setLists((prev) => ({ ...prev, following: (prev.following ?? []).filter((p) => p.id !== id) }))
+      notify('Abonnement retiré', 'info')
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Action impossible', 'error')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  return (
+    <Modal open onClose={onClose} title={info.title}>
+      <Tabs<'followers' | 'following'>
+        value={tab}
+        onChange={setTab}
+        tabs={[
+          { value: 'followers', label: 'Abonnés' },
+          { value: 'following', label: 'Abonnements' },
+        ]}
+      />
+      <div className="mt-3 space-y-1.5">
+        {loading ? (
+          <p className="py-6 text-center text-sm text-muted">Chargement…</p>
+        ) : rows.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted">
+            {tab === 'followers' ? 'Aucun abonné pour l’instant.' : 'Aucun abonnement pour l’instant.'}
+          </p>
+        ) : (
+          rows.map((p) => (
+            <div key={p.id} className="flex items-center gap-3 rounded-xl bg-surface-2 p-2">
+              <button type="button" onClick={() => go(p)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+                <Avatar url={p.avatar_url} name={p.display_name ?? p.username ?? '?'} size={40} />
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-bold">@{p.username ?? '?'}</span>
+                  {p.display_name && <span className="block truncate text-xs text-muted">{p.display_name}</span>}
+                </span>
+              </button>
+              {mine && tab === 'following' && (
+                <Button size="sm" variant="ghost" disabled={busyId === p.id} onClick={() => void remove(p.id)}>
+                  <UserMinus size={14} /> Retirer
+                </Button>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+    </Modal>
   )
 }
 
