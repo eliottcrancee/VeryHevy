@@ -5,10 +5,10 @@ import {
   Database,
   Download,
   Info,
+  LogOut,
   Moon,
   Monitor,
   Palette,
-  RefreshCw,
   RotateCcw,
   Sun,
   Trash2,
@@ -17,7 +17,7 @@ import {
 } from 'lucide-react'
 import type { AppData } from '@/types'
 import { useStore } from '@/store/store'
-import { syncCloudNow } from '@/lib/cloudSync'
+import { deleteCloudData } from '@/lib/cloudSync'
 import { useAuth } from '@/lib/auth'
 import { isCloudEnabled } from '@/lib/supabase'
 import { Page, PageHeader } from '@/components/PageHeader'
@@ -70,7 +70,7 @@ export default function SettingsPage() {
     data: Partial<AppData>
   } | null>(null)
   const [busy, setBusy] = useState(false)
-  const [syncing, setSyncing] = useState(false)
+  const [confirmDeleteCloud, setConfirmDeleteCloud] = useState(false)
   const [notifPerm, setNotifPerm] = useState<NotificationPermission | 'unsupported'>(() =>
     notificationPermission(),
   )
@@ -80,19 +80,14 @@ export default function SettingsPage() {
     ? new Date(settings.lastSyncAt).toLocaleString('fr-FR')
     : 'jamais'
 
-  const runSync = async () => {
-    setSyncing(true)
+  const eraseCloud = async () => {
     try {
-      const res = await syncCloudNow()
-      if (res.status === 'ok') {
-        notify(`Synchro cloud OK : ${res.pushed ?? 0} envoyé(s), ${res.pulled ?? 0} reçu(s)`, 'success')
-      } else if (res.status === 'error') {
-        notify(res.error ?? 'Échec de synchro', 'error')
-      } else {
-        notify('Rien à synchroniser', 'info')
-      }
+      await deleteCloudData()
+      notify('Données cloud supprimées (cet appareil garde sa copie locale)', 'success')
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Suppression impossible', 'error')
     } finally {
-      setSyncing(false)
+      setConfirmDeleteCloud(false)
     }
   }
 
@@ -214,12 +209,13 @@ export default function SettingsPage() {
           {cloudEnabled && user && (
             <Button
               size="sm"
+              variant="danger"
               onClick={() => {
                 void signOut()
                 notify('Déconnecté — vos données locales sont conservées', 'info')
               }}
             >
-              Déconnexion
+              <LogOut size={14} /> Déconnexion
             </Button>
           )}
         </Card>
@@ -466,7 +462,7 @@ export default function SettingsPage() {
         </Card>
 
         {/* Synchronisation cloud */}
-        <Card className="space-y-4 p-4">
+        <Card className="space-y-3 p-4">
           <SectionTitle className="mb-0">
             <span className="inline-flex items-center gap-1.5">
               <CloudDownload size={13} /> Synchronisation cloud
@@ -476,16 +472,20 @@ export default function SettingsPage() {
             Vos données sont liées à votre compte Google et synchronisées automatiquement
             après chaque modification, toutes les 5 minutes et au retour d’internet.
           </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" variant="primary" disabled={syncing} onClick={runSync}>
-              {syncing ? <RefreshCw size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-              Synchroniser maintenant
-            </Button>
-            <span className="text-xs text-muted">
-              Dernière synchro : {lastSync}
-              {settings.lastSyncError ? ` · ⚠ ${settings.lastSyncError}` : ''}
-            </span>
-          </div>
+          <p className="text-xs text-muted">
+            Dernière synchro : {lastSync}
+            {settings.lastSyncError ? ` · ⚠ ${settings.lastSyncError}` : ''}
+          </p>
+          {cloudEnabled && user && (
+            <div>
+              <Button size="sm" variant="danger" onClick={() => setConfirmDeleteCloud(true)}>
+                <Trash2 size={14} /> Supprimer mes données cloud
+              </Button>
+              <p className="mt-1 text-[11px] text-muted">
+                Efface séances, programmes et exercices en ligne. La copie locale de cet appareil est conservée.
+              </p>
+            </div>
+          )}
         </Card>
 
         {/* À propos */}
@@ -532,6 +532,16 @@ export default function SettingsPage() {
           if (pendingRestore) importData(pendingRestore.data)
           setPendingRestore(null)
         }}
+      />
+
+      <ConfirmDialog
+        open={confirmDeleteCloud}
+        title="Supprimer les données cloud ?"
+        message="Vos séances, programmes et exercices stockés en ligne seront effacés. La copie locale de CET appareil est conservée."
+        confirmLabel="Tout supprimer en ligne"
+        danger
+        onCancel={() => setConfirmDeleteCloud(false)}
+        onConfirm={() => void eraseCloud()}
       />
 
       <ConfirmDialog

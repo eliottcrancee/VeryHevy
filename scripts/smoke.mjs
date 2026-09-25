@@ -238,40 +238,10 @@ async function main() {
       await shot('12-reglages')
     })
 
-    await step('Import de la base complète depuis internet', async () => {
+    await step('Base illustrée auto-téléchargée', async () => {
       const before = await page.evaluate(() => window.__veryhevy.getState().exercises.length)
-      // Nouveau flux : Réglages → « Gérer la bibliothèque » → bouton « Importer »
-      // du header → modale → « Compléter ».
-      await page.evaluate(() => {
-        const link = [...document.querySelectorAll('a')].find((a) =>
-          a.textContent?.includes('Gérer la bibliothèque'),
-        )
-        link?.click()
-      })
-      await page.waitForFunction(
-        () => document.body.innerText.includes('151 exercices') || document.body.innerText.includes('résultat'),
-        { timeout: 10000 },
-      )
-      await page.waitForFunction(
-        () => [...document.querySelectorAll('button')].some((b) => b.getAttribute('aria-label') === 'Importer' || b.getAttribute('title') === 'Importer'),
-        { timeout: 10000 },
-      )
-      await page.evaluate(() => {
-        const btn = [...document.querySelectorAll('button')].find(
-          (b) => b.getAttribute('aria-label') === 'Importer' || b.getAttribute('title') === 'Importer',
-        )
-        btn?.click()
-      })
-      await page.waitForFunction(
-        () => document.body.innerText.includes('Compléter avec la base illustrée'),
-        { timeout: 10000 },
-      )
-      await page.evaluate(() => {
-        const btn = [...document.querySelectorAll('button')].find((b) =>
-          b.textContent?.includes('Compléter avec la base illustrée'),
-        )
-        btn?.click()
-      })
+      // Nouveau flux : la base illustrée se télécharge seule en arrière-plan
+      // (~3 s après le chargement). On attend juste le résultat.
       await page.waitForFunction(
         () => window.__veryhevy.getState().exercises.length > 800,
         { timeout: 90000, polling: 1000 },

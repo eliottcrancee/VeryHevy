@@ -12,10 +12,10 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { Activity, Dumbbell, Flame, Timer, Trophy, TrendingUp, Weight } from 'lucide-react'
+import { Activity, Dumbbell, Trophy } from 'lucide-react'
 import { useStore } from '@/store/store'
 import { Page, PageHeader } from '@/components/PageHeader'
-import { Card, Chip, EmptyState, ProgressBar, SectionTitle, Stat } from '@/components/ui'
+import { Card, Chip, EmptyState, ProgressBar, SectionTitle } from '@/components/ui'
 import {
   arcWorkouts,
   completedWorkouts,
@@ -28,6 +28,7 @@ import {
   weeklySeries,
 } from '@/lib/calc'
 import { CATEGORY_META } from '@/types'
+import CalendarPage from '@/pages/Calendar'
 import { ChartTooltipContent, chartCursor, chartLineCursor, chartTooltipWrapper } from '@/components/charts'
 import { addDays, cn, formatDuration, formatVolume, formatWeight, kgToDisplay, startOfWeek, toDateKey } from '@/lib/utils'
 
@@ -188,21 +189,24 @@ export default function StatsPage() {
           ))}
         </div>
 
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <Stat label="Séances" value={filtered.length} icon={<Flame size={12} />} />
-          <Stat
-            label="Volume"
-            value={`${Math.round(kgToDisplay(totalVolume, settings.unit) / 1000).toLocaleString('fr-FR')}k`}
-            sub={settings.unit}
-            icon={<Weight size={12} />}
-          />
-          <Stat label="Temps" value={formatDuration(totalTime, 'compact')} icon={<Timer size={12} />} />
-          <Stat label="Séries" value={totalSets} icon={<TrendingUp size={12} />} />
+        <div className="grid grid-cols-4 gap-1.5 text-center">
+          {[
+            { label: 'Séances', value: String(filtered.length) },
+            { label: 'Volume', value: `${Math.round(kgToDisplay(totalVolume, settings.unit) / 1000).toLocaleString('fr-FR')}k` },
+            { label: 'Temps', value: formatDuration(totalTime, 'compact') },
+            { label: 'Séries', value: String(totalSets) },
+          ].map((s) => (
+            <div key={s.label} className="rounded-xl border border-line bg-surface px-1 py-2">
+              <p className="tabular truncate text-sm font-extrabold">{s.value}</p>
+              <p className="text-[10px] tracking-wide text-muted uppercase">{s.label}</p>
+            </div>
+          ))}
         </div>
 
-        {/* Régularité */}
-        <Card className="p-4">
-          <SectionTitle>Régularité — 12 dernières semaines</SectionTitle>
+        {/* Régularité + calendrier */}
+        <Card className="space-y-4 p-4">
+          <div>
+            <SectionTitle>Régularité — 12 dernières semaines</SectionTitle>
           <div className="flex gap-1 overflow-x-auto pb-1">
             {heatmap.map((week, wi) => (
               <div key={wi} className="flex flex-col gap-1">
@@ -227,12 +231,17 @@ export default function StatsPage() {
             <span className="h-3 w-3 rounded bg-accent" />
             <span>Plus</span>
           </div>
+          </div>
+          <div className="border-t border-line pt-4">
+            <SectionTitle>Calendrier</SectionTitle>
+            <CalendarPage bare />
+          </div>
         </Card>
 
         {/* Volume hebdo */}
         <Card className="p-4">
           <SectionTitle>Volume par semaine ({settings.unit})</SectionTitle>
-          <div className="h-52">
+          <div className="mx-auto h-52 w-full max-w-md">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={series} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
                 <XAxis
@@ -281,7 +290,7 @@ export default function StatsPage() {
         {categories.length > 0 && (
           <Card className="p-4">
             <SectionTitle>Répartition par type d’effort</SectionTitle>
-            <div className="space-y-3">
+            <div className="mx-auto w-full max-w-md space-y-3">
               {categories.map(({ cat, sets, meta }) => (
                 <div key={cat}>
                   <div className="mb-1 flex items-center justify-between text-[12px]">
@@ -301,7 +310,7 @@ export default function StatsPage() {
         {muscles.length > 0 && (
           <Card className="p-4">
             <SectionTitle>Séries par groupe musculaire</SectionTitle>
-            <div className="h-64">
+            <div className="mx-auto h-64 w-full max-w-md">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={muscles} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 0 }}>
                   <XAxis
@@ -397,7 +406,7 @@ export default function StatsPage() {
         {bodyweightSeries.length > 1 && (
           <Card className="p-4">
             <SectionTitle>Évolution du poids de corps ({settings.unit})</SectionTitle>
-            <div className="h-44">
+            <div className="mx-auto h-44 w-full max-w-md">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart
                   data={bodyweightSeries.map((p) => ({

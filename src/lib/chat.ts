@@ -1,0 +1,232 @@
+/**
+ * Match + chat : candidatures sur sessions privées, acceptation,
+ * discussion 1-1 hôte ↔ membre. Anonymat : inscrits visibles
+ * par les membres uniquement (+ profils publics via RPC).
+ */
+import type { SocialProfile } from '@/types'
+import { getSupabase } from './supabase'
+import { fetchSocialProfiles } from './social'
+
+function sbOrThrow() {
+  const sb = getSupabase()
+  if (!sb) throw new Error('Cloud non configuré')
+  return sb
+}
+
+async function myId(): Promise<string> {
+  const sb = sbOrThrow()
+  const { data: { session } } = await sb.auth.getSession()
+  if (!session?.user) throw new Error('Non connecté')
+  return session.user.id
+}
+
+export interface SessionRequest {
+  session_id: string
+  user_id: string
+  message: string
+  status: 'pending' | 'accepted' | 'declined'
+  created_at: string
+  author?: SocialProfile | null
+}
+
+/* ---------------------------- candidatures ---------------------------- */
+
+export async function sendRequest(sessionId: string, message = ''): Promise<void> {
+  const sb = sbOrThrow()
+  const me = await myId()
+  const { error } = await sb.from('session_requests').insert({
+    session_id: sessionId,
+    user_id: me,
+    message: message.trim().slice(0, 280),
+    status: 'pending',
+  })
+  if (error && !error.message.includes('duplicate')) throw new Error(`Candidature : ${error.message}`)
+}
+
+export async function myRequestStatus(sessionId: string): Promise<SessionRequest | null> {
+  const sb = sbOrThrow()
+  const me = await myId()
+  const { data, error } = await sb
+    .from('session_requests')
+    .select('*')
+    .eq('session_id', sessionId)
+    .eq('user_id', me)
+    .maybeSingle()
+  if (error) throw new Error(`Candidature : ${error.message}`)
+  return (data as SessionRequest | null) ?? null
+}
+
+export async function withdrawRequest(sessionId: string): Promise<void> {
+  const sb = sbOrThrow()
+  const me = await myId()
+  const { error } = await sb.from('session_requests').delete().eq('session_id', sessionId).eq('user_id', me)
+  if (error) throw new Error(`Retrait : ${error.message}`)
+}
+
+export async function listRequests(sessionId: string): Promise<SessionRequest[]> {
+  const sb = sbOrThrow()
+  const { data, error } = await sb
+    .from('session_requests')
+    .select('*')
+    .eq('session_id', sessionId)
+    .order('created_at', { ascending: true })
+  if (error) throw new Error(`Candidatures : ${error.message}`)
+  const list = (data as SessionRequest[]) ?? []
+  const authors = await fetchSocialProfiles([...new Set(list.map((r) => r.user_id))])
+  return list.map((r) => ({ ...r, author: authors.get(r.user_id) ?? null }))
+}
+
+/** Accepter = inscrit le membre (compteur auto via trigger). */
+export async function acceptRequest(sessionId: string, userId: string): Promise<void> {
+  const sb = sbOrThrow()
+  const { error: jErr } = await sb.from('session_joins').insert({ session_id: sessionId, user_id: userId })
+  if (jErr && !jErr.message.includes('duplicate')) throw new Error(`Acceptation : ${jErr.message}`)
+  const { error } = await sb
+    .from('session_requests')
+    .update({ status: 'accepted' })
+    .eq('session_id', sessionId)
+    .eq('user_id', userId)
+  if (error) throw new Error(`Acceptation : ${error.message}`)
+}
+
+export async function declineRequest(sessionId: string, userId: string): Promise<void> {
+  const sb = sbOrThrow()
+  const { error } = await sb
+    .from('session_requests')
+    .update({ status: 'declined' })
+    .eq('session_id', sessionId)
+    .eq('user_id', userId)
+  if (error) throw new Error(`Refus : ${error.message}`)
+}
+
+/* ------------------------------ membres ------------------------------ */
+
+export interface SessionMember {
+  user_id: string
+  profile: SocialProfile | null
+  /** Candidature d'origine (message de présentation). */
+  requestMessage?: string
+}
+
+/** Inscrits avec profils (hôte + membres uniquement, cf. RLS). */
+export async function listMembers(sessionId: string): Promise<SessionMember[]> {
+  const sb = sbOrThrow()
+  const { data, error } = await sb.from('session_joins').select('user_id').eq('session_id', sessionId)
+  if (error) throw new Error(`Membres : ${error.message}`)
+  const ids = ((data as { user_id: string }[] ?? []).map((r) => r.user_id))
+  if (!ids.length) return []
+  const [profiles, reqs] = await Promise.all([
+    fetchSocialProfiles(ids),
+    sb.from('session_requests').select('user_id,message').eq('session_id', sessionId).in('user_id', ids),
+  ])
+  const msgs = new Map(((reqs.data as { user_id: string; message: string }[] ?? []).map((r) => [r.user_id, r.message])))
+  return ids.map((id) => ({ user_id: id, profile: profiles.get(id) ?? null, requestMessage: msgs.get(id) }))
+}
+
+/** Participants au profil public (teaser, tout connecté). */
+export async function listPublicParticipants(sessionId: string): Promise<SocialProfile[]> {
+  const sb = sbOrThrow()
+  const { data, error } = await sb.rpc('session_public_participants', { sid: sessionId })
+  if (error) return []
+  return ((data as { user_id: string; username: string; display_name: string; avatar_url: string }[] ?? []).map((r) => ({
+    id: r.user_id,
+    username: r.username,
+    display_name: r.display_name,
+    avatar_url: r.avatar_url,
+    followers_count: 0,
+    following_count: 0,
+  })))
+}
+
+/* ------------------------------- chat ------------------------------- */
+
+export interface ChatMessage {
+  id: string
+  session_id: string
+  from_id: string
+  to_id: string
+  text: string
+  created_at: string
+}
+
+export interface Thread {
+  session_id: string
+  session_title: string
+  other_id: string
+  other: SocialProfile | null
+  last: ChatMessage
+  count: number
+}
+
+/** Mes threads (sessions avec ≥1 message où je suis expéditeur/destinataire). */
+export async function listThreads(): Promise<Thread[]> {
+  const sb = sbOrThrow()
+  const me = await myId()
+  const { data, error } = await sb
+    .from('messages')
+    .select('*')
+    .or(`from_id.eq.${me},to_id.eq.${me}`)
+    .order('created_at', { ascending: false })
+    .limit(200)
+  if (error) throw new Error(`Messages : ${error.message}`)
+  const all = (data as ChatMessage[]) ?? []
+  const byKey = new Map<string, { msgs: ChatMessage[] }>()
+  for (const m of all) {
+    const other = m.from_id === me ? m.to_id : m.from_id
+    const key = `${m.session_id}:${other}`
+    const entry = byKey.get(key) ?? { msgs: [] }
+    entry.msgs.push(m)
+    byKey.set(key, entry)
+  }
+  const sessionIds = [...new Set(all.map((m) => m.session_id))]
+  const otherIds = [...new Set(all.map((m) => (m.from_id === me ? m.to_id : m.from_id)))]
+  const [{ data: sess }, profiles] = await Promise.all([
+    sb.from('sessions').select('id,title').in('id', sessionIds.length ? sessionIds : ['00000000-0000-0000-0000-000000000000']),
+    fetchSocialProfiles(otherIds),
+  ])
+  const titles = new Map(((sess as { id: string; title: string }[] ?? []).map((s) => [s.id, s.title])))
+  return [...byKey.entries()].map(([key, { msgs }]) => {
+    const [sid, other] = key.split(':')
+    return {
+      session_id: sid,
+      session_title: titles.get(sid) ?? 'Séance',
+      other_id: other,
+      other: profiles.get(other) ?? null,
+      last: msgs[0],
+      count: msgs.length,
+    }
+  })
+}
+
+export async function listMessages(sessionId: string, otherId: string): Promise<ChatMessage[]> {
+  const sb = sbOrThrow()
+  const me = await myId()
+  const { data, error } = await sb
+    .from('messages')
+    .select('*')
+    .eq('session_id', sessionId)
+    .or(`and(from_id.eq.${me},to_id.eq.${otherId}),and(from_id.eq.${otherId},to_id.eq.${me})`)
+    .order('created_at', { ascending: true })
+    .limit(200)
+  if (error) throw new Error(`Discussion : ${error.message}`)
+  return (data as ChatMessage[]) ?? []
+}
+
+export async function sendMessage(sessionId: string, toId: string, text: string): Promise<ChatMessage> {
+  const sb = sbOrThrow()
+  const me = await myId()
+  const clean = text.trim().slice(0, 1000)
+  if (!clean) throw new Error('Message vide')
+  const { data, error } = await sb
+    .from('messages')
+    .insert({ session_id: sessionId, from_id: me, to_id: toId, text: clean })
+    .select('*')
+    .single()
+  if (error) throw new Error(`Envoi : ${error.message}`)
+  return data as ChatMessage
+}
+
+export function displayNameOf(p?: SocialProfile | null, fallback = 'Sportif'): string {
+  if (p?.username) return `@${p.username}`
+  return p?.display_name?.trim() || fallback
+}

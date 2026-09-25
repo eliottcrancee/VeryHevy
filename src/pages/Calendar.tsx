@@ -7,7 +7,7 @@ import { Button, Card, EmptyState, IconButton, SectionTitle } from '@/components
 import { workoutDurationSeconds, workoutSets, workoutVolume } from '@/lib/calc'
 import { addDays, cn, formatDate, formatDuration, formatVolume, pluralize, startOfWeek, toDateKey, WEEKDAY_LABELS } from '@/lib/utils'
 
-export default function CalendarPage() {
+export default function CalendarPage({ bare }: { bare?: boolean }) {
   const navigate = useNavigate()
   const workouts = useStore((s) => s.workouts)
   const settings = useStore((s) => s.settings)
@@ -36,13 +36,10 @@ export default function CalendarPage() {
   const todayKey = toDateKey(new Date())
   const selectedWorkouts = selected ? (byDay.get(selected) ?? []) : []
 
-  return (
-    <div>
-      <PageHeader title="Calendrier" subtitle={`${pluralize(byDay.size, 'jour')} d’entraînement`} />
-
-      <Page className="max-w-3xl space-y-4">
-        <Card className="p-3">
-          <div className="mb-3 flex items-center justify-between">
+  const body = (
+    <>
+      <Card className="p-3">
+        <div className="mb-3 flex items-center justify-between">
             <IconButton
               label="Mois précédent"
               onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))}
@@ -150,6 +147,17 @@ export default function CalendarPage() {
             Touchez un jour pour voir le détail des séances.
           </Card>
         )}
+    </>
+  )
+
+  if (bare) return body
+
+  return (
+    <div>
+      <PageHeader title="Calendrier" subtitle={`${pluralize(byDay.size, 'jour')} d’entraînement`} />
+
+      <Page className="max-w-3xl space-y-4">
+        {body}
       </Page>
     </div>
   )

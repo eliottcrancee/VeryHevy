@@ -113,6 +113,15 @@ export async function updateMyProfile(
   return data as SocialProfile
 }
 
+/** Ids des comptes que je suis (recommandations, badges Ami). */
+export async function listMyFollowIds(): Promise<Set<string>> {
+  const sb = sbOrThrow()
+  const me = await myId()
+  const { data, error } = await sb.from('follows').select('followed').eq('follower', me)
+  if (error) throw new Error(`Follows : ${error.message}`)
+  return new Set(((data as { followed: string }[] ?? []).map((f) => f.followed)))
+}
+
 /** Profils par ids (pseudo/avatar, jamais l'email). */
 export async function fetchSocialProfiles(ids: string[]): Promise<Map<string, SocialProfile>> {
   const map = new Map<string, SocialProfile>()

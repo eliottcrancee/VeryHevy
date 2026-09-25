@@ -19,6 +19,13 @@ createRoot(document.getElementById('root')!).render(
 // Synchro cloud Supabase (no-op sans config ou sans compte connecté).
 startAutoCloudSync()
 
+// Bibliothèque unique : base illustrée téléchargée une fois en arrière-plan.
+import('./store/store').then(({ useStore }) => {
+  const run = () => void useStore.getState().ensureIllustratedLibrary().catch(() => {})
+  if (document.readyState === 'complete') setTimeout(run, 3000)
+  else window.addEventListener('load', () => setTimeout(run, 3000))
+})
+
 // Installation hors ligne (PWA) — uniquement sur la version compilée.
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {

@@ -1,21 +1,15 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import {
   BarChart3,
-  CalendarDays,
-  CloudOff,
   History,
   LayoutGrid,
-  LogOut,
   Pencil,
-  RefreshCw,
   Settings as SettingsIcon,
-  Trash2,
   UserPlus,
   UserMinus,
 } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
-import { deleteCloudData, syncCloudNow } from '@/lib/cloudSync'
 import { useStore } from '@/store/store'
 import {
   amIFollowing,
@@ -34,25 +28,20 @@ import { Page, PageHeader } from '@/components/PageHeader'
 import {
   Button,
   Card,
-  ConfirmDialog,
   EmptyState,
   Field,
   Input,
   Modal,
-  SectionTitle,
   Select,
-  Stat,
   Tabs,
   Textarea,
 } from '@/components/ui'
 import { IconButton } from '@/components/ui'
-import { completedWorkouts, workoutDurationSeconds, workoutSets, workoutVolume } from '@/lib/calc'
-import { formatDuration, kgToDisplay } from '@/lib/utils'
+import { completedWorkouts } from '@/lib/calc'
 import HistoryPage from '@/pages/History'
 import StatsPage from '@/pages/Stats'
-import CalendarPage from '@/pages/Calendar'
 
-type Tab = 'posts' | 'historique' | 'stats' | 'calendrier'
+type Tab = 'posts' | 'historique' | 'stats'
 
 function Avatar({ url, name, size = 64 }: { url?: string | null; name: string; size?: number }) {
   if (url) {
@@ -78,11 +67,9 @@ function Avatar({ url, name, size = 64 }: { url?: string | null; name: string; s
 
 export default function ProfilePage() {
   const { username: routeUsername } = useParams()
-  const { user, signOut, cloudEnabled } = useAuth()
+  const { user, cloudEnabled } = useAuth()
   const navigate = useNavigate()
   const workouts = useStore((s) => s.workouts)
-  const routines = useStore((s) => s.routines)
-  const exercises = useStore((s) => s.exercises)
   const settings = useStore((s) => s.settings)
   const updateSettings = useStore((s) => s.updateSettings)
   const notify = useStore((s) => s.notify)
@@ -93,9 +80,6 @@ export default function ProfilePage() {
   const [loadingProfile, setLoadingProfile] = useState(true)
   const [following, setFollowing] = useState(false)
   const [followBusy, setFollowBusy] = useState(false)
-  const [syncing, setSyncing] = useState(false)
-  const [confirmDelete, setConfirmDelete] = useState(false)
-  const [confirmLogout, setConfirmLogout] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [myPosts, setMyPosts] = useState<Post[]>([])
   const [loadingPosts, setLoadingPosts] = useState(false)
@@ -147,9 +131,6 @@ export default function ProfilePage() {
   }, [routeUsername, cloudEnabled, user, refreshMine])
 
   const done = completedWorkouts(workouts)
-  const totalSets = done.reduce((n, w) => n + workoutSets(w), 0)
-  const totalVolume = done.reduce((n, w) => n + workoutVolume(w), 0)
-  const totalTime = done.reduce((n, w) => n + workoutDurationSeconds(w), 0)
 
   const refreshPosts = useCallback(async () => {
     if (!cloudEnabled || !user) return
@@ -178,37 +159,6 @@ export default function ProfilePage() {
     myProfile?.avatar_url ??
     (meta.avatar_url as string | undefined) ??
     (meta.picture as string | undefined)
-  const lastSync = settings.lastSyncAt ? new Date(settings.lastSyncAt).toLocaleString('fr-FR') : 'jamais'
-
-  const runSync = async () => {
-    setSyncing(true)
-    try {
-      const res = await syncCloudNow()
-      if (res.status === 'ok') notify(`Synchro OK : ${res.pushed ?? 0} envoyé(s), ${res.pulled ?? 0} reçu(s)`, 'success')
-      else if (res.status === 'error') notify(res.error ?? 'Échec de synchro', 'error')
-      else notify('Rien à synchroniser', 'info')
-    } finally {
-      setSyncing(false)
-    }
-  }
-
-  const logout = async () => {
-    await signOut()
-    setConfirmLogout(false)
-    navigate('/login', { replace: true })
-  }
-
-  const eraseCloud = async () => {
-    try {
-      await deleteCloudData()
-      notify('Données cloud supprimées (cet appareil garde sa copie locale)', 'success')
-    } catch (err) {
-      notify(err instanceof Error ? err.message : 'Suppression impossible', 'error')
-    } finally {
-      setConfirmDelete(false)
-    }
-  }
-
   const toggleFollow = async () => {
     if (!publicProfile) return
     setFollowBusy(true)
@@ -283,64 +233,40 @@ export default function ProfilePage() {
         title={myProfile?.username ? `@${myProfile.username}` : 'Profil'}
         subtitle={cloudEnabled ? displayName : 'Compte local'}
         actions={
-          <>
-            <IconButton label="Réglages" onClick={() => navigate('/reglages')}>
-              <SettingsIcon size={20} />
-            </IconButton>
-            {cloudEnabled && user && (
-              <IconButton label="Se déconnecter" onClick={() => setConfirmLogout(true)}>
-                <LogOut size={20} />
-              </IconButton>
-            )}
-          </>
+          <IconButton label="Réglages" onClick={() => navigate('/reglages')}>
+            <SettingsIcon size={20} />
+          </IconButton>
         }
       />
       <Page className="max-w-3xl space-y-4 pb-10">
         <Card className="flex items-center gap-4 p-4">
           <Avatar url={avatar} name={displayName} />
           <div className="min-w-0 flex-1">
-            <p className="truncate text-lg font-extrabold">{displayName}</p>
+            <p className="flex items-center gap-1.5 text-lg font-extrabold">
+              <span className="truncate">{displayName}</span>
+              {cloudEnabled && user && (
+                <button
+                  type="button"
+                  title="Modifier le profil"
+                  aria-label="Modifier le profil"
+                  onClick={() => setEditOpen(true)}
+                  className="shrink-0 rounded-lg p-1.5 text-muted transition-colors hover:bg-surface-2 hover:text-ink"
+                >
+                  <Pencil size={15} />
+                </button>
+              )}
+            </p>
             {myProfile?.username && <p className="truncate text-sm text-accent">@{myProfile.username}</p>}
-            <p className="truncate text-xs text-muted">{user?.email ?? 'Mode local — aucun compte'}</p>
             {myProfile?.bio && <p className="mt-1 text-sm">{myProfile.bio}</p>}
             {myProfile?.city && <p className="mt-0.5 text-xs text-muted">📍 {myProfile.city}</p>}
-            {cloudEnabled && myProfile && (
-              <p className="mt-1.5 text-xs font-semibold text-muted">
-                {myProfile.followers_count} abonné{myProfile.followers_count > 1 ? 's' : ''} ·{' '}
-                {myProfile.following_count} abonnement{myProfile.following_count > 1 ? 's' : ''}
-              </p>
-            )}
-            <p className="mt-1 text-[11px] text-muted">
-              {cloudEnabled ? (
-                <>Synchro : {lastSync}{settings.lastSyncError ? ` · ⚠ ${settings.lastSyncError}` : ''}</>
-              ) : (
-                <span className="inline-flex items-center gap-1"><CloudOff size={12} /> 100 % local</span>
+            <p className="mt-1.5 text-xs font-semibold text-muted">
+              💪 {done.length} séance{done.length > 1 ? 's' : ''}
+              {cloudEnabled && myProfile && (
+                <> · {myProfile.followers_count} abonné{myProfile.followers_count > 1 ? 's' : ''} · {myProfile.following_count} abonnement{myProfile.following_count > 1 ? 's' : ''}</>
               )}
             </p>
           </div>
         </Card>
-
-        {cloudEnabled && user && (
-          <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant="primary" onClick={() => setEditOpen(true)}>
-              <Pencil size={14} /> Modifier le profil
-            </Button>
-            <Button size="sm" disabled={syncing} onClick={() => void runSync()}>
-              {syncing ? <RefreshCw size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-              Synchroniser
-            </Button>
-            <Button size="sm" variant="danger" onClick={() => setConfirmDelete(true)}>
-              <Trash2 size={14} /> Données cloud
-            </Button>
-          </div>
-        )}
-
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <Stat label="Séances" value={done.length} />
-          <Stat label="Séries" value={totalSets} />
-          <Stat label="Volume" value={Math.round(kgToDisplay(totalVolume, settings.unit)).toLocaleString('fr-FR')} sub={settings.unit} />
-          <Stat label="Temps" value={formatDuration(totalTime, 'compact')} />
-        </div>
 
         <Tabs<Tab>
           value={tab}
@@ -349,7 +275,6 @@ export default function ProfilePage() {
             { value: 'posts', label: 'Séances', icon: <LayoutGrid size={14} /> },
             { value: 'historique', label: 'Historique', icon: <History size={14} /> },
             { value: 'stats', label: 'Stats', icon: <BarChart3 size={14} /> },
-            { value: 'calendrier', label: 'Calendrier', icon: <CalendarDays size={14} /> },
           ]}
         />
 
@@ -378,25 +303,8 @@ export default function ProfilePage() {
             </div>
           )
         )}
-        {tab === 'historique' && <HistoryPage />}
-        {tab === 'stats' && <StatsPage />}
-        {tab === 'calendrier' && <CalendarPage />}
-
-        <Card className="space-y-2 p-4">
-          <SectionTitle className="mb-0">Compte</SectionTitle>
-          <p className="text-sm text-muted">
-            {routines.length} programme(s) · {exercises.length} exercice(s) sur cet appareil.
-            La déconnexion garde vos données locales.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <Link to="/reglages">
-              <Button size="sm"><SettingsIcon size={14} /> Réglages</Button>
-            </Link>
-            <Link to="/explorer">
-              <Button size="sm" variant="primary">Explorer la carte</Button>
-            </Link>
-          </div>
-        </Card>
+        {tab === 'historique' && <div className="-mx-4"><HistoryPage /></div>}
+        {tab === 'stats' && <div className="-mx-4"><StatsPage /></div>}
       </Page>
 
       <EditProfileModal
@@ -411,23 +319,6 @@ export default function ProfilePage() {
         }}
       />
 
-      <ConfirmDialog
-        open={confirmLogout}
-        title="Se déconnecter ?"
-        message="Vos données restent sur cet appareil. Reconnectez-vous pour resynchroniser."
-        confirmLabel="Se déconnecter"
-        onCancel={() => setConfirmLogout(false)}
-        onConfirm={() => void logout()}
-      />
-      <ConfirmDialog
-        open={confirmDelete}
-        title="Supprimer les données cloud ?"
-        message="Vos séances, programmes et exercices stockés en ligne seront effacés. La copie locale de CET appareil est conservée."
-        confirmLabel="Tout supprimer en ligne"
-        danger
-        onCancel={() => setConfirmDelete(false)}
-        onConfirm={() => void eraseCloud()}
-      />
     </div>
   )
 }

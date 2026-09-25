@@ -1,39 +1,26 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  CloudDownload,
   Dumbbell,
-  FileJson,
   Filter,
   Plus,
-  RefreshCw,
   Search,
   Star,
-  Trash2,
-  Upload,
   X,
 } from 'lucide-react'
 import type { ExerciseCategory } from '@/types'
 import { CATEGORY_META, MUSCLE_GROUPS } from '@/types'
 import { useStore } from '@/store/store'
 import { Page, PageHeader } from '@/components/PageHeader'
-import { Button, Card, Chip, ConfirmDialog, EmptyState, Field, IconButton, Input, Modal, Segmented } from '@/components/ui'
+import { Button, Card, Chip, EmptyState, IconButton, Input, Segmented } from '@/components/ui'
 import { ExerciseRow } from '@/components/ExercisePicker'
 import { ExerciseFormModal } from '@/components/ExerciseFormModal'
-import { fetchFreeExerciseDb, parseExternalExercises } from '@/lib/importers'
-import { SEED_EXERCISES } from '@/lib/seed'
 import { normalize } from '@/lib/utils'
-
-const SEED_IDS = new Set(SEED_EXERCISES.map((e) => e.id))
 
 type SortKey = 'nom' | 'recent' | 'favoris'
 
 export default function ExercisesPage() {
   const exercises = useStore((s) => s.exercises)
-  const importExercises = useStore((s) => s.importExercises)
-  const restoreBuiltinExercises = useStore((s) => s.restoreBuiltinExercises)
-  const removeImportedExercises = useStore((s) => s.removeImportedExercises)
-  const notify = useStore((s) => s.notify)
 
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState<ExerciseCategory | 'tous'>('tous')
@@ -45,17 +32,7 @@ export default function ExercisesPage() {
   const [sort, setSort] = useState<SortKey>('nom')
   const [showFilters, setShowFilters] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
-  const [importOpen, setImportOpen] = useState(false)
-  const [importing, setImporting] = useState(false)
-  const [importLog, setImportLog] = useState<string[]>([])
-  const [confirmPrune, setConfirmPrune] = useState(false)
 
-  const importedCount = exercises.filter((e) => !e.isCustom && !SEED_IDS.has(e.id)).length
-  const seedPresent = exercises.filter((e) => SEED_IDS.has(e.id)).length
-  const seedMissing = SEED_EXERCISES.length - seedPresent
-  const fedbCount = exercises.filter((e) => e.source === 'free-exercise-db').length
-
-  const isDefault = exercises.length > 0 && exercises.every((e) => e.source === 'veryhevy')
   const hasPhotos = exercises.some((e) => e.images.length > 0)
 
   const filtered = useMemo(() => {
@@ -96,59 +73,13 @@ export default function ExercisesPage() {
     (onlyCustom ? 1 : 0) +
     (onlyPhotos ? 1 : 0)
 
-  /* -------------------------------- import -------------------------------- */
-
-  const runImport = async () => {
-    setImporting(true)
-    setImportLog(['Téléchargement de la base free-exercise-db…'])
-    try {
-      const list = await fetchFreeExerciseDb()
-      setImportLog((l) => [...l, `${list.length} exercices reçus, import en cours…`])
-      const result = importExercises(list)
-      setImportLog((l) => [
-        ...l,
-        `✓ ${result.added} ajoutés, ${result.updated} enrichis (photos), ${result.skipped} déjà présents.`,
-      ])
-      notify(`${list.length} exercices importés`, 'success')
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Erreur inconnue'
-      setImportLog((l) => [...l, `✗ Échec : ${message}`])
-      notify('Import impossible', 'error')
-    } finally {
-      setImporting(false)
-    }
-  }
-
-  const importFile = async (file: File) => {
-    setImporting(true)
-    try {
-      const text = await file.text()
-      const parsed = parseExternalExercises(JSON.parse(text))
-      const result = importExercises(parsed)
-      setImportLog([
-        `Fichier « ${file.name} » : ${parsed.length} exercices lus.`,
-        `✓ ${result.added} ajoutés, ${result.updated} enrichis, ${result.skipped} ignorés.`,
-      ])
-      notify(`${result.added} exercices importés`, 'success')
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Erreur inconnue'
-      setImportLog([`✗ Échec : ${message}`])
-      notify('Fichier invalide', 'error')
-    } finally {
-      setImporting(false)
-    }
-  }
+  /* -------------------------------- liste -------------------------------- */
 
   return (
     <div>
       <PageHeader
         title="Exercices"
         subtitle={`${exercises.length} exercices · ${exercises.filter((e) => e.isCustom).length} personnalisés`}
-        actions={
-          <IconButton label="Importer" onClick={() => setImportOpen(true)}>
-            <CloudDownload size={18} />
-          </IconButton>
-        }
       />
 
       <Page className="space-y-4">
@@ -279,22 +210,10 @@ export default function ExercisesPage() {
             <EmptyState
               icon={<Dumbbell size={26} />}
               title="Aucun exercice"
-              message={
-                isDefault
-                  ? 'Importez la base complète ou créez vos propres exercices.'
-                  : 'Ajustez vos filtres ou créez un nouvel exercice.'
-              }
+              message="Ajustez vos filtres ou créez un nouvel exercice."
               action={
-                <Button variant="primary" onClick={() => (isDefault ? setImportOpen(true) : setCreateOpen(true))}>
-                  {isDefault ? (
-                    <>
-                      <CloudDownload size={16} /> Importer la base
-                    </>
-                  ) : (
-                    <>
-                      <Plus size={16} /> Créer un exercice
-                    </>
-                  )}
+                <Button variant="primary" onClick={() => setCreateOpen(true)}>
+                  <Plus size={16} /> Créer un exercice
                 </Button>
               }
             />
@@ -316,132 +235,6 @@ export default function ExercisesPage() {
       </Page>
 
       <ExerciseFormModal open={createOpen} onClose={() => setCreateOpen(false)} />
-
-      {/* Import / restauration */}
-      <Modal open={importOpen} onClose={() => setImportOpen(false)} title="Bibliothèque : importer / restaurer" size="md">
-        <div className="space-y-4">
-          <Card className="border-accent-line bg-accent-soft p-3.5">
-            <p className="text-sm font-bold">Base VeryHevy ({SEED_EXERCISES.length} exercices en français)</p>
-            <p className="mt-1 text-xs text-muted">
-              {seedMissing === 0
-                ? '✓ Base complète, rien à faire.'
-                : `${seedPresent}/${SEED_EXERCISES.length} présents — ${seedMissing} manquant(s), jamais effacés par les autres imports.`}
-            </p>
-            {seedMissing > 0 && (
-              <div className="mt-3">
-                <Button
-                  variant="primary"
-                  size="sm"
-                  disabled={importing}
-                  onClick={() => {
-                    restoreBuiltinExercises()
-                    setImportOpen(false)
-                  }}
-                >
-                  <RefreshCw size={14} />
-                  Restaurer les {seedMissing} manquants
-                </Button>
-              </div>
-            )}
-          </Card>
-
-          <Card className="p-3.5">
-            <p className="text-sm font-bold">Base illustrée free-exercise-db</p>
-            <p className="mt-1 text-xs text-muted">
-              {fedbCount > 0 ? `${fedbCount} exercice(s) illustré(s) déjà installé(s). ` : ''}
-              876 exercices (musculation, cardio, étirements, pliométrie, haltérophilie…) avec photos animées et
-              instructions. Domaine public, téléchargé depuis GitHub. L’import complète sans doublon et ne
-              supprime jamais rien.
-            </p>
-            <div className="mt-3">
-              <Button variant="primary" size="sm" disabled={importing} onClick={() => runImport()}>
-                {importing ? <RefreshCw size={14} className="animate-spin" /> : <CloudDownload size={14} />}
-                Compléter avec la base illustrée
-              </Button>
-            </div>
-          </Card>
-
-          <Field label="Or, importer un fichier JSON">
-            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-line bg-surface-2 py-6 text-sm text-muted transition-colors hover:text-ink">
-              <Upload size={16} />
-              Choisir un fichier .json
-              <input
-                type="file"
-                accept="application/json,.json"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0]
-                  if (file) void importFile(file)
-                }}
-              />
-            </label>
-          </Field>
-
-          <p className="flex items-start gap-2 text-[11px] text-muted">
-            <FileJson size={14} className="mt-0.5 shrink-0" />
-            Formats acceptés : export VeryHevy, ou tableau d’objets au format free-exercise-db (name, category,
-            primaryMuscles, equipment, images…). Les doublons sont détectés par nom.
-          </p>
-
-          {importedCount > 0 && (
-            <Card className="border-danger/40 bg-danger/10 p-3.5">
-              <p className="text-sm font-bold">Retirer les exercices importés ({importedCount})</p>
-              <p className="mt-1 text-xs text-muted">
-                Retire les exercices issus de la base libre. La base VeryHevy et vos exercices
-                personnalisés sont conservés, vos séances passées ne sont pas touchées.
-              </p>
-              <div className="mt-3">
-                <Button
-                  size="sm"
-                  variant="danger"
-                  disabled={importing}
-                  onClick={() => {
-                    setImportOpen(false)
-                    setConfirmPrune(true)
-                  }}
-                >
-                  <Trash2 size={14} />
-                  Retirer
-                </Button>
-              </div>
-            </Card>
-          )}
-
-          {importLog.length > 0 && (
-            <pre className="max-h-40 overflow-auto rounded-xl bg-surface-2 p-3 text-[11px] whitespace-pre-wrap text-muted">
-              {importLog.join('\n')}
-            </pre>
-          )}
-
-          {importing && (
-            <p className="flex items-center gap-2 text-xs text-accent">
-              <RefreshCw size={13} className="animate-spin" /> Opération en cours…
-            </p>
-          )}
-        </div>
-      </Modal>
-
-      <ConfirmDialog
-        open={confirmPrune}
-        title="Retirer les exercices importés ?"
-        message={
-          <>
-            {importedCount > 1
-              ? `${importedCount} exercices issus de la base libre seront retirés de la bibliothèque.`
-              : `1 exercice issu de la base libre sera retiré de la bibliothèque.`}{' '}
-            La base VeryHevy et vos exercices personnalisés sont conservés.
-            <br />
-            Vos séances passées ne sont pas touchées (leurs séries restent enregistrées).
-          </>
-        }
-        confirmLabel="Retirer"
-        danger
-        onCancel={() => setConfirmPrune(false)}
-        onConfirm={() => {
-          removeImportedExercises()
-          setConfirmPrune(false)
-        }}
-      />
     </div>
   )
 }

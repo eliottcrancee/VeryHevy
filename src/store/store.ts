@@ -82,6 +82,8 @@ export interface StoreState extends AppData {
   deleteExercise: (id: string) => void
   toggleFavorite: (id: string) => void
   importExercises: (list: Exercise[], opts?: { replace?: boolean }) => ImportResult
+  /** Télécharge la base illustrée une fois (arrière-plan, silencieux). */
+  ensureIllustratedLibrary: () => Promise<{ added: number; updated: number }>
   restoreBuiltinExercises: () => void
   replaceLibraryWith: (list: Exercise[]) => void
   /** Retire les exercices importés (base libre…) : ne garde que la base VeryHevy + vos customs. */
@@ -533,6 +535,30 @@ export const useStore = create<StoreState>()(
         const result = mergeExercises(get().exercises, list)
         set({ exercises: result.exercises })
         return result
+      },
+
+      /**
+       * Bibliothèque unique : la base illustrée (photos distantes) se
+       * télécharge seule une fois en arrière-plan. Best effort silencieux :
+       * hors ligne ou échec → on garde la base FR, sans déranger.
+       */
+      ensureIllustratedLibrary: async () => {
+        if (typeof navigator !== 'undefined' && !navigator.onLine) return { added: 0, updated: 0 }
+        if (get().exercises.some((e) => e.source === 'free-exercise-db')) return { added: 0, updated: 0 }
+        try {
+          const { fetchFreeExerciseDb } = await import('@/lib/importers')
+          const list = await fetchFreeExerciseDb()
+          const result = mergeExercises(get().exercises, list)
+          const now = new Date().toISOString()
+          set({
+            exercises: result.exercises.map((e) =>
+              e.source === 'free-exercise-db' && !e.updatedAt ? { ...e, updatedAt: now } : e,
+            ),
+          })
+          return { added: result.added, updated: result.updated }
+        } catch {
+          return { added: 0, updated: 0 }
+        }
       },
 
       replaceLibraryWith: (list) => {

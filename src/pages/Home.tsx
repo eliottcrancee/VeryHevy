@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CloudOff, Plus, RefreshCw, Search, UserPlus } from 'lucide-react'
+import { CloudOff, Plus, Search, UserPlus } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
 import { useStore } from '@/store/store'
 import type { Post, SocialProfile } from '@/types'
@@ -10,6 +10,7 @@ import { Page, PageHeader } from '@/components/PageHeader'
 import { Button, Card, EmptyState, Input } from '@/components/ui'
 import { IconButton } from '@/components/ui'
 import { PostCard } from '@/components/PostCard'
+import { cn } from '@/lib/utils'
 
 const PAGE_SIZE = 20
 
@@ -34,6 +35,12 @@ export default function HomePage() {
   const [searching, setSearching] = useState(false)
   const [found, setFound] = useState<SocialProfile | null | undefined>(undefined)
   const [followBusy, setFollowBusy] = useState(false)
+
+  /* Pull-to-refresh : tirer vers le bas en haut du feed pour actualiser. */
+  const [pull, setPull] = useState(0)
+  const pullStart = useRef<number | null>(null)
+  const pullActive = useRef(false)
+  const pullDist = useRef(0)
 
   const load = useCallback(async (offset: number, append: boolean) => {
     if (!cloudEnabled || !user) return
@@ -60,6 +67,48 @@ export default function HomePage() {
     setRefreshing(true)
     void load(0, false)
   }
+
+  useEffect(() => {
+    const el = document.querySelector('.app-main')
+    if (!el) return
+    const onStart = (e: Event) => {
+      if (el.scrollTop <= 0) {
+        pullStart.current = (e as TouchEvent).touches[0].clientY
+        pullActive.current = true
+      }
+    }
+    const onMove = (e: Event) => {
+      if (!pullActive.current || pullStart.current === null) return
+      const dy = (e as TouchEvent).touches[0].clientY - pullStart.current
+      if (dy > 0 && el.scrollTop <= 0) {
+        pullDist.current = Math.min(96, dy * 0.5)
+        setPull(pullDist.current)
+      } else {
+        pullActive.current = false
+        pullDist.current = 0
+        setPull(0)
+      }
+    }
+    const onEnd = () => {
+      if (pullActive.current && pullDist.current >= 64) {
+        setRefreshing(true)
+        void load(0, false)
+      }
+      pullActive.current = false
+      pullStart.current = null
+      pullDist.current = 0
+      setPull(0)
+    }
+    el.addEventListener('touchstart', onStart, { passive: true })
+    el.addEventListener('touchmove', onMove, { passive: true })
+    el.addEventListener('touchend', onEnd)
+    return () => {
+      el.removeEventListener('touchstart', onStart)
+      el.removeEventListener('touchmove', onMove)
+      el.removeEventListener('touchend', onEnd)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const startEmpty = () => {
     if (activeId) {
@@ -125,19 +174,23 @@ export default function HomePage() {
     <div>
       <PageHeader
         title="Accueil"
-        subtitle="Séances de tes abonnements"
+        subtitle="Tire vers le bas pour actualiser"
         actions={
-          <>
-            <IconButton label="Actualiser" onClick={refresh}>
-              <RefreshCw size={20} className={refreshing ? 'animate-spin' : ''} />
-            </IconButton>
-            <IconButton label="Démarrer une séance vide" onClick={startEmpty}>
-              <Plus size={22} />
-            </IconButton>
-          </>
+          <IconButton label="Démarrer une séance vide" onClick={startEmpty}>
+            <Plus size={22} />
+          </IconButton>
         }
       />
       <Page className="max-w-2xl space-y-3 pb-10">
+        <div
+          className={cn(
+            'flex items-center justify-center gap-2 overflow-hidden text-xs font-bold text-muted transition-all',
+            pull > 0 || refreshing ? 'h-8 opacity-100' : 'h-0 opacity-0',
+          )}
+        >
+          <span className={cn('inline-block h-4 w-4 rounded-full border-2 border-accent border-t-transparent', (refreshing || pull >= 64) && 'animate-spin')} />
+          {refreshing ? 'Actualisation…' : pull >= 64 ? 'Relâche pour actualiser' : 'Tire pour actualiser'}
+        </div>
         {loading ? (
           <p className="py-8 text-center text-sm text-muted">Chargement du feed…</p>
         ) : posts.length === 0 ? (

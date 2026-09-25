@@ -11,6 +11,8 @@ l'app reste 100 % locale et aucune page de login n'est exigée.
    (tables `profiles`, `workouts`, `routines`, `exercises`, `deleted_items` + RLS + trigger profil auto).
 3. Puis exécutez `supabase/schema_social.sql` (pseudo unique, follows,
    posts/likes/comments, sessions carte, notifs/blocks/reports + buckets Storage).
+4. Puis exécutez `supabase/schema_chat.sql` (match : candidatures,
+   chat 1-1, anonymat des inscrits + RPC participants publics).
 
 ## 2. Activer Google
 
