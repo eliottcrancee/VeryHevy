@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import type { SocialProfile } from '@/types'
+import { t, useLang } from '@/lib/i18n'
 
 /** Lien vers le profil public (/profil/:username), ou null sans pseudo. */
 export function profileLinkOf(p?: SocialProfile | null): string | null {
@@ -7,7 +8,7 @@ export function profileLinkOf(p?: SocialProfile | null): string | null {
 }
 
 /** Nom d'affichage : nom, sinon @pseudo, sinon repli. */
-export function profileNameOf(p?: SocialProfile | null, fallback = 'Sportif'): string {
+export function profileNameOf(p?: SocialProfile | null, fallback = t('lib.athlete')): string {
   return p?.display_name?.trim() || (p?.username ? `@${p.username}` : fallback)
 }
 
@@ -17,6 +18,7 @@ export function ProfileAvatar({ url, name, size = 32 }: {
   name: string
   size?: number
 }) {
+  useLang()
   if (url) {
     return (
       <img
@@ -48,6 +50,7 @@ export function ProfileLine({ profile, size = 28, single }: {
   /** Une seule ligne (nom uniquement) au lieu de nom + pseudo. */
   single?: boolean
 }) {
+  useLang()
   const name = profileNameOf(profile)
   const to = profileLinkOf(profile)
   const body = (

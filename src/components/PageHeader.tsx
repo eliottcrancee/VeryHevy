@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { t, useLang } from '@/lib/i18n'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -21,6 +22,7 @@ export function PageHeader({
   className?: string
   children?: ReactNode
 }) {
+  useLang()
   const navigate = useNavigate()
   return (
     <header
@@ -33,7 +35,7 @@ export function PageHeader({
       <div className="mx-auto flex w-full max-w-5xl items-center gap-3 px-4 py-3">
         {back && (
           <IconButton
-            label="Retour"
+            label={t('ui.back')}
             onClick={() => (typeof back === 'string' ? navigate(back) : navigate(-1))}
             className="-ml-2"
           >

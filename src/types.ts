@@ -283,6 +283,8 @@ export interface Settings {
   sync: SyncSettings
   /** Visibilité par défaut des nouveaux posts : followers (défaut validé). */
   defaultPostVisibility: PostVisibility
+  /** Langue de l'interface (contenus utilisateurs jamais traduits). */
+  lang: 'fr' | 'en'
   /** Horodatage serveur de la dernière synchro réussie (ISO). */
   lastSyncAt: string | null
   /** Dernière erreur de synchro (affichage Réglages). */

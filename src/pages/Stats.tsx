@@ -29,6 +29,7 @@ import {
 } from '@/lib/calc'
 import { CATEGORY_META } from '@/types'
 import CalendarPage from '@/pages/Calendar'
+import { localeOf, t, tx, useLang } from '@/lib/i18n'
 import { ChartTooltipContent, chartCursor, chartLineCursor, chartTooltipWrapper } from '@/components/charts'
 import { addDays, cn, formatDuration, formatVolume, formatWeight, kgToDisplay, startOfWeek, toDateKey } from '@/lib/utils'
 
@@ -41,6 +42,7 @@ export default function StatsPage({ bare = false }: { bare?: boolean }) {
   const exercises = useStore((s) => s.exercises)
   const settings = useStore((s) => s.settings)
   const [range, setRange] = useState<Range>('90j')
+  const loc = localeOf(useLang())
 
   const all = completedWorkouts(workouts)
 
@@ -147,7 +149,7 @@ export default function StatsPage({ bare = false }: { bare?: boolean }) {
         .sort((a, b) => +new Date(a.startedAt) - +new Date(b.startedAt))
         .slice(-20)
         .map((w) => ({
-          label: new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: '2-digit' }).format(new Date(w.startedAt)),
+          label: new Intl.DateTimeFormat(loc, { day: '2-digit', month: '2-digit' }).format(new Date(w.startedAt)),
           poids: w.bodyweightKg,
         })),
     [workouts],
@@ -156,13 +158,13 @@ export default function StatsPage({ bare = false }: { bare?: boolean }) {
   if (!all.length) {
     return (
       <div>
-        {!bare && <PageHeader title="Stats" />}
+        {!bare && <PageHeader title={t('stats.title')} />}
         <Page>
           <Card>
             <EmptyState
               icon={<Activity size={26} />}
-              title="Pas encore de statistiques"
-              message="Termine une première séance pour découvrir tes courbes de progression."
+              title={t('stats.empty')}
+              message={t('stats.emptyHint')}
             />
           </Card>
         </Page>
@@ -172,29 +174,29 @@ export default function StatsPage({ bare = false }: { bare?: boolean }) {
 
   return (
     <div>
-      {!bare && <PageHeader title="Stats" subtitle={`${filtered.length} séances sur la période`} />}
+      {!bare && <PageHeader title={t('stats.title')} subtitle={t('stats.subtitle', { n: filtered.length })} />}
       <Page className="space-y-5">
         <div className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1">
-          {(
-            [
-              ['30j', '30 jours'],
-              ['90j', '3 mois'],
-              ['6m', '6 mois'],
-              ['tout', 'Tout'],
-            ] as [Range, string][]
-          ).map(([value, label]) => (
-            <Chip key={value} active={range === value} onClick={() => setRange(value)}>
-              {label}
-            </Chip>
-          ))}
+            {(
+              [
+                ['30j', t('stats.range30')],
+                ['90j', t('stats.range90')],
+                ['6m', t('stats.range6m')],
+                ['tout', t('common.all')],
+              ] as [Range, string][]
+            ).map(([value, label]) => (
+              <Chip key={value} active={range === value} onClick={() => setRange(value)}>
+                {label}
+              </Chip>
+            ))}
         </div>
 
         <div className="grid grid-cols-4 gap-1.5 text-center">
           {[
-            { label: 'Séances', value: String(filtered.length) },
-            { label: 'Volume', value: `${Math.round(kgToDisplay(totalVolume, settings.unit) / 1000).toLocaleString('fr-FR')}k` },
-            { label: 'Temps', value: formatDuration(totalTime, 'compact') },
-            { label: 'Séries', value: String(totalSets) },
+            { label: t('stats.sessions'), value: String(filtered.length) },
+            { label: t('stats.volume'), value: `${Math.round(kgToDisplay(totalVolume, settings.unit) / 1000).toLocaleString('fr-FR')}k` },
+            { label: t('stats.time'), value: formatDuration(totalTime, 'compact') },
+            { label: t('stats.sets'), value: String(totalSets) },
           ].map((s) => (
             <div key={s.label} className="rounded-xl border border-line bg-surface px-1 py-2">
               <p className="tabular truncate text-sm font-extrabold">{s.value}</p>
@@ -206,14 +208,14 @@ export default function StatsPage({ bare = false }: { bare?: boolean }) {
         {/* Régularité + calendrier */}
         <Card className="space-y-4 p-4">
           <div>
-            <SectionTitle>Régularité — 12 dernières semaines</SectionTitle>
+            <SectionTitle>{t('stats.regularity')}</SectionTitle>
           <div className="flex gap-1 overflow-x-auto pb-1">
             {heatmap.map((week, wi) => (
               <div key={wi} className="flex flex-col gap-1">
                 {week.map((day) => (
                   <div
                     key={day.key}
-                    title={`${day.date.toLocaleDateString('fr-FR')}${day.count ? ` · ${day.count} séance(s)` : ''}`}
+                    title={day.count ? t('stats.heatDay', { date: day.date.toLocaleDateString('fr-FR'), n: day.count }) : day.date.toLocaleDateString('fr-FR')}
                     className={cn(
                       'h-5 w-5 shrink-0 rounded',
                       day.future ? 'opacity-0' : day.count > 0 ? 'bg-accent' : 'bg-surface-3',
@@ -225,22 +227,22 @@ export default function StatsPage({ bare = false }: { bare?: boolean }) {
             ))}
           </div>
           <div className="mt-2 flex items-center gap-2 text-[10px] text-muted">
-            <span>Moins</span>
+            <span>{t('stats.less')}</span>
             <span className="h-3 w-3 rounded bg-surface-3" />
             <span className="h-3 w-3 rounded bg-accent/60" />
             <span className="h-3 w-3 rounded bg-accent" />
-            <span>Plus</span>
+            <span>{t('stats.more')}</span>
           </div>
           </div>
           <div className="border-t border-line pt-4">
-            <SectionTitle>Calendrier</SectionTitle>
+            <SectionTitle>{t('stats.calendar')}</SectionTitle>
             <CalendarPage bare />
           </div>
         </Card>
 
         {/* Volume hebdo */}
         <Card className="p-4">
-          <SectionTitle>Volume par semaine ({settings.unit})</SectionTitle>
+          <SectionTitle>{t('stats.volumePerWeek', { unit: settings.unit })}</SectionTitle>
           <div className="mx-auto h-52 w-full max-w-md">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={series} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
@@ -266,13 +268,17 @@ export default function StatsPage({ bare = false }: { bare?: boolean }) {
                     <ChartTooltipContent
                       format={(p, datum) =>
                         p.dataKey === 'volume'
-                          ? `${Math.round(Number(p.value)).toLocaleString('fr-FR')} ${settings.unit} · ${String(datum.sets ?? 0)} séries`
+                          ? t('stats.tipVolume', {
+                              v: Math.round(Number(p.value)).toLocaleString('fr-FR'),
+                              u: settings.unit,
+                              s: String(datum.sets ?? 0),
+                            })
                           : null
                       }
                     />
                   }
                 />
-                <Bar dataKey="volume" name="Volume" radius={[6, 6, 2, 2]} fill="var(--accent)" minPointSize={2} maxBarSize={34}>
+                <Bar dataKey="volume" name={t('stats.chartVolume')} radius={[6, 6, 2, 2]} fill="var(--accent)" minPointSize={2} maxBarSize={34}>
                   {series.map((s, i) => (
                     <Cell
                       key={i}
@@ -289,15 +295,15 @@ export default function StatsPage({ bare = false }: { bare?: boolean }) {
         {/* Types d'effort */}
         {categories.length > 0 && (
           <Card className="p-4">
-            <SectionTitle>Répartition par type d’effort</SectionTitle>
+            <SectionTitle>{t('stats.byType')}</SectionTitle>
             <div className="mx-auto w-full max-w-md space-y-3">
               {categories.map(({ cat, sets, meta }) => (
                 <div key={cat}>
                   <div className="mb-1 flex items-center justify-between text-[12px]">
                     <span className="font-semibold">
-                      {meta.emoji} {meta.label}
+                      {meta.emoji} {tx('cat', cat)}
                     </span>
-                    <span className="tabular text-muted">{sets} séries</span>
+                    <span className="tabular text-muted">{t('stats.setsCount', { n: sets })}</span>
                   </div>
                   <ProgressBar value={sets} max={categories[0].sets} color={meta.color} />
                 </div>
@@ -309,7 +315,7 @@ export default function StatsPage({ bare = false }: { bare?: boolean }) {
         {/* Muscles */}
         {muscles.length > 0 && (
           <Card className="p-4">
-            <SectionTitle>Séries par groupe musculaire</SectionTitle>
+            <SectionTitle>{t('stats.byMuscle')}</SectionTitle>
             <div className="mx-auto h-64 w-full max-w-md">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={muscles} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 0 }}>
@@ -327,6 +333,7 @@ export default function StatsPage({ bare = false }: { bare?: boolean }) {
                     axisLine={false}
                     tickLine={false}
                     width={96}
+                    tickFormatter={(v: string) => tx('muscle', v)}
                   />
                   <Tooltip
                     cursor={chartCursor}
@@ -334,12 +341,16 @@ export default function StatsPage({ bare = false }: { bare?: boolean }) {
                     content={
                       <ChartTooltipContent
                         format={(p, datum) =>
-                          `${p.value} séries · ${Math.round(kgToDisplay(Number(datum.volume ?? 0), settings.unit)).toLocaleString('fr-FR')} ${settings.unit}`
+                          t('stats.tipMuscle', {
+                            v: p.value,
+                            vol: Math.round(kgToDisplay(Number(datum.volume ?? 0), settings.unit)).toLocaleString('fr-FR'),
+                            u: settings.unit,
+                          })
                         }
                       />
                     }
                   />
-                  <Bar dataKey="sets" name="Séries" radius={[0, 6, 6, 0]} barSize={14} maxBarSize={18}>
+                  <Bar dataKey="sets" name={t('stats.chartSets')} radius={[0, 6, 6, 0]} barSize={14} maxBarSize={18}>
                     {muscles.map((_, i) => (
                       <Cell key={i} fill="var(--accent)" fillOpacity={Math.max(0.35, 1 - i * 0.06)} />
                     ))}
@@ -353,25 +364,29 @@ export default function StatsPage({ bare = false }: { bare?: boolean }) {
         {/* Top exercices */}
         {topExercises.length > 0 && (
           <Card className="p-4">
-            <SectionTitle>Exercices les plus travaillés</SectionTitle>
+            <SectionTitle>{t('stats.topExercises')}</SectionTitle>
             <div className="space-y-2">
-              {topExercises.map((t) => (
+              {topExercises.map((x) => (
                 <Link
-                  key={t.exercise!.id}
-                  to={`/exercices/${t.exercise!.id}`}
+                  key={x.exercise!.id}
+                  to={`/exercices/${x.exercise!.id}`}
                   className="flex items-center gap-3 rounded-xl bg-surface-2 px-3 py-2 transition-colors hover:bg-surface-3"
                 >
                   <Dumbbell size={15} className="shrink-0 text-muted" />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] font-semibold">{t.exercise!.name}</span>
+                    <span className="block truncate text-[13px] font-semibold">{x.exercise!.name}</span>
                     <span className="block text-[11px] text-muted">
-                      {t.sessions} séances · {t.sets} séries
-                      {t.volume > 0 && ` · ${formatVolume(t.volume, settings.unit)}`}
+                      {x.volume > 0
+                        ? t('stats.topSubVol', {
+                            sub: t('stats.topSub', { a: x.sessions, b: x.sets }),
+                            vol: formatVolume(x.volume, settings.unit),
+                          })
+                        : t('stats.topSub', { a: x.sessions, b: x.sets })}
                     </span>
                   </span>
-                  {t.best > 0 && (
+                  {x.best > 0 && (
                     <span className="tabular shrink-0 text-[12px] font-bold text-accent">
-                      {formatWeight(t.best, settings.unit)}
+                      {formatWeight(x.best, settings.unit)}
                     </span>
                   )}
                 </Link>
@@ -383,7 +398,7 @@ export default function StatsPage({ bare = false }: { bare?: boolean }) {
         {/* Records */}
         {records.length > 0 && (
           <Card className="p-4">
-            <SectionTitle>Meilleures charges</SectionTitle>
+            <SectionTitle>{t('stats.best')}</SectionTitle>
             <div className="space-y-1.5">
               {records.map((r) => (
                 <div key={r.ex.id} className="flex items-center gap-3 text-sm">
@@ -405,7 +420,7 @@ export default function StatsPage({ bare = false }: { bare?: boolean }) {
         {/* Poids de corps */}
         {bodyweightSeries.length > 1 && (
           <Card className="p-4">
-            <SectionTitle>Évolution du poids de corps ({settings.unit})</SectionTitle>
+            <SectionTitle>{t('stats.bodyweight', { unit: settings.unit })}</SectionTitle>
             <div className="mx-auto h-44 w-full max-w-md">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart
@@ -441,7 +456,7 @@ export default function StatsPage({ bare = false }: { bare?: boolean }) {
                   <Line
                     type="monotone"
                     dataKey="poids"
-                    name="Poids"
+                    name={t('stats.chartWeight')}
                     stroke="var(--accent)"
                     strokeWidth={2.5}
                     dot={{ r: 3, fill: 'var(--accent)' }}
@@ -452,7 +467,7 @@ export default function StatsPage({ bare = false }: { bare?: boolean }) {
             </div>
             <p className="mt-1 text-center text-sm font-bold">
               {formatWeight(bodyweightSeries.at(-1)?.poids, settings.unit)}
-              <span className="ml-2 text-[11px] font-normal text-muted">dernier relevé</span>
+              <span className="ml-2 text-[11px] font-normal text-muted">{t('stats.latest')}</span>
             </p>
           </Card>
         )}

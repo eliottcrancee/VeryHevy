@@ -56,6 +56,7 @@ import { useStore, selectActiveWorkout } from '@/store/store'
 import { workoutDurationSeconds, workoutSets, workoutVolume } from '@/lib/calc'
 import { cn, formatDuration, formatVolume, inputToKg, kgToInput } from '@/lib/utils'
 import { useBottomBar, useInterval } from '@/hooks/app'
+import { t, useLang } from '@/lib/i18n'
 
 /* ------------------------------------------------------------------ */
 /* Élément réordonnable                                                */
@@ -86,6 +87,7 @@ function SortableExercise({
 
 function StartScreen() {
   const navigate = useNavigate()
+  useLang()
   const routines = useStore((s) => s.routines)
   const workouts = useStore((s) => s.workouts)
   const startWorkout = useStore((s) => s.startWorkout)
@@ -100,16 +102,16 @@ function StartScreen() {
     <div>
       <PageHeader
         back="/"
-        title="S’entraîner"
-        subtitle="Séance vide, programme ou bibliothèque"
+        title={t('workout.train')}
+        subtitle={t('workout.trainSub')}
       />
       <Page className="max-w-3xl">
       <Card className="overflow-hidden">
         <div className="grid-bg border-b border-line px-5 py-7">
-          <p className="text-xs font-bold tracking-widest text-accent uppercase">Prêt à transpirer ?</p>
-          <h2 className="mt-1 text-2xl font-extrabold">Démarrer une séance</h2>
+          <p className="text-xs font-bold tracking-widest text-accent uppercase">{t('workout.ready')}</p>
+          <h2 className="mt-1 text-2xl font-extrabold">{t('workout.startTitle')}</h2>
           <p className="mt-1 text-sm text-muted">
-            Séance vide, depuis un programme, ou en piochant dans ta bibliothèque.
+            {t('workout.startHint')}
           </p>
         </div>
         <div className="space-y-2 p-4">
@@ -119,20 +121,20 @@ function StartScreen() {
             block
             onClick={() => startWorkout()}
           >
-            <Play size={18} /> Séance vide
+            <Play size={18} /> {t('workout.emptyWorkout')}
           </Button>
           <Button size="lg" block onClick={() => setPicker(true)}>
-            <Dumbbell size={18} /> Choisir mes exercices
+            <Dumbbell size={18} /> {t('workout.pickExercises')}
           </Button>
           <Button size="lg" block onClick={() => navigate('/programmes')}>
-            <ListChecks size={18} /> Depuis un programme
+            <ListChecks size={18} /> {t('workout.fromProgram')}
           </Button>
         </div>
       </Card>
 
       {recent.length > 0 && (
         <div className="mt-6">
-          <p className="mb-2 text-xs font-bold tracking-widest text-muted uppercase">Reprendre rapidement</p>
+          <p className="mb-2 text-xs font-bold tracking-widest text-muted uppercase">{t('workout.quickResume')}</p>
           <div className="space-y-2">
             {recent.map((r) => (
               <button
@@ -150,8 +152,8 @@ function StartScreen() {
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-bold">{r.name}</span>
                   <span className="block text-[11px] text-muted">
-                    {r.exercises.length} exercice{r.exercises.length > 1 ? 's' : ''}
-                    {r.timesPerformed > 0 && ` · faite ${r.timesPerformed}×`}
+                    {t('workout.exNum', { n: r.exercises.length })}
+                    {r.timesPerformed > 0 && ` · ${t('workout.doneTimes', { n: r.timesPerformed })}`}
                   </span>
                 </span>
                 <Play size={16} className="text-muted" />
@@ -164,7 +166,7 @@ function StartScreen() {
       {workouts.length > 0 && (
         <div className="mt-6">
           <Button block variant="ghost" onClick={() => navigate('/historique')}>
-            Voir tout l’historique
+            {t('workout.viewHistory')}
           </Button>
         </div>
       )}
@@ -189,6 +191,7 @@ function StartScreen() {
 
 export default function ActiveWorkoutPage() {
   const navigate = useNavigate()
+  useLang()
   // Même sélecteur que le bandeau « séance en cours » : le repli sur toute
   // séance active garantit que cliquer le bandeau n'ouvre jamais l'écran
   // « démarrer une séance » alors qu'une séance existe.
@@ -258,7 +261,7 @@ export default function ActiveWorkoutPage() {
       return
     }
     setLinkAnchor(weId)
-    notify('Choisissez le 2ᵉ exercice du superset', 'info')
+    notify(t('workout.supersetPick'), 'info')
   }
 
   return (
@@ -266,11 +269,15 @@ export default function ActiveWorkoutPage() {
       <PageHeader
         back="/"
         title={workout.name}
-        subtitle={`${formatDuration(elapsed)} · ${doneSets}/${totalSets} séries · ${formatVolume(volume, settings.unit)}`}
+        subtitle={t('workout.summary', {
+          time: formatDuration(elapsed),
+          sets: `${doneSets}/${totalSets}`,
+          vol: formatVolume(volume, settings.unit),
+        })}
         actions={
           <>
             <IconButton
-              label="Renommer la séance"
+              label={t('workout.rename')}
               onClick={() => {
                 setNameDraft(workout.name)
                 setRenameOpen(true)
@@ -281,20 +288,20 @@ export default function ActiveWorkoutPage() {
             <Menu
               align="right"
               trigger={({ toggle }) => (
-                <IconButton label="Options de la séance" onClick={toggle}>
+                <IconButton label={t('workout.options')} onClick={toggle}>
                   <MoreVertical size={18} />
                 </IconButton>
               )}
               items={[
                 {
-                  label: 'Enregistrer comme programme',
+                  label: t('workout.saveAsProgram'),
                   icon: <Save size={15} />,
                   onClick: () => {
                     setRoutineName(workout.name)
                     setSaveRoutineOpen(true)
                   },
                 },
-                { label: 'Annuler la séance', icon: <Trash2 size={15} />, danger: true, onClick: () => setConfirmDiscard(true) },
+                { label: t('workout.cancelWorkout'), icon: <Trash2 size={15} />, danger: true, onClick: () => setConfirmDiscard(true) },
               ]}
             />
           </>
@@ -305,7 +312,7 @@ export default function ActiveWorkoutPage() {
         {clockPaused && (
           <div className="animate-slide-up flex flex-wrap items-center gap-2 rounded-xl border border-warning/50 bg-warning/10 px-3 py-2 text-[13px]">
             <Pause size={15} className="text-warning" />
-            <span className="font-semibold">Chrono en pause ({formatDuration(elapsed)})</span>
+            <span className="font-semibold">{t('workout.pausedBanner', { time: formatDuration(elapsed) })}</span>
             <span className="ml-auto flex gap-2">
               <Button
                 size="sm"
@@ -315,10 +322,10 @@ export default function ActiveWorkoutPage() {
                   setDurationOpen(true)
                 }}
               >
-                Modifier
+                {t('workout.edit')}
               </Button>
               <Button size="sm" variant="primary" onClick={() => resumeWorkoutClock(workout.id)}>
-                <Play size={13} /> Reprendre
+                <Play size={13} /> {t('workout.resume')}
               </Button>
             </span>
           </div>
@@ -327,9 +334,9 @@ export default function ActiveWorkoutPage() {
         {linkAnchor && (
           <div className="animate-slide-up flex items-center gap-2 rounded-xl border border-info/50 bg-info/10 px-3 py-2 text-[13px]">
             <Link2 size={15} className="text-info" />
-            Sélectionnez le second exercice à enchaîner.
+            {t('workout.supersetSelect')}
             <Button size="sm" variant="ghost" className="ml-auto" onClick={() => setLinkAnchor(null)}>
-              Annuler
+              {t('common.cancel')}
             </Button>
           </div>
         )}
@@ -338,11 +345,11 @@ export default function ActiveWorkoutPage() {
           <Card>
             <EmptyState
               icon={<Dumbbell size={26} />}
-              title="Aucun exercice"
-              message="Ajoutez votre premier exercice pour commencer la séance."
+              title={t('workout.noExercise')}
+              message={t('workout.noExerciseHint')}
               action={
                 <Button variant="primary" onClick={() => setPicker(true)}>
-                  <Plus size={16} /> Ajouter un exercice
+                  <Plus size={16} /> {t('workout.addExercise')}
                 </Button>
               }
             />
@@ -383,7 +390,7 @@ export default function ActiveWorkoutPage() {
                                 setLinkAnchor(null)
                               }}
                             >
-                              <Link2 size={13} /> Lier
+                              <Link2 size={13} /> {t('workout.link')}
                             </Button>
                           ) : undefined
                         }
@@ -397,20 +404,20 @@ export default function ActiveWorkoutPage() {
         )}
 
         <Button size="lg" block variant="outline" onClick={() => setPicker(true)}>
-          <Plus size={18} /> Ajouter un exercice
+          <Plus size={18} /> {t('workout.addExercise')}
         </Button>
 
         <Card className="p-4">
-          <p className="mb-2 text-xs font-bold tracking-widest text-muted uppercase">Notes de séance</p>
+          <p className="mb-2 text-xs font-bold tracking-widest text-muted uppercase">{t('workout.sessionNotes')}</p>
           <Textarea
             value={workout.notes ?? ''}
             onChange={(e) => updateWorkout(workout.id, { notes: e.target.value })}
-            placeholder="Sensations, sommeil, énergie, douleurs…"
+            placeholder={t('workout.notesHint')}
           />
         </Card>
 
         <Card className="p-4">
-          <p className="mb-2 text-xs font-bold tracking-widest text-muted uppercase">Poids de corps (optionnel)</p>
+          <p className="mb-2 text-xs font-bold tracking-widest text-muted uppercase">{t('workout.bodyweightOpt')}</p>
           <Input
             type="number"
             inputMode="decimal"
@@ -420,7 +427,7 @@ export default function ActiveWorkoutPage() {
                 bodyweightKg: e.target.value === '' ? undefined : inputToKg(Number(e.target.value), settings.unit),
               })
             }
-            placeholder={settings.unit === 'kg' ? 'Ex. 78 (kg)' : 'Ex. 172 (lb)'}
+            placeholder={settings.unit === 'kg' ? t('workout.bodyweightEx') : t('workout.bodyweightExLb')}
           />
         </Card>
 
@@ -429,9 +436,9 @@ export default function ActiveWorkoutPage() {
           <div className="rounded-2xl border border-line bg-surface p-3.5">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold tracking-wide text-muted uppercase">
               <Timer size={12} />
-              Durée
+              {t('workout.duration')}
               {clockPaused && (
-                <span className="rounded bg-warning/15 px-1 py-px text-[9px] font-bold text-warning">pause</span>
+                <span className="rounded bg-warning/15 px-1 py-px text-[9px] font-bold text-warning">{t('workout.pause')}</span>
               )}
             </div>
             <div className="mt-1.5 flex items-center gap-1">
@@ -441,24 +448,24 @@ export default function ActiveWorkoutPage() {
                   setDurationDraft(Math.round(elapsed / 60))
                   setDurationOpen(true)
                 }}
-                title="Modifier la durée à la main"
+                title={t('workout.editDuration')}
                 className="tabular min-w-0 flex-1 truncate text-left text-xl font-extrabold transition-colors hover:text-accent"
               >
                 {formatDuration(elapsed, 'compact')}
               </button>
               {clockPaused ? (
-                <IconButton label="Reprendre le chrono" onClick={() => resumeWorkoutClock(workout.id)} className="h-8 w-8 text-success">
+                <IconButton label={t('workout.resumeChrono')} onClick={() => resumeWorkoutClock(workout.id)} className="h-8 w-8 text-success">
                   <Play size={15} />
                 </IconButton>
               ) : (
-                <IconButton label="Mettre le chrono en pause" onClick={() => pauseWorkoutClock(workout.id)} className="h-8 w-8">
+                <IconButton label={t('workout.pauseChrono')} onClick={() => pauseWorkoutClock(workout.id)} className="h-8 w-8">
                   <Pause size={15} />
                 </IconButton>
               )}
             </div>
           </div>
-          <Stat label="Séries" value={`${doneSets}/${totalSets}`} icon={<Check size={12} />} />
-          <Stat label="Volume" value={formatVolume(volume, settings.unit)} icon={<Flag size={12} />} />
+          <Stat label={t('stats.sets')} value={`${doneSets}/${totalSets}`} icon={<Check size={12} />} />
+          <Stat label={t('stats.volume')} value={formatVolume(volume, settings.unit)} icon={<Flag size={12} />} />
         </div>
       </Page>
 
@@ -470,7 +477,7 @@ export default function ActiveWorkoutPage() {
         <div className="mx-auto flex max-w-3xl items-center gap-3">
           <div className="hidden flex-1 sm:block">
             <p className="text-[11px] text-muted">
-              {doneSets} série{doneSets > 1 ? 's' : ''} validée{doneSets > 1 ? 's' : ''} sur {totalSets}
+              {t('workout.validated', { d: doneSets, t: totalSets })}
             </p>
             <div className="mt-1 h-1.5 w-full max-w-48 overflow-hidden rounded-full bg-surface-3">
               <div
@@ -480,7 +487,7 @@ export default function ActiveWorkoutPage() {
             </div>
           </div>
           <Button variant="ghost" onClick={() => setConfirmDiscard(true)} className="text-danger">
-            <X size={16} /> Annuler
+            <X size={16} /> {t('common.cancel')}
           </Button>
           <Button
             variant="primary"
@@ -488,7 +495,7 @@ export default function ActiveWorkoutPage() {
             className="flex-1 sm:flex-none"
             onClick={() => setConfirmFinish(true)}
           >
-            <Check size={18} /> Terminer la séance
+            <Check size={18} /> {t('workout.finish')}
           </Button>
         </div>
       </div>
@@ -504,18 +511,18 @@ export default function ActiveWorkoutPage() {
       <ExercisePicker
         open={Boolean(replaceTarget)}
         onClose={() => setReplaceTarget(null)}
-        title="Remplacer par…"
+        title={t('workout.replaceWith')}
         onPick={(ids) => {
           if (replaceTarget && ids[0]) {
             useStore.getState().replaceWorkoutExercise(workout.id, replaceTarget, ids[0])
-            notify('Exercice remplacé', 'success')
+            notify(t('workout.exReplaced'), 'success')
           }
         }}
       />
 
-      <Modal open={durationOpen} onClose={() => setDurationOpen(false)} title="Durée de la séance" size="sm">
+      <Modal open={durationOpen} onClose={() => setDurationOpen(false)} title={t('workout.durationTitle')} size="sm">
         <p className="mb-2 text-sm text-muted">
-          {clockPaused ? 'Chrono en pause — ajustez la durée figée.' : 'Ajustez la durée écoulée.'}
+          {clockPaused ? t('workout.durationPaused') : t('workout.durationRunning')}
         </p>
         <NumberField
           value={durationDraft}
@@ -525,11 +532,11 @@ export default function ActiveWorkoutPage() {
           max={1440}
           decimals={0}
           suffix="min"
-          ariaLabel="Durée de la séance en minutes"
+          ariaLabel={t('workout.durationAria')}
         />
         <div className="mt-4 flex gap-2">
           <Button block onClick={() => setDurationOpen(false)}>
-            Annuler
+            {t('common.cancel')}
           </Button>
           <Button
             block
@@ -539,16 +546,16 @@ export default function ActiveWorkoutPage() {
               setDurationOpen(false)
             }}
           >
-            Enregistrer
+            {t('common.save')}
           </Button>
         </div>
       </Modal>
 
-      <Modal open={renameOpen} onClose={() => setRenameOpen(false)} title="Renommer la séance" size="sm">
+      <Modal open={renameOpen} onClose={() => setRenameOpen(false)} title={t('workout.rename')} size="sm">
         <Input value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} autoFocus />
         <div className="mt-4 flex gap-2">
           <Button block onClick={() => setRenameOpen(false)}>
-            Annuler
+            {t('common.cancel')}
           </Button>
           <Button
             block
@@ -558,7 +565,7 @@ export default function ActiveWorkoutPage() {
               setRenameOpen(false)
             }}
           >
-            Enregistrer
+            {t('common.save')}
           </Button>
         </div>
       </Modal>
@@ -566,16 +573,16 @@ export default function ActiveWorkoutPage() {
       <Modal
         open={saveRoutineOpen}
         onClose={() => setSaveRoutineOpen(false)}
-        title="Enregistrer comme programme"
+        title={t('workout.saveAsProgram')}
         size="sm"
       >
         <p className="mb-3 text-sm text-muted">
-          Les exercices, l’ordre, les séries et les temps de repos seront conservés (sans les charges).
+          {t('workout.saveProgramHint')}
         </p>
         <Input value={routineName} onChange={(e) => setRoutineName(e.target.value)} autoFocus />
         <div className="mt-4 flex gap-2">
           <Button block onClick={() => setSaveRoutineOpen(false)}>
-            Annuler
+            {t('common.cancel')}
           </Button>
           <Button
             block
@@ -585,17 +592,17 @@ export default function ActiveWorkoutPage() {
               setSaveRoutineOpen(false)
             }}
           >
-            <Sparkles size={16} /> Enregistrer
+            <Sparkles size={16} /> {t('common.save')}
           </Button>
         </div>
       </Modal>
 
       <ConfirmDialog
         open={confirmDiscard}
-        title="Annuler la séance ?"
-        message="Les séries saisies seront perdues. Cette action est définitive."
-        confirmLabel="Annuler la séance"
-        cancelLabel="Continuer"
+        title={t('workout.discardTitle')}
+        message={t('workout.discardMessage')}
+        confirmLabel={t('workout.cancelWorkout')}
+        cancelLabel={t('workout.continue')}
         danger
         onCancel={() => setConfirmDiscard(false)}
         onConfirm={() => {
@@ -607,16 +614,15 @@ export default function ActiveWorkoutPage() {
 
       <ConfirmDialog
         open={confirmFinish}
-        title="Terminer la séance ?"
+        title={t('workout.finishTitle')}
         message={
           <>
-            {doneSets} série{doneSets > 1 ? 's' : ''} validée{doneSets > 1 ? 's' : ''} ·{' '}
-            {formatVolume(volume, settings.unit)} de volume.
+            {t('workout.finishMessage1', { d: doneSets, vol: formatVolume(volume, settings.unit) })}
             <br />
-            Les séries non validées seront supprimées définitivement.
+            {t('workout.finishMessage2')}
           </>
         }
-        confirmLabel="Terminer"
+        confirmLabel={t('workout.finishConfirm')}
         onCancel={() => setConfirmFinish(false)}
         onConfirm={() => {
           // Seul le travail validé est conservé : les séries non validées

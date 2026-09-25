@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
 import { useStore } from '@/store/store'
+import { t, tx, useLang } from '@/lib/i18n'
 import type { SessionVisibility, SocialProfile, SportSession } from '@/types'
 import {
   createSession,
@@ -69,7 +70,7 @@ import { Button, Card, Chip, EmptyState, Field, Input, Modal, Select, Tabs, Text
 import { IconButton } from '@/components/ui'
 import { ReportDialog } from '@/components/ReportDialog'
 import { loadSessions, peekSessions } from '@/lib/pagePreload'
-import { cn } from '@/lib/utils'
+import { cn, intlLocale } from '@/lib/utils'
 
 const FRANCE: [number, number] = [46.603354, 1.888334]
 
@@ -114,11 +115,11 @@ function clusterIcon(n: number): L.DivIcon {
 }
 
 function fmtDate(iso: string): string {
-  return new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(iso))
+  return new Intl.DateTimeFormat(intlLocale(), { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(iso))
 }
 
 function fmtTime(iso: string): string {
-  return new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit' }).format(new Date(iso))
+  return new Intl.DateTimeFormat(intlLocale(), { hour: '2-digit', minute: '2-digit' }).format(new Date(iso))
 }
 
 /** Distance vol d'oiseau en km. */
@@ -134,7 +135,7 @@ function kmBetween(aLat: number, aLng: number, bLat: number, bLng: number): numb
 }
 
 function fmtDistance(km: number): string {
-  return km < 1 ? `à ${Math.max(50, Math.round(km * 1000 / 50) * 50)} m` : `à ${km.toFixed(km < 10 ? 1 : 0)} km`
+  return km < 1 ? t('explorer.distanceNear', { d: Math.max(50, Math.round(km * 1000 / 50) * 50) }) : t('explorer.distanceFar', { d: km.toFixed(km < 10 ? 1 : 0) })
 }
 
 function dayMatches(iso: string, f: DayFilter): boolean {  if (f === 'all') return true
@@ -240,6 +241,7 @@ function savedMapView(userId?: string): { center: [number, number]; zoom: number
 /* ------------------------------------------------------------------ */
 
 export default function ExplorerPage() {
+  useLang()
   const [searchParams, setSearchParams] = useSearchParams()
   const { cloudEnabled, user } = useAuth()
   const notify = useStore((s) => s.notify)
@@ -279,7 +281,7 @@ export default function ExplorerPage() {
       setSessions(list)
       setFollowIds(follows)
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Carte illisible', 'error')
+      notify(err instanceof Error ? err.message : t('explorer.mapLoadFailed'), 'error')
     } finally {
       setLoading(false)
     }
@@ -301,7 +303,7 @@ export default function ExplorerPage() {
   useEffect(() => {
     const messageId = searchParams.get('message')
     if (messageId) {
-      setThread({ sessionId: null, title: 'Message direct', otherId: messageId, other: null })
+      setThread({ sessionId: null, title: t('dm.direct'), otherId: messageId, other: null })
       setView('messages')
       setSearchParams({}, { replace: true })
       return
@@ -353,7 +355,7 @@ export default function ExplorerPage() {
 
   const locate = () => {
     if (!('geolocation' in navigator)) {
-      notify('Géolocalisation indisponible', 'error')
+      notify(t('explorer.geoUnavailable'), 'error')
       return
     }
     navigator.geolocation.getCurrentPosition(
@@ -364,7 +366,7 @@ export default function ExplorerPage() {
         setZoom(13)
         setFlyTo({ lat: c[0], lng: c[1], zoom: 13 })
       },
-      () => notify('Position refusée — déplace la carte à la main', 'error'),
+      () => notify(t('explorer.geoDenied'), 'error'),
       { timeout: 8000 },
     )
   }
@@ -446,7 +448,7 @@ export default function ExplorerPage() {
       notify(ok, 'success')
       await reload()
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Action impossible', 'error')
+      notify(err instanceof Error ? err.message : t('explorer.actionFailed'), 'error')
     } finally {
       setBusyId(null)
     }
@@ -455,13 +457,13 @@ export default function ExplorerPage() {
   if (!cloudEnabled) {
     return (
       <div>
-        <PageHeader title="Explorer" subtitle="La carte des séances" />
+        <PageHeader title={t('explorer.title')} subtitle={t('explorer.subtitle')} />
         <Page className="max-w-3xl">
           <Card>
             <EmptyState
               icon={<CloudOff size={24} />}
-              title="La carte nécessite le cloud"
-              message="Connecte-toi avec Google pour voir et proposer des séances."
+              title={t('explorer.cloudTitle')}
+              message={t('explorer.cloudMsg')}
             />
           </Card>
         </Page>
@@ -472,14 +474,14 @@ export default function ExplorerPage() {
   return (
     <div>
       <PageHeader
-        title="Explorer"
-        subtitle="Touche la carte pour proposer une séance"
+        title={t('explorer.title')}
+        subtitle={t('explorer.mapHint')}
         actions={
           <div className="flex items-center gap-1">
             <Button size="sm" variant="primary" onClick={() => setCreateOpen(true)}>
-              <Plus size={15} /> Proposer
+              <Plus size={15} /> {t('explorer.propose')}
             </Button>
-            <IconButton label="Me localiser" onClick={locate}>
+            <IconButton label={t('explorer.locateMe')} onClick={locate}>
               <LocateFixed size={20} />
             </IconButton>
           </div>
@@ -491,10 +493,10 @@ export default function ExplorerPage() {
             onChange={setView}
             className="w-full [&>button]:shrink-0 [&>button]:whitespace-nowrap [&>button]:px-2"
             tabs={[
-              { value: 'carte', label: 'Carte' },
-              { value: 'reco', label: 'Pour toi' },
-              { value: 'mine', label: 'Mes séances' },
-              { value: 'messages', label: unreadMessages ? `Messages · ${unreadMessages}` : 'Messages' },
+              { value: 'carte', label: t('explorer.tabMap') },
+              { value: 'reco', label: t('explorer.tabForYou') },
+              { value: 'mine', label: t('explorer.tabMine') },
+              { value: 'messages', label: unreadMessages ? t('explorer.tabMessagesUnread', { n: unreadMessages }) : t('explorer.tabMessages') },
             ]}
           />
         </div>
@@ -521,28 +523,28 @@ export default function ExplorerPage() {
           <div className="space-y-4">
             <div className="relative">
               <Search size={15} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted" />
-              <Input value={recoQuery} onChange={(e) => setRecoQuery(e.target.value)} placeholder="Titre, salle, ville…" className="pl-9" />
+              <Input value={recoQuery} onChange={(e) => setRecoQuery(e.target.value)} placeholder={t('explorer.recoSearchPlaceholder')} className="pl-9" />
             </div>
             {loading ? (
-              <p className="text-sm text-muted">Chargement…</p>
+              <p className="text-sm text-muted">{t('common.loading')}</p>
             ) : recoFriends.length === 0 && recoNear.length === 0 ? (
               <Card>
                 <EmptyState
                   icon={<MapPin size={24} />}
-                  title="Rien pour l'instant"
-                  message="Suis des sportifs pour voir leurs séances ici en premier, ou place un point sur la carte."
-                  action={<Button variant="primary" onClick={() => setView('carte')}><MapPin size={16} /> Choisir un point sur la carte</Button>}
+                  title={t('explorer.recoEmptyTitle')}
+                  message={t('explorer.recoEmptyMsg')}
+                  action={<Button variant="primary" onClick={() => setView('carte')}><MapPin size={16} /> {t('explorer.recoEmptyAction')}</Button>}
                 />
               </Card>
             ) : (
               <>
                 <div className="space-y-2">
                   <p className="text-xs font-extrabold tracking-wide text-muted uppercase">
-                    Sorties de tes abonnements ({recoFriends.length})
+                    {t('explorer.recoFriendsTitle', { n: recoFriends.length })}
                   </p>
                   {recoFriends.length === 0 ? (
                     <p className="text-xs text-muted">
-                      Aucune séance de tes abonnements — suis des sportifs pour les voir ici en premier.
+                      {t('explorer.recoFriendsEmpty')}
                     </p>
                   ) : (
                     recoFriends.map((s) => (
@@ -572,10 +574,10 @@ export default function ExplorerPage() {
                 </div>
                 <div className="space-y-2">
                   <p className="text-xs font-extrabold tracking-wide text-muted uppercase">
-                    {userPos ? `À proximité (${recoNear.length})` : `Autres sorties (${recoNear.length}) — par date`}
+                    {userPos ? t('explorer.nearbyTitle', { n: recoNear.length }) : t('explorer.otherTitle', { n: recoNear.length })}
                   </p>
                   {!userPos && recoNear.length > 0 && (
-                    <p className="text-[11px] text-muted">Active ta position (📍 en haut) pour trier par proximité.</p>
+                    <p className="text-[11px] text-muted">{t('explorer.enableLocationHint')}</p>
                   )}
                   {recoNear.map(({ s, d }) => (
                     <div key={s.id} className="space-y-2">
@@ -609,10 +611,10 @@ export default function ExplorerPage() {
             <div className="space-y-2">
               <div className="relative">
                 <Search size={15} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted" />
-                <Input aria-label="Rechercher une ville ou une salle" value={q} onChange={(e) => onQuery(e.target.value)} placeholder="Ville, salle… (ex. Basic-Fit Lyon)" className="pl-9" />
+                <Input aria-label={t('explorer.searchAria')} value={q} onChange={(e) => onQuery(e.target.value)} placeholder={t('explorer.searchPlaceholder')} className="pl-9" />
                 {(searching || results.length > 0) && (
                   <div className="absolute inset-x-0 top-full z-50 mt-1 overflow-hidden rounded-xl border border-line bg-surface shadow-xl">
-                    {searching && <p className="px-3 py-2 text-xs text-muted">Recherche…</p>}
+                    {searching && <p className="px-3 py-2 text-xs text-muted">{t('explorer.searching')}</p>}
                     {results.map((r, i) => (
                       <button key={i} type="button" onClick={() => goPlace(r)} className="block w-full truncate px-3 py-2 text-left text-[13px] hover:bg-surface-2">
                         📍 {r.label}
@@ -622,10 +624,10 @@ export default function ExplorerPage() {
                 )}
               </div>
               <div className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1">
-                <Chip active={dayFilter === 'all'} onClick={() => setDayFilter('all')}>Tout</Chip>
-                <Chip active={dayFilter === 'today'} onClick={() => setDayFilter('today')}>Aujourd’hui</Chip>
-                <Chip active={dayFilter === 'tomorrow'} onClick={() => setDayFilter('tomorrow')}>Demain</Chip>
-                <Chip active={dayFilter === 'weekend'} onClick={() => setDayFilter('weekend')}>Ce week-end</Chip>
+                <Chip active={dayFilter === 'all'} onClick={() => setDayFilter('all')}>{t('common.all')}</Chip>
+                <Chip active={dayFilter === 'today'} onClick={() => setDayFilter('today')}>{t('explorer.filterToday')}</Chip>
+                <Chip active={dayFilter === 'tomorrow'} onClick={() => setDayFilter('tomorrow')}>{t('explorer.filterTomorrow')}</Chip>
+                <Chip active={dayFilter === 'weekend'} onClick={() => setDayFilter('weekend')}>{t('explorer.filterWeekend')}</Chip>
               </div>
             </div>
             {/* relative z-0 : contexte d'empilement pour que les panneaux
@@ -670,27 +672,27 @@ export default function ExplorerPage() {
               <Card className="flex items-center gap-3 p-3">
                 <span className="text-xl">📍</span>
                 <p className="min-w-0 flex-1 text-xs text-muted">
-                  Point {picked.lat}, {picked.lng}
+                  {t('explorer.pickedPoint', { lat: picked.lat, lng: picked.lng })}
                 </p>
                 <Button size="sm" variant="primary" onClick={() => setCreateOpen(true)}>
-                  <Plus size={14} /> Proposer ici
+                  <Plus size={14} /> {t('explorer.proposeHere')}
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => setPicked(null)}>Annuler</Button>
+                <Button size="sm" variant="ghost" onClick={() => setPicked(null)}>{t('common.cancel')}</Button>
               </Card>
             )}
 
             <div className="space-y-2">
               <p className="text-xs font-extrabold tracking-wide text-muted uppercase">
-                Dans cette zone ({loading ? '…' : inZone.length})
+                {t('explorer.inZone', { n: loading ? '…' : inZone.length })}
               </p>
               {loading ? (
-                <p className="text-sm text-muted">Chargement de la carte…</p>
+                <p className="text-sm text-muted">{t('explorer.loadingMap')}</p>
               ) : inZone.length === 0 ? (
                 <Card>
                   <EmptyState
                     icon={<MapPin size={24} />}
-                    title="Aucune séance dans cette zone"
-                    message="Déplace ou dézoome la carte — ou touche-la pour proposer ta séance ici."
+                    title={t('explorer.emptyZoneTitle')}
+                    message={t('explorer.emptyZoneMsg')}
                   />
                 </Card>
               ) : (
@@ -751,6 +753,7 @@ function SessionRow({ s, me, friend, selected, onSelect, distanceKm }: {
   onSelect: () => void
   distanceKm?: number | null
 }) {
+  useLang()
   const full = s.spots_taken >= s.spots_total
   const past = isSessionPast(s)
   return (
@@ -769,16 +772,16 @@ function SessionRow({ s, me, friend, selected, onSelect, distanceKm }: {
         <span className="flex items-center gap-1.5">
           <span className="truncate text-sm font-extrabold">{s.title}</span>
           {/* Pas de badge Ami sur les sessions anonymes (ne pas trahir l'hôte). */}
-          {friend && s.visibility !== 'open' && <span className="shrink-0 rounded-md bg-accent-soft px-1.5 py-0.5 text-[10px] font-extrabold text-accent">Ami</span>}
+          {friend && s.visibility !== 'open' && <span className="shrink-0 rounded-md bg-accent-soft px-1.5 py-0.5 text-[10px] font-extrabold text-accent">{t('explorer.friend')}</span>}
         </span>
         <span className="block truncate text-[11px] text-muted">
-          {fmtDate(s.starts_at)} · {s.gym_name || 'Lieu à préciser'} · {s.spots_taken}/{s.spots_total}
-          {s.host === me ? ' · ta session' : ''}
+          {fmtDate(s.starts_at)} · {s.gym_name || t('explorer.venueTbd')} · {s.spots_taken}/{s.spots_total}
+          {s.host === me ? ` ${t('explorer.ownSession')}` : ''}
           {distanceKm != null ? ` · ${fmtDistance(distanceKm)}` : ''}
         </span>
       </span>
       <span className={cn('shrink-0 rounded-lg px-2 py-1 text-[11px] font-extrabold', past ? 'bg-surface-3 text-muted' : full ? 'bg-danger/10 text-danger' : 'bg-success/10 text-success')}>
-        {past ? 'Terminée' : full ? 'Complet' : `${s.spots_total - s.spots_taken} place(s)`}
+        {past ? t('explorer.finished') : full ? t('explorer.full') : t('explorer.spotsLeft', { n: s.spots_total - s.spots_taken })}
       </span>
     </button>
   )
@@ -795,6 +798,7 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
   onChat: (t: ActiveThread) => void
   act: (id: string, fn: () => Promise<void>, ok: string) => Promise<void>
 }) {
+  useLang()
   const notify = useStore((st) => st.notify)
   const full = s.spots_taken >= s.spots_total
   const past = isSessionPast(s)
@@ -842,18 +846,18 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
   const hostTo = mine ? '/profil' : profileLinkOf(s.host_profile)
   const hostNode =
     s.visibility === 'open' && !isMember && !mine ? (
-      <b>un sportif anonyme 🤫</b>
+      <b>{t('explorer.anonymous')}</b>
     ) : s.host_profile || mine ? (
       <Link to={hostTo ?? '/profil'} className="inline-flex items-center gap-1 font-bold text-ink hover:text-accent">
         <ProfileAvatar
           url={s.host_profile?.avatar_url}
-          name={mine ? 'toi' : profileNameOf(s.host_profile)}
+          name={mine ? t('explorer.you') : profileNameOf(s.host_profile)}
           size={18}
         />
-        {mine ? 'toi' : profileNameOf(s.host_profile)}
+        {mine ? t('explorer.you') : profileNameOf(s.host_profile)}
       </Link>
     ) : (
-      <b>un sportif</b>
+      <b>{t('explorer.aSportif')}</b>
     )
 
   const propose = async () => {
@@ -863,9 +867,9 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
       await sendRequest(s.id, reqMsg)
       setMyReq(await myRequestStatus(s.id))
       setReqMsg('')
-      notify(s.visibility === 'open' ? 'Candidature envoyée — l’hôte va te répondre 💬' : 'Demande envoyée — l’hôte va te répondre 💬', 'success')
+      notify(s.visibility === 'open' ? t('session.requestSentOpen') : t('session.requestSentPublic'), 'success')
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Envoi impossible', 'error')
+      notify(err instanceof Error ? err.message : t('session.sendFailed'), 'error')
     } finally {
       setReqBusy(false)
     }
@@ -873,17 +877,17 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
 
   const acceptMyInvite = async () => {
     if (full) {
-      notify('Session complète', 'error')
+      notify(t('session.full'), 'error')
       return
     }
     setReqBusy(true)
     try {
       await acceptInvite(s.id)
       setMyInvite(await myInviteStatus(s.id))
-      notify('Inscrit ! 🎉 Discute avec l’hôte 💬', 'success')
+      notify(t('session.joinedOk'), 'success')
       onChanged()
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Acceptation impossible', 'error')
+      notify(err instanceof Error ? err.message : t('session.acceptFailed'), 'error')
     } finally {
       setReqBusy(false)
     }
@@ -894,10 +898,10 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
     try {
       await declineInvite(s.id)
       setMyInvite(await myInviteStatus(s.id))
-      notify('Invitation déclinée', 'info')
+      notify(t('session.inviteDeclinedInfo'), 'info')
       onChanged()
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Action impossible', 'error')
+      notify(err instanceof Error ? err.message : t('explorer.actionFailed'), 'error')
     } finally {
       setReqBusy(false)
     }
@@ -907,17 +911,17 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
     setReqBusy(true)
     try {
       if (ok) {
-        if (s.spots_taken >= s.spots_total) throw new Error('Session complète')
+        if (s.spots_taken >= s.spots_total) throw new Error(t('session.full'))
         await acceptRequest(s.id, r.user_id)
-        notify(`Match avec ${displayNameOf(r.author)} 🤝 Discutez !`, 'success')
+        notify(t('session.matchMade', { name: displayNameOf(r.author) }), 'success')
       } else {
         await declineRequest(s.id, r.user_id)
-        notify(s.visibility === 'open' ? 'Candidature refusée' : 'Demande refusée', 'info')
+        notify(s.visibility === 'open' ? t('session.applicationRefused') : t('session.requestRefused'), 'info')
       }
       setRequests(await listRequests(s.id))
       onChanged()
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Action impossible', 'error')
+      notify(err instanceof Error ? err.message : t('explorer.actionFailed'), 'error')
     } finally {
       setReqBusy(false)
     }
@@ -931,10 +935,10 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
     try {
       await cancelInvite(s.id, u.user_id)
       setInvites(await listSessionInvites(s.id))
-      notify('Invitation retirée', 'info')
+      notify(t('session.inviteWithdrawn'), 'info')
       onChanged()
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Action impossible', 'error')
+      notify(err instanceof Error ? err.message : t('explorer.actionFailed'), 'error')
     } finally {
       setReqBusy(false)
     }
@@ -942,15 +946,15 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
 
   /* Exclure un membre accepté (hôte / admin de la sortie). */
   const kickOne = async (uid: string, name: string) => {
-    if (!window.confirm(`Exclure ${name} de la sortie ? Il devra redemander pour revenir.`)) return
+    if (!window.confirm(t('session.kickConfirm', { name }))) return
     setReqBusy(true)
     try {
       await kickMember(s.id, uid)
       setMembers(await listMembers(s.id))
-      notify(`${name} exclu`, 'info')
+      notify(t('session.kicked', { name }), 'info')
       onChanged()
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Exclusion impossible', 'error')
+      notify(err instanceof Error ? err.message : t('session.kickFailed'), 'error')
     } finally {
       setReqBusy(false)
     }
@@ -962,27 +966,27 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
         <div className="min-w-0 flex-1">
           <p className="text-base font-extrabold">{s.title}</p>
           <p className="text-xs font-semibold text-accent">{fmtDate(s.starts_at)}</p>
-          <p className="mt-0.5 text-xs text-muted">📍 {s.gym_name || 'Lieu à préciser'}</p>
+          <p className="mt-0.5 text-xs text-muted">📍 {s.gym_name || t('explorer.venueTbd')}</p>
           {/* Adresse exacte : membres uniquement (teaser public). */}
           {isMember && s.address_text && (
             <p className="mt-0.5 text-xs text-muted">🗺️ {s.address_text}</p>
           )}
           <p className="mt-0.5 text-xs text-muted">
-            {s.visibility === 'invite' ? '📩 Entre amis (sur invitation)' : s.visibility === 'open' ? '✨ Sur proposition (rencontre)' : '🌍 Publique (validation requise)'} · Niveau : {s.level} ·{' '}
-            {s.spots_taken}/{s.spots_total} · Par {hostNode}
+            {s.visibility === 'invite' ? t('session.visInvite') : s.visibility === 'open' ? t('session.visOpen') : t('session.visPublic')} · {t('session.levelLabel')} {s.level === 'tous' ? t('session.levelAny') : tx('level', s.level)} ·{' '}
+            {s.spots_taken}/{s.spots_total} · {t('session.byHost')} {hostNode}
           </p>
           {/* Participants : cachés aux non-membres (sauf profils publics). */}
           {!isMember && publicOnes.length > 0 && (
             <p className="mt-1 text-[11px] text-muted">
-              Déjà là : {publicOnes.map((p) => displayNameOf(p)).join(', ')}
-              {s.spots_taken - 1 - publicOnes.length > 0 && ` +${s.spots_taken - 1 - publicOnes.length} autre(s)`}
+              {t('session.alreadyThere')} {publicOnes.map((p) => displayNameOf(p)).join(', ')}
+              {s.spots_taken - 1 - publicOnes.length > 0 && ` ${t('session.othersMore', { n: s.spots_taken - 1 - publicOnes.length })}`}
             </p>
           )}
         </div>
         <div className="flex gap-1">
-          {mine && <Button size="sm" variant="ghost" onClick={() => setEditOpen(true)}>Modifier</Button>}
-          {!mine && <Button size="sm" variant="ghost" onClick={() => setReportOpen(true)}>Signaler</Button>}
-          <Button size="sm" variant="ghost" onClick={onClose}>Fermer</Button>
+          {mine && <Button size="sm" variant="ghost" onClick={() => setEditOpen(true)}>{t('session.edit')}</Button>}
+          {!mine && <Button size="sm" variant="ghost" onClick={() => setReportOpen(true)}>{t('session.report')}</Button>}
+          <Button size="sm" variant="ghost" onClick={onClose}>{t('common.close')}</Button>
         </div>
       </div>
       {s.description && <p className="text-sm text-muted">{s.description}</p>}
@@ -990,12 +994,12 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
       {/* Membres visibles : hôte + inscrits uniquement. */}
       {isMember && members !== null && members.length > 0 && (
         <div className="space-y-1 rounded-xl bg-surface-2 p-2.5">
-          <p className="text-[11px] font-extrabold tracking-wide text-muted uppercase">Inscrits ({members.length})</p>
+          <p className="text-[11px] font-extrabold tracking-wide text-muted uppercase">{t('session.membersTitle', { n: members.length })}</p>
           {members.map((m) => (
             <div key={m.user_id} className="space-y-0.5">
               <div className="flex items-center gap-2">
                 <ProfileLine profile={m.profile} size={26} />
-                {m.user_id === s.host && <span className="shrink-0 text-[10px] text-muted">(hôte)</span>}
+                {m.user_id === s.host && <span className="shrink-0 text-[10px] text-muted">{t('session.hostTag')}</span>}
                 {mine && m.user_id !== me && (
                   <Button size="sm" variant="ghost" onClick={() => chatWith(m.user_id, m.profile)}>
                     <MessageCircle size={14} />
@@ -1005,7 +1009,7 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
                   <Button
                     size="sm"
                     variant="ghost"
-                    title={`Exclure ${displayNameOf(m.profile)}`}
+                    title={t('session.kickTitle', { name: displayNameOf(m.profile) })}
                     disabled={reqBusy}
                     onClick={() => void kickOne(m.user_id, displayNameOf(m.profile))}
                     className="hover:text-danger"
@@ -1024,82 +1028,82 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
         {past ? (
           mine ? (
             <Button size="sm" variant="danger" disabled={busy} onClick={() => {
-              if (!window.confirm('Supprimer cette session ?')) return
-              void act(s.id, () => deleteSession(s.id), 'Session supprimée')
-            }}>Supprimer</Button>
+              if (!window.confirm(t('session.deleteConfirm'))) return
+              void act(s.id, () => deleteSession(s.id), t('session.deleted'))
+            }}>{t('common.delete')}</Button>
           ) : isMember ? (
             <Button size="sm" variant="primary" block onClick={() => chatWith(s.host, s.host_profile ?? null)}>
-              <MessageCircle size={14} /> Discuter avec l’hôte
+              <MessageCircle size={14} /> {t('session.chatHost')}
             </Button>
           ) : (
-            <p className="text-xs text-muted">Session terminée 🕓 — inscriptions closes.</p>
+            <p className="text-xs text-muted">{t('session.finishedClosed')}</p>
           )
         ) : mine ? (
           <>
             {s.visibility === 'invite' && (
               <Button size="sm" variant="secondary" onClick={() => setInviteOpen(true)}>
-                <Users size={14} /> Inviter
+                <Users size={14} /> {t('session.inviteBtn')}
               </Button>
             )}
             <Button size="sm" variant="danger" disabled={busy} onClick={() => {
-              if (!window.confirm('Supprimer cette session ?')) return
-              void act(s.id, () => deleteSession(s.id), 'Session supprimée')
-            }}>Supprimer</Button>
+              if (!window.confirm(t('session.deleteConfirm'))) return
+              void act(s.id, () => deleteSession(s.id), t('session.deleted'))
+            }}>{t('common.delete')}</Button>
           </>
         ) : s.joined_by_me ? (
           <>
-            <Button size="sm" variant="secondary" block disabled={busy} onClick={() => void act(s.id, () => leaveSession(s.id), 'Désinscrit').then(onChanged)}>
-              Se désinscrire
+            <Button size="sm" variant="secondary" block disabled={busy} onClick={() => void act(s.id, () => leaveSession(s.id), t('session.left')).then(onChanged)}>
+              {t('session.leave')}
             </Button>
             <Button size="sm" variant="primary" block onClick={() => chatWith(s.host, s.host_profile ?? null)}>
-              <MessageCircle size={14} /> Discuter avec l’hôte
+              <MessageCircle size={14} /> {t('session.chatHost')}
             </Button>
           </>
         ) : s.visibility === 'invite' ? (
           myInvite === undefined ? (
-            <p className="text-xs text-muted">Chargement…</p>
+            <p className="text-xs text-muted">{t('common.loading')}</p>
           ) : myInvite?.status === 'pending' ? (
             <div className="w-full space-y-2 rounded-xl bg-accent-soft p-3">
-              <p className="text-[13px] font-bold">🎉 {displayNameOf(s.host_profile)} t’a invité !</p>
+              <p className="text-[13px] font-bold">{t('session.invitedBy', { name: displayNameOf(s.host_profile) })}</p>
               <div className="flex gap-2">
                 <Button size="sm" variant="primary" block disabled={reqBusy || full} onClick={() => void acceptMyInvite()}>
-                  {full ? 'Complet' : 'Accepter 🤝'}
+                  {full ? t('explorer.full') : t('session.acceptBtn')}
                 </Button>
                 <Button size="sm" variant="ghost" block disabled={reqBusy} onClick={() => void declineMyInvite()}>
-                  Refuser
+                  {t('session.declineBtn')}
                 </Button>
               </div>
             </div>
           ) : (
             <p className="text-xs text-muted">
-              {myInvite?.status === 'declined' ? 'Invitation déclinée.' : 'Invitation traitée.'}
+              {myInvite?.status === 'declined' ? t('session.inviteDeclinedDone') : t('session.inviteHandled')}
             </p>
           )
         ) : myReq === undefined ? (
-          <p className="text-xs text-muted">Chargement…</p>
+          <p className="text-xs text-muted">{t('common.loading')}</p>
         ) : myReq?.status === 'pending' ? (
           <div className="flex w-full gap-2">
             <p className="flex-1 rounded-xl bg-surface-2 px-3 py-2 text-xs font-bold text-muted">
-              {s.visibility === 'open' ? 'Candidature envoyée — en attente 💬' : 'Demande envoyée — en attente 💬'}
+              {s.visibility === 'open' ? t('session.pendingOpen') : t('session.pendingPublic')}
             </p>
-            <Button size="sm" variant="ghost" disabled={reqBusy} onClick={() => { setReqBusy(true); withdrawRequest(s.id).then(() => setMyReq(null)).catch((e) => notify(e instanceof Error ? e.message : 'Impossible', 'error')).finally(() => setReqBusy(false)) }}>
-              Annuler
+            <Button size="sm" variant="ghost" disabled={reqBusy} onClick={() => { setReqBusy(true); withdrawRequest(s.id).then(() => setMyReq(null)).catch((e) => notify(e instanceof Error ? e.message : t('session.errGeneric'), 'error')).finally(() => setReqBusy(false)) }}>
+              {t('common.cancel')}
             </Button>
           </div>
         ) : myReq?.status === 'declined' ? (
           <div className="w-full space-y-2">
-            <p className="text-xs text-muted">{s.visibility === 'open' ? 'Candidature déclinée — tu peux retenter avec un mot :' : 'Demande déclinée — tu peux retenter avec un mot :'}</p>
-            <ProposeBox msg={reqMsg} setMsg={setReqMsg} busy={reqBusy} onSend={() => void propose()} action={s.visibility === 'open' ? 'Se proposer 🙋' : 'Demander à rejoindre 🙋'} />
+            <p className="text-xs text-muted">{s.visibility === 'open' ? t('session.retryOpen') : t('session.retryPublic')}</p>
+            <ProposeBox msg={reqMsg} setMsg={setReqMsg} busy={reqBusy} onSend={() => void propose()} action={s.visibility === 'open' ? t('session.applyOpen') : t('session.applyPublic')} />
           </div>
         ) : full ? (
-          <p className="w-full rounded-xl bg-surface-2 px-3 py-2 text-xs font-bold text-muted">Complet — plus de place.</p>
+          <p className="w-full rounded-xl bg-surface-2 px-3 py-2 text-xs font-bold text-muted">{t('session.fullNoSpot')}</p>
         ) : s.visibility === 'open' ? (
           <div className="w-full space-y-2">
-            <ProposeBox msg={reqMsg} setMsg={setReqMsg} busy={reqBusy} onSend={() => void propose()} action="Se proposer 🙋" />
+            <ProposeBox msg={reqMsg} setMsg={setReqMsg} busy={reqBusy} onSend={() => void propose()} action={t('session.applyOpen')} />
           </div>
         ) : (
           <div className="w-full space-y-2">
-            <ProposeBox msg={reqMsg} setMsg={setReqMsg} busy={reqBusy} onSend={() => void propose()} action="Demander à rejoindre 🙋" placeholder="Un mot pour l’hôte (optionnel)…" />
+            <ProposeBox msg={reqMsg} setMsg={setReqMsg} busy={reqBusy} onSend={() => void propose()} action={t('session.applyPublic')} placeholder={t('session.applyPlaceholderHost')} />
           </div>
         )}
       </div>
@@ -1108,12 +1112,12 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
       {mine && !past && s.visibility !== 'invite' && (
         <div className="space-y-2 rounded-xl bg-surface-2 p-2.5">
           <p className="text-[11px] font-extrabold tracking-wide text-muted uppercase">
-            {s.visibility === 'open' ? 'Candidatures' : 'Demandes'} ({pending.length})
+            {s.visibility === 'open' ? t('session.requestsOpenTitle', { n: pending.length }) : t('session.requestsPublicTitle', { n: pending.length })}
           </p>
           {requests === null ? (
-            <p className="text-xs text-muted">Chargement…</p>
+            <p className="text-xs text-muted">{t('common.loading')}</p>
           ) : pending.length === 0 ? (
-            <p className="text-xs text-muted">Aucune pour l’instant.</p>
+            <p className="text-xs text-muted">{t('session.noRequests')}</p>
           ) : (
             pending.map((r) => (
               <div key={r.user_id} className="flex items-center gap-2 rounded-lg bg-surface px-2.5 py-2">
@@ -1137,18 +1141,18 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
       {mine && !past && s.visibility === 'invite' && (
         <div className="space-y-2 rounded-xl bg-surface-2 p-2.5">
           <p className="text-[11px] font-extrabold tracking-wide text-muted uppercase">
-            Invités ({pendingInvites.length} en attente)
+            {t('session.guestsTitle', { n: pendingInvites.length })}
           </p>
           {invites === null ? (
-            <p className="text-xs text-muted">Chargement…</p>
+            <p className="text-xs text-muted">{t('common.loading')}</p>
           ) : invites.length === 0 ? (
-            <p className="text-xs text-muted">Personne pour l’instant — invite tes amis.</p>
+            <p className="text-xs text-muted">{t('session.noGuests')}</p>
           ) : (
             invites.map((i) => (
               <div key={i.user_id} className="flex items-center gap-2 rounded-lg bg-surface px-2.5 py-2">
                 <ProfileLine profile={i.author} size={26} />
                 <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-extrabold ${i.status === 'pending' ? 'bg-warning/15 text-warning' : i.status === 'accepted' ? 'bg-success/15 text-success' : 'bg-surface-3 text-muted'}`}>
-                  {i.status === 'pending' ? 'En attente' : i.status === 'accepted' ? 'Accepté' : 'Refusé'}
+                  {i.status === 'pending' ? t('session.statusPending') : i.status === 'accepted' ? t('session.statusAccepted') : t('session.statusDeclined')}
                 </span>
                 {i.status === 'pending' && (
                   <Button size="sm" variant="ghost" disabled={reqBusy} onClick={() => void uninvite(i)}>
@@ -1166,7 +1170,7 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
           session={s}
           onDone={() => {
             setInviteOpen(false)
-            notify('Invitations envoyées 🎉', 'success')
+            notify(t('session.invitesSent'), 'success')
             onChanged()
           }}
         />
@@ -1177,13 +1181,14 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
   )
 }
 
-function ProposeBox({ msg, setMsg, busy, onSend, action = 'Se proposer 🙋', placeholder = 'Présente-toi en un mot (optionnel)…' }: {  msg: string
+function ProposeBox({ msg, setMsg, busy, onSend, action = t('session.applyOpen'), placeholder = t('session.applyPlaceholderDefault') }: {  msg: string
   setMsg: (v: string) => void
   busy: boolean
   onSend: () => void
   action?: string
   placeholder?: string
 }) {
+  useLang()
   return (
     <div className="flex gap-2">
       <Input value={msg} onChange={(e) => setMsg(e.target.value)} placeholder={placeholder} maxLength={280} />
@@ -1204,6 +1209,7 @@ function MySessionsView({ sessions, initialSelectedId, followIds, busyId, onChan
   onChat: (t: ActiveThread) => void
   act: (id: string, fn: () => Promise<void>, ok: string) => Promise<void>
 }) {
+  useLang()
   const { user } = useAuth()
   const notify = useStore((s) => s.notify)
   const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId)
@@ -1225,7 +1231,7 @@ function MySessionsView({ sessions, initialSelectedId, followIds, busyId, onChan
       // Historique : seulement celles où je suis concerné (créées/rejointes).
       setPastOnes(p.filter((s) => s.host === user?.id || s.joined_by_me))
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Chargement impossible', 'error')
+      notify(err instanceof Error ? err.message : t('explorer.myLoadFailed'), 'error')
     }
   }
 
@@ -1288,15 +1294,15 @@ function MySessionsView({ sessions, initialSelectedId, followIds, busyId, onChan
     </div>
   )
 
-  if (loading) return <p className="py-6 text-center text-sm text-muted">Chargement de tes séances…</p>
+  if (loading) return <p className="py-6 text-center text-sm text-muted">{t('explorer.loadingMine')}</p>
 
   if (mine.length === 0 && joined.length === 0 && requested.length === 0 && invitedOnes.length === 0 && pastOnes.length === 0) {
     return (
       <Card>
         <EmptyState
           icon={<CalendarCheck size={24} />}
-          title="Aucune séance pour l'instant"
-          message="Propose une séance depuis la carte, ou demande à rejoindre celles autour de toi : tout se retrouvera ici."
+          title={t('explorer.mineEmptyTitle')}
+          message={t('explorer.mineEmptyMsg')}
         />
       </Card>
     )
@@ -1306,13 +1312,13 @@ function MySessionsView({ sessions, initialSelectedId, followIds, busyId, onChan
     <div className="space-y-4">
       {(invitedOnes.length > 0 || requested.length > 0) && (
         <div className="space-y-3">
-          {section('📩 Invitations reçues', invitedOnes, '')}
-          {section('⏳ En attente (candidatures + demandes)', requested, '')}
+          {section(t('explorer.secInvites'), invitedOnes, '')}
+          {section(t('explorer.secPending'), requested, '')}
         </div>
       )}
-      {section('🤝 Où je suis inscrit', joined, 'Aucune inscription pour l’instant.')}
-      {section('📣 Créées par moi', mine, 'Aucune séance créée pour l’instant.')}
-      {pastOnes.length > 0 && section('🕓 Terminées', pastOnes, '')}
+      {section(t('explorer.secJoined'), joined, t('explorer.emptyJoined'))}
+      {section(t('explorer.secMine'), mine, t('explorer.emptyMine'))}
+      {pastOnes.length > 0 && section(t('explorer.secPast'), pastOnes, '')}
     </div>
   )
 }
@@ -1324,6 +1330,7 @@ function MessagesView({ initial, onConsumeInitial, onBack }: {
   onConsumeInitial: () => void
   onBack: () => void
 }) {
+  useLang()
   const notify = useStore((s) => s.notify)
   const [threads, setThreads] = useState<Thread[]>([])
   const [loading, setLoading] = useState(true)
@@ -1334,7 +1341,7 @@ function MessagesView({ initial, onConsumeInitial, onBack }: {
     try {
       setThreads(await listThreads())
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Messages illisibles', 'error')
+      notify(err instanceof Error ? err.message : t('chat.threadsFailed'), 'error')
     } finally {
       setLoading(false)
     }
@@ -1360,20 +1367,20 @@ function MessagesView({ initial, onConsumeInitial, onBack }: {
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <p className="text-xs font-extrabold tracking-wide text-muted uppercase">Discussions ({loading ? '…' : threads.length})</p>
+        <p className="text-xs font-extrabold tracking-wide text-muted uppercase">{t('chat.listTitle', { n: loading ? '…' : threads.length })}</p>
         <Button size="sm" variant="ghost" onClick={() => setComposeOpen(true)}>
-          <Plus size={14} /> Nouveau
+          <Plus size={14} /> {t('chat.new')}
         </Button>
       </div>
       {loading ? (
-        <p className="text-sm text-muted">Chargement…</p>
+        <p className="text-sm text-muted">{t('common.loading')}</p>
       ) : threads.length === 0 ? (
         <Card>
           <EmptyState
             icon={<MessageCircle size={24} />}
-            title="Aucune discussion"
-            message="Écris à tes abonnés et abonnements, ou discute depuis une séance : la conversation survit même si la séance est supprimée."
-            action={<Button variant="primary" size="sm" onClick={onBack}>Voir la carte</Button>}
+            title={t('chat.emptyTitle')}
+            message={t('chat.emptyMsg')}
+            action={<Button variant="primary" size="sm" onClick={onBack}>{t('chat.viewMap')}</Button>}
           />
         </Card>
       ) : (
@@ -1404,7 +1411,7 @@ function MessagesView({ initial, onConsumeInitial, onBack }: {
         onClose={() => setComposeOpen(false)}
         onPick={(p) => {
           setComposeOpen(false)
-          setActive({ sessionId: null, title: 'Message direct', otherId: p.id, other: p })
+          setActive({ sessionId: null, title: t('dm.direct'), otherId: p.id, other: p })
         }}
       />
     </div>
@@ -1417,6 +1424,7 @@ function NewMessageModal({ open, onClose, onPick }: {
   onClose: () => void
   onPick: (p: SocialProfile) => void
 }) {
+  useLang()
   const notify = useStore((s) => s.notify)
   const [friends, setFriends] = useState<SocialProfile[]>([])
   const [q, setQ] = useState('')
@@ -1428,7 +1436,7 @@ function NewMessageModal({ open, onClose, onPick }: {
     setLoading(true)
     listInviteCandidates()
       .then(setFriends)
-      .catch((err) => notify(err instanceof Error ? err.message : 'Contacts illisibles', 'error'))
+      .catch((err) => notify(err instanceof Error ? err.message : t('dm.contactsFailed'), 'error'))
       .finally(() => setLoading(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open ])
@@ -1443,14 +1451,14 @@ function NewMessageModal({ open, onClose, onPick }: {
   )
 
   return (
-    <Modal open={open} onClose={onClose} title="Nouveau message">
+    <Modal open={open} onClose={onClose} title={t('dm.newTitle')}>
       <div className="space-y-2">
-        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher un ami…" autoComplete="off" />
+        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('dm.searchPlaceholder')} autoComplete="off" />
         {loading ? (
-          <p className="py-4 text-center text-sm text-muted">Chargement…</p>
+          <p className="py-4 text-center text-sm text-muted">{t('common.loading')}</p>
         ) : list.length === 0 ? (
           <p className="py-4 text-center text-sm text-muted">
-            {friends.length === 0 ? 'Suis des sportifs pour pouvoir leur écrire.' : 'Aucun ami avec ce nom.'}
+            {friends.length === 0 ? t('dm.noContacts') : t('dm.noMatch')}
           </p>
         ) : (
           <div className="max-h-80 space-y-1 overflow-y-auto">
@@ -1476,13 +1484,14 @@ function NewMessageModal({ open, onClose, onPick }: {
             ))}
           </div>
         )}
-        <p className="text-[11px] text-muted">Messages possibles avec tes abonnés et abonnements, ou quelqu'un avec qui tu as déjà échangé.</p>
+        <p className="text-[11px] text-muted">{t('dm.hint')}</p>
       </div>
     </Modal>
   )
 }
 
-function ConversationView({ t, onBack }: { t: ActiveThread; onBack: () => void }) {
+function ConversationView({ t: thread, onBack }: { t: ActiveThread; onBack: () => void }) {
+  useLang()
   const { user } = useAuth()
   const notify = useStore((s) => s.notify)
   const [msgs, setMsgs] = useState<ChatMessage[]>([])
@@ -1493,12 +1502,12 @@ function ConversationView({ t, onBack }: { t: ActiveThread; onBack: () => void }
 
   const load = async (silent = false) => {
     try {
-      const list = await listMessages(t.otherId, messageLimit)
+      const list = await listMessages(thread.otherId, messageLimit)
       setMsgs(list)
-      void markMessagesRead(t.otherId)
+      void markMessagesRead(thread.otherId)
       if (!silent) bottom.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
     } catch (err) {
-      if (!silent) notify(err instanceof Error ? err.message : 'Discussion illisible', 'error')
+      if (!silent) notify(err instanceof Error ? err.message : t('chat.threadFailed'), 'error')
     }
   }
 
@@ -1507,18 +1516,18 @@ function ConversationView({ t, onBack }: { t: ActiveThread; onBack: () => void }
     const id = setInterval(() => void load(true), 5000)
     return () => clearInterval(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [t.otherId, messageLimit])
+  }, [thread.otherId, messageLimit])
 
   const send = async () => {
     if (!draft.trim() || sending) return
     setSending(true)
     try {
-      const m = await sendMessage(t.otherId, draft, t.sessionId)
+      const m = await sendMessage(thread.otherId, draft, thread.sessionId)
       setMsgs((l) => [...l, m])
       setDraft('')
       bottom.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Envoi impossible', 'error')
+      notify(err instanceof Error ? err.message : t('chat.sendFailed'), 'error')
     } finally {
       setSending(false)
     }
@@ -1527,21 +1536,21 @@ function ConversationView({ t, onBack }: { t: ActiveThread; onBack: () => void }
   return (
     <Card className="flex min-h-[420px] flex-col overflow-hidden">
       <div className="flex items-center gap-2.5 border-b border-line p-3">
-        <Button size="sm" variant="ghost" onClick={onBack}>←</Button>
+        <Button size="sm" variant="ghost" onClick={onBack}>{t('common.back')}</Button>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-extrabold">{displayNameOf(t.other)}</p>
-          <p className="truncate text-[11px] text-muted">{t.title}</p>
+          <p className="truncate text-sm font-extrabold">{displayNameOf(thread.other)}</p>
+          <p className="truncate text-[11px] text-muted">{thread.title}</p>
         </div>
       </div>
       <div className="flex-1 space-y-2 overflow-y-auto p-3">
         {msgs.length >= messageLimit && (
           <Button size="sm" variant="ghost" block onClick={() => setMessageLimit((n) => n + 200)}>
-            Charger les messages précédents
+            {t('chat.loadMore')}
           </Button>
         )}
         {msgs.length === 0 && (
           <p className="py-6 text-center text-xs text-muted">
-            {t.sessionId ? 'Match 🤝 Dis bonjour et organisez votre séance !' : 'Écris à ton ami 💬'}
+            {thread.sessionId ? t('chat.emptyMatch') : t('chat.emptyDirect')}
           </p>
         )}
         {msgs.map((m) => {
@@ -1564,7 +1573,7 @@ function ConversationView({ t, onBack }: { t: ActiveThread; onBack: () => void }
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') void send() }}
-          placeholder="Écris un message…"
+          placeholder={t('chat.composePlaceholder')}
           maxLength={1000}
         />
         <Button variant="primary" size="sm" disabled={sending || !draft.trim()} onClick={() => void send()}>
@@ -1578,6 +1587,7 @@ function ConversationView({ t, onBack }: { t: ActiveThread; onBack: () => void }
 /* ------------------------------ création ------------------------------ */
 
 function InviteBox({ session, onDone }: { session: SportSession; onDone: () => void }) {
+  useLang()
   const notify = useStore((s) => s.notify)
   const [candidates, setCandidates] = useState<SocialProfile[]>([])
   const [current, setCurrent] = useState<SessionInvite[]>([])
@@ -1592,7 +1602,7 @@ function InviteBox({ session, onDone }: { session: SportSession; onDone: () => v
         setCurrent(l)
         setPicked(l.filter((i) => i.status === 'pending').map((i) => i.user_id))
       })
-      .catch((err) => notify(err instanceof Error ? err.message : 'Contacts illisibles', 'error'))
+      .catch((err) => notify(err instanceof Error ? err.message : t('session.contactsFailed'), 'error'))
       .finally(() => setLoading(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.id])
@@ -1612,18 +1622,18 @@ function InviteBox({ session, onDone }: { session: SportSession; onDone: () => v
       ])
       onDone()
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Invitation impossible', 'error')
+      notify(err instanceof Error ? err.message : t('session.inviteFailed'), 'error')
     } finally {
       setSaving(false)
     }
   }
 
-  if (loading) return <p className="text-xs text-muted">Chargement des contacts…</p>
-  if (!candidates.length) return <p className="text-xs text-muted">Suis des sportifs pour pouvoir les inviter.</p>
+  if (loading) return <p className="text-xs text-muted">{t('session.loadingContacts')}</p>
+  if (!candidates.length) return <p className="text-xs text-muted">{t('session.noCandidates')}</p>
 
   return (
     <div className="space-y-2 rounded-xl bg-surface-2 p-3">
-      <p className="text-xs font-extrabold">Inviter des amis (direct, sans validation)</p>
+      <p className="text-xs font-extrabold">{t('session.inviteTitle')}</p>
       <div className="flex max-h-40 flex-col gap-1 overflow-y-auto">
         {candidates.map((c) => (
           <label key={c.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-surface">
@@ -1633,7 +1643,7 @@ function InviteBox({ session, onDone }: { session: SportSession; onDone: () => v
         ))}
       </div>
       <Button size="sm" variant="primary" disabled={saving} onClick={() => void save()}>
-        {saving ? 'Envoi…' : `Inviter (${picked.length})`}
+        {saving ? t('session.sending') : t('session.inviteCount', { n: picked.length })}
       </Button>
     </div>
   )
@@ -1645,6 +1655,7 @@ function EditSessionModal({ session, open, onClose, onSaved }: {
   onClose: () => void
   onSaved: () => void
 }) {
+  useLang()
   const notify = useStore((s) => s.notify)
   const [title, setTitle] = useState(session.title)
   const [gym, setGym] = useState(session.gym_name)
@@ -1662,44 +1673,44 @@ function EditSessionModal({ session, open, onClose, onSaved }: {
   const save = async () => {
     const date = new Date(starts)
     if (!title.trim() || !Number.isFinite(date.getTime()) || date.getTime() < Date.now()) {
-      notify('Indique un titre et une date à venir', 'error')
+      notify(t('session.editInvalid'), 'error')
       return
     }
     setSaving(true)
     try {
       await updateSession(session.id, { title, gym_name: gym, address_text: address,
         starts_at: date.toISOString(), spots_total: spots, level, description, visibility })
-      notify('Sortie modifiée', 'success')
+      notify(t('session.updated'), 'success')
       onClose()
       onSaved()
-    } catch (err) { notify(err instanceof Error ? err.message : 'Modification impossible', 'error') }
+    } catch (err) { notify(err instanceof Error ? err.message : t('session.updateFailed'), 'error') }
     finally { setSaving(false) }
   }
 
-  return <Modal open={open} onClose={onClose} title="Modifier la sortie">
+  return <Modal open={open} onClose={onClose} title={t('session.editTitle')}>
     <div className="space-y-3">
-      <Field label="Titre"><Input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={80} /></Field>
-      <Field label="Salle / lieu"><Input value={gym} onChange={(e) => setGym(e.target.value)} maxLength={120} /></Field>
-      <Field label="Adresse exacte"><Input value={address} onChange={(e) => setAddress(e.target.value)} maxLength={200} /></Field>
+      <Field label={t('session.fieldTitle')}><Input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={80} /></Field>
+      <Field label={t('session.fieldVenue')}><Input value={gym} onChange={(e) => setGym(e.target.value)} maxLength={120} /></Field>
+      <Field label={t('session.fieldAddress')}><Input value={address} onChange={(e) => setAddress(e.target.value)} maxLength={200} /></Field>
       <div className="grid grid-cols-2 gap-2">
-        <Field label="Date et heure"><Input type="datetime-local" value={starts} onChange={(e) => setStarts(e.target.value)} /></Field>
-        <Field label="Places"><Select value={spots} onChange={(e) => setSpots(Number(e.target.value))}>
+        <Field label={t('session.fieldDateTime')}><Input type="datetime-local" value={starts} onChange={(e) => setStarts(e.target.value)} /></Field>
+        <Field label={t('session.fieldSpots')}><Select value={spots} onChange={(e) => setSpots(Number(e.target.value))}>
           {[2, 3, 4, 5, 6, 7, 8].map((n) => <option key={n} value={n}>{n}</option>)}
         </Select></Field>
       </div>
       <div className="grid grid-cols-2 gap-2">
-        <Field label="Niveau"><Select value={level} onChange={(e) => setLevel(e.target.value)}>
-          <option value="tous">Tous niveaux</option><option value="débutant">Débutant</option>
-          <option value="intermédiaire">Intermédiaire</option><option value="confirmé">Confirmé</option>
+        <Field label={t('session.fieldLevel')}><Select value={level} onChange={(e) => setLevel(e.target.value)}>
+          <option value="tous">{t('session.levelAll')}</option><option value="débutant">{tx('level', 'débutant')}</option>
+          <option value="intermédiaire">{tx('level', 'intermédiaire')}</option><option value="confirmé">{t('session.levelConfirmed')}</option>
         </Select></Field>
-        <Field label="Type"><Select value={visibility} onChange={(e) => setVisibility(e.target.value as SessionVisibility)}>
-          <option value="invite">Entre amis</option><option value="open">Sur proposition</option>
-          <option value="public">Publique</option>
+        <Field label={t('session.fieldType')}><Select value={visibility} onChange={(e) => setVisibility(e.target.value as SessionVisibility)}>
+          <option value="invite">{t('session.typeInvite')}</option><option value="open">{t('session.typeOpen')}</option>
+          <option value="public">{t('session.typePublic')}</option>
         </Select></Field>
       </div>
-      <Field label="Description"><Textarea value={description} onChange={(e) => setDescription(e.target.value)} maxLength={500} rows={3} /></Field>
+      <Field label={t('session.fieldDescription')}><Textarea value={description} onChange={(e) => setDescription(e.target.value)} maxLength={500} rows={3} /></Field>
       <Button variant="primary" block disabled={saving} onClick={() => void save()}>
-        {saving ? 'Enregistrement…' : 'Enregistrer les modifications'}
+        {saving ? t('session.saving') : t('session.saveChanges')}
       </Button>
     </div>
   </Modal>
@@ -1711,8 +1722,9 @@ function CreateSessionModal({ open, picked, onClose, onCreated }: {
   onClose: () => void
   onCreated: (s: SportSession) => void
 }) {
+  useLang()
   const notify = useStore((s) => s.notify)
-  const [title, setTitle] = useState('Push — pecs / épaules')
+  const [title, setTitle] = useState(() => t('session.defaultTitle'))
   const [gym, setGym] = useState('')
   const [address, setAddress] = useState('')
   const [date, setDate] = useState(() => {
@@ -1750,25 +1762,25 @@ function CreateSessionModal({ open, picked, onClose, onCreated }: {
   const findPlace = async () => {
     setPlaceBusy(true)
     try { setPlaces(await searchPlaces(placeQuery)) }
-    catch (err) { notify(err instanceof Error ? err.message : 'Lieu introuvable', 'error') }
+    catch (err) { notify(err instanceof Error ? err.message : t('session.errPlaceNotFound'), 'error') }
     finally { setPlaceBusy(false) }
   }
 
   const submit = async () => {
     if (!location) {
-      notify('Choisis un lieu dans la recherche ou sur la carte', 'error')
+      notify(t('session.errLocationRequired'), 'error')
       return
     }
     const d = new Date(`${date}T${hour}:00`)
     if (!Number.isFinite(d.getTime()) || d.getTime() < Date.now()) {
-      notify('Choisis une date à venir', 'error')
+      notify(t('session.errDateFuture'), 'error')
       return
     }
     setSaving(true)
     try {
       const s = await createSession({
-        title: title.trim() || 'Séance ouverte',
-        gym_name: gym.trim() || 'Salle à préciser en privé',
+        title: title.trim() || t('session.titleFallback'),
+        gym_name: gym.trim() || t('session.venueFallback'),
         address_text: address.trim(),
         lat: location.lat,
         lng: location.lng,
@@ -1783,30 +1795,30 @@ function CreateSessionModal({ open, picked, onClose, onCreated }: {
       }
       notify(
         visibility === 'invite'
-          ? `Sortie entre amis créée 📩 ${invited.length} invitation(s) envoyée(s)`
+          ? t('session.createdInvite', { n: invited.length })
           : visibility === 'open'
-            ? 'Proposition publiée — ton identité reste anonyme ✨'
-            : 'Sortie publiée sur la carte 🎉',
+            ? t('session.createdOpen')
+            : t('session.createdPublic'),
         'success',
       )
       onCreated(s)
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Création impossible', 'error')
+      notify(err instanceof Error ? err.message : t('session.errCreateFailed'), 'error')
     } finally {
       setSaving(false)
     }
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Proposer une séance">
+    <Modal open={open} onClose={onClose} title={t('session.createTitle')}>
       <div className="space-y-3">
-        <Field label="Lieu de la séance" hint="Cherche une salle ou une ville, ou touche la carte avant d’ouvrir ce formulaire.">
+        <Field label={t('session.createPlaceLabel')} hint={t('session.createPlaceHint')}>
           <div className="flex gap-2">
             <Input value={placeQuery} onChange={(e) => setPlaceQuery(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void findPlace() } }}
-              placeholder="Ville ou salle…" />
+              placeholder={t('session.createPlacePlaceholder')} />
             <Button size="sm" disabled={placeBusy || placeQuery.trim().length < 3} onClick={() => void findPlace()}>
-              <Search size={15} /> Chercher
+              <Search size={15} /> {t('session.searchBtn')}
             </Button>
           </div>
         </Field>
@@ -1818,50 +1830,50 @@ function CreateSessionModal({ open, picked, onClose, onCreated }: {
           </button>)}
         </div>}
         {location && <p className="text-xs text-muted">📍 {chosenPlace?.label ?? `${location.lat}, ${location.lng}`}</p>}
-        <Field label="Titre"><Input value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
-        <Field label="Salle / lieu" hint="Nom libre, ex. Basic-Fit Part-Dieu">
-          <Input value={gym} onChange={(e) => setGym(e.target.value)} placeholder="Ma salle habituelle…" />
+        <Field label={t('session.fieldTitle')}><Input value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
+        <Field label={t('session.fieldVenue')} hint={t('session.venueHint')}>
+          <Input value={gym} onChange={(e) => setGym(e.target.value)} placeholder={t('session.venuePlaceholder')} />
         </Field>
-        <Field label="Adresse exacte" hint="Visible uniquement par les inscrits">
-          <Input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="12 rue des Sports" />
+        <Field label={t('session.fieldAddress')} hint={t('session.addressHint')}>
+          <Input value={address} onChange={(e) => setAddress(e.target.value)} placeholder={t('session.addressPlaceholder')} />
         </Field>
         <div className="grid grid-cols-3 gap-2">
-          <Field label="Date"><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
-          <Field label="Heure"><Input type="time" value={hour} onChange={(e) => setHour(e.target.value)} /></Field>
-          <Field label="Places">
+          <Field label={t('session.fieldDate')}><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
+          <Field label={t('session.fieldHour')}><Input type="time" value={hour} onChange={(e) => setHour(e.target.value)} /></Field>
+          <Field label={t('session.fieldSpots')}>
             <Select value={spots} onChange={(e) => setSpots(e.target.value)}>
               {['2', '3', '4', '5', '6', '7', '8'].map((n) => <option key={n} value={n}>{n}</option>)}
             </Select>
           </Field>
         </div>
         <div className="grid grid-cols-2 gap-2">
-          <Field label="Niveau">
+          <Field label={t('session.fieldLevel')}>
             <Select value={level} onChange={(e) => setLevel(e.target.value)}>
-              <option value="tous">Tous niveaux</option>
-              <option value="débutant">Débutant</option>
-              <option value="intermédiaire">Intermédiaire</option>
-              <option value="confirmé">Confirmé</option>
+              <option value="tous">{t('session.levelAll')}</option>
+              <option value="débutant">{tx('level', 'débutant')}</option>
+              <option value="intermédiaire">{tx('level', 'intermédiaire')}</option>
+              <option value="confirmé">{t('session.levelConfirmed')}</option>
             </Select>
           </Field>
-          <Field label="Qui peut rejoindre ?">
+          <Field label={t('session.fieldWho')}>
             <Select value={visibility} onChange={(e) => setVisibility(e.target.value as SessionVisibility)}>
-              <option value="invite">📩 Entre amis (invitation)</option>
-              <option value="open">✨ Sur proposition (anonyme)</option>
-              <option value="public">🌍 Publique (validation requise)</option>
+              <option value="invite">{t('session.typeInviteLong')}</option>
+              <option value="open">{t('session.typeOpenLong')}</option>
+              <option value="public">{t('session.typePublicLong')}</option>
             </Select>
           </Field>
         </div>
         <p className="text-[11px] text-muted">
           {visibility === 'invite'
-            ? 'Seuls tes invités la voient et rejoignent direct en acceptant. Entre amis, pas de vérification.'
+            ? t('session.inviteHint')
             : visibility === 'open'
-              ? 'Visible par tous, sans ton pseudo. On se propose, tu acceptes → match + discussion.'
-              : 'Visible par tous avec ton pseudo, mais tu valides chaque demande.'}
+              ? t('session.openHint')
+              : t('session.publicHint')}
         </p>
         {visibility === 'invite' && (
-          <Field label="Invités">
+          <Field label={t('session.inviteGuestsLabel')}>
             {candidates.length === 0 ? (
-              <p className="text-xs text-muted">Suis des sportifs pour les inviter.</p>
+              <p className="text-xs text-muted">{t('session.noCandidatesShort')}</p>
             ) : (
               <div className="flex max-h-32 flex-col gap-1 overflow-y-auto rounded-xl border border-line p-2">
                 {candidates.map((c) => (
@@ -1879,11 +1891,11 @@ function CreateSessionModal({ open, picked, onClose, onCreated }: {
             )}
           </Field>
         )}
-        <Field label="Description"><Textarea value={desc} onChange={(e) => setDesc(e.target.value)} rows={2} maxLength={500} placeholder="Séance ouverte, on s'adapte aux niveaux…" /></Field>
+        <Field label={t('session.fieldDescription')}><Textarea value={desc} onChange={(e) => setDesc(e.target.value)} rows={2} maxLength={500} placeholder={t('session.descPlaceholder')} /></Field>
         <div className="flex gap-2">
-          <Button variant="ghost" block onClick={onClose}>Annuler</Button>
+          <Button variant="ghost" block onClick={onClose}>{t('common.cancel')}</Button>
           <Button variant="primary" block disabled={saving} onClick={() => void submit()}>
-            {saving ? 'Publication…' : 'Publier'}
+            {saving ? t('session.publishing') : t('session.publish')}
           </Button>
         </div>
       </div>

@@ -9,6 +9,7 @@
 import type { Exercise, Routine, SyncTombstone, Workout } from '@/types'
 import { activateAccount, activeAccountId, syncTs, useStore } from '@/store/store'
 import { getSupabase, isCloudEnabled } from './supabase'
+import { t } from './i18n'
 
 export interface CloudSyncSummary {
   status: 'ok' | 'skipped' | 'error'
@@ -99,7 +100,7 @@ export function syncCloudNow(): Promise<CloudSyncSummary> {
           })),
           { onConflict: 'user_id,id' },
         )
-        if (error) throw new Error(`Push séances : ${error.message}`)
+        if (error) throw new Error(t('lib.pushWorkouts', { msg: error.message }))
       }
       if (dirtyRoutines.length) {
         const { error } = await supabase.from('routines').upsert(
@@ -111,7 +112,7 @@ export function syncCloudNow(): Promise<CloudSyncSummary> {
           })),
           { onConflict: 'user_id,id' },
         )
-        if (error) throw new Error(`Push programmes : ${error.message}`)
+        if (error) throw new Error(t('lib.pushPrograms', { msg: error.message }))
       }
       if (dirtyExercises.length) {
         const { error } = await supabase.from('exercises').upsert(
@@ -123,7 +124,7 @@ export function syncCloudNow(): Promise<CloudSyncSummary> {
           })),
           { onConflict: 'user_id,id' },
         )
-        if (error) throw new Error(`Push exercices : ${error.message}`)
+        if (error) throw new Error(t('lib.pushExercises', { msg: error.message }))
       }
       if (dirtyDeleted.length) {
         const { error } = await supabase.from('deleted_items').upsert(
@@ -135,16 +136,16 @@ export function syncCloudNow(): Promise<CloudSyncSummary> {
           })),
           { onConflict: 'user_id,kind,item_id' },
         )
-        if (error) throw new Error(`Push suppressions : ${error.message}`)
+        if (error) throw new Error(t('lib.pushDeleted', { msg: error.message }))
         // La suppression gagne : on efface les lignes devenues orphelines.
-        for (const t of dirtyDeleted) {
-          const table = t.kind === 'workout' ? 'workouts' : t.kind === 'routine' ? 'routines' : 'exercises'
+        for (const tomb of dirtyDeleted) {
+          const table = tomb.kind === 'workout' ? 'workouts' : tomb.kind === 'routine' ? 'routines' : 'exercises'
           const { error: delErr } = await supabase
             .from(table)
             .delete()
             .eq('user_id', user.id)
-            .eq('id', t.id)
-          if (delErr) throw new Error(`Nettoyage distant : ${delErr.message}`)
+            .eq('id', tomb.id)
+          if (delErr) throw new Error(t('lib.remoteCleanup', { msg: delErr.message }))
         }
       }
 
@@ -162,7 +163,7 @@ export function syncCloudNow(): Promise<CloudSyncSummary> {
           if (since) query = query.gt(stamp, since)
           const { data, error } = await query
             .order(stamp, { ascending: true }).range(offset, offset + 499)
-          if (error) throw new Error(`Pull ${table} : ${error.message}`)
+          if (error) throw new Error(t('lib.pullError', { table, msg: error.message }))
           const page = (data ?? []) as unknown as Record<string, unknown>[]
           rows.push(...page)
           if (page.length < 500) return rows
@@ -190,7 +191,7 @@ export function syncCloudNow(): Promise<CloudSyncSummary> {
       useStore.getState().setLastSync(pull.time)
       return { status: 'ok', pushed, pulled: applied, deleted, at: pull.time }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Échec de synchro cloud'
+      const message = err instanceof Error ? err.message : t('lib.syncFailed')
       if (activeAccountId() === user.id) {
         useStore.getState().setLastSync(useStore.getState().settings.lastSyncAt, message)
       }
@@ -225,17 +226,17 @@ export function startAutoCloudSync() {
 /** Supprime les données cloud de l'utilisateur connecté (profil + synchro). */
 export async function deleteCloudData(): Promise<void> {
   const supabase = getSupabase()
-  if (!supabase) throw new Error('Cloud non configuré')
+  if (!supabase) throw new Error(t('lib.cloudOff'))
   const { data: { session } } = await supabase.auth.getSession()
   const user = session?.user
-  if (!user) throw new Error('Non connecté')
+  if (!user) throw new Error(t('lib.notConnected'))
   // Empêche immédiatement une resynchronisation qui recréerait les lignes.
   localStorage.setItem(pauseKey(user.id), '1')
   if (running) await running
   try {
     for (const table of ['workouts', 'routines', 'exercises', 'deleted_items'] as const) {
       const { error } = await supabase.from(table).delete().eq('user_id', user.id)
-      if (error) throw new Error(`${table} : ${error.message}`)
+      if (error) throw new Error(t('lib.wipeError', { table, msg: error.message }))
     }
   } catch (err) {
     localStorage.removeItem(pauseKey(user.id))

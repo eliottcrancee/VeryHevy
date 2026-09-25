@@ -15,15 +15,17 @@ import {
 } from '@/lib/notifications'
 import { Page, PageHeader } from '@/components/PageHeader'
 import { ProfileAvatar, profileNameOf } from '@/components/ProfileAvatar'
+import { intlLocale } from '@/lib/utils'
+import { t, useLang } from '@/lib/i18n'
 import { Button, Card, EmptyState } from '@/components/ui'
 
 function fmtWhen(iso: string): string {
   const d = new Date(iso)
   const diff = Date.now() - d.getTime()
-  if (diff < 60_000) return "à l'instant"
-  if (diff < 3_600_000) return `il y a ${Math.floor(diff / 60_000)} min`
-  if (diff < 86_400_000) return `il y a ${Math.floor(diff / 3_600_000)} h`
-  return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
+  if (diff < 60_000) return t('notif.justNow')
+  if (diff < 3_600_000) return t('notif.minutesAgo', { count: Math.floor(diff / 60_000) })
+  if (diff < 86_400_000) return t('notif.hoursAgo', { count: Math.floor(diff / 3_600_000) })
+  return d.toLocaleDateString(intlLocale(), { day: 'numeric', month: 'short' })
 }
 
 /** Icône par type de notification. */
@@ -47,33 +49,42 @@ function notifIcon(type: string) {
 }
 function describe(n: AppNotification): { text: string; to: string | null } {
   const p = n.payload as Record<string, string | undefined>
-  const who = p.from_username ? `@${p.from_username}` : p.username ? `@${p.username}` : 'Un sportif'
+  const who = p.from_username ? `@${p.from_username}` : p.username ? `@${p.username}` : t('notif.someAthlete')
   const whoLink = p.from_username ? `/profil/${p.from_username}` : p.username ? `/profil/${p.username}` : null
   const sessionLink = p.session_id ? `/explorer?session=${encodeURIComponent(p.session_id)}` : '/explorer'
   switch (n.type) {
     case 'follow_request':
-      return { text: `${who} veut te suivre`, to: whoLink }
+      return { text: t('notif.followRequest', { who }), to: whoLink }
     case 'follow_accepted':
-      return { text: `${who} a accepté ta demande 🎉`, to: whoLink }
+      return { text: t('notif.followAccepted', { who }), to: whoLink }
     case 'new_follower':
-      return { text: `${who} te suit`, to: whoLink }
-    case 'session_request':
-      return { text: `${who} veut rejoindre ${p.session_title ? `« ${p.session_title} »` : 'ta sortie'}`, to: sessionLink }
-    case 'session_invite':
-      return { text: `${who} t'invite à « ${p.session_title ?? 'une séance'} » 🎉`, to: sessionLink }
-    case 'session_invite_declined':
-      return { text: `${who} a décliné ton invitation${p.session_title ? ` (« ${p.session_title} »)` : ''}`, to: sessionLink }
-    case 'session_accepted':
-      return { text: `Match ! ${who} t'a accepté${p.session_title ? ` : « ${p.session_title} »` : ''} 🤝`, to: sessionLink }
+      return { text: t('notif.newFollower', { who }), to: whoLink }
+    case 'session_request': {
+      const session = p.session_title ? `« ${p.session_title} »` : t('notif.yourOuting')
+      return { text: t('notif.sessionJoin', { who, session }), to: sessionLink }
+    }
+    case 'session_invite': {
+      const session = p.session_title ?? t('notif.aWorkout')
+      return { text: t('notif.sessionInvite', { who, session }), to: sessionLink }
+    }
+    case 'session_invite_declined': {
+      const detail = p.session_title ? ` (« ${p.session_title} »)` : ''
+      return { text: t('notif.sessionDeclined', { who, detail }), to: sessionLink }
+    }
+    case 'session_accepted': {
+      const detail = p.session_title ? ` : « ${p.session_title} »` : ''
+      return { text: t('notif.sessionMatched', { who, detail }), to: sessionLink }
+    }
     case 'message':
-      return { text: `${who} t'a envoyé un message`, to: p.from_id ? `/explorer?message=${encodeURIComponent(p.from_id)}` : '/explorer' }
+      return { text: t('notif.newMessage', { who }), to: p.from_id ? `/explorer?message=${encodeURIComponent(p.from_id)}` : '/explorer' }
     default:
-      return { text: 'Nouvelle notification', to: null }
+      return { text: t('notif.generic'), to: null }
   }
 }
 
 export default function NotificationsPage() {
   const navigate = useNavigate()
+  useLang()
   const notify = useStore((s) => s.notify)
   const [loading, setLoading] = useState(true)
   const [items, setItems] = useState<AppNotification[]>([])
@@ -93,7 +104,7 @@ export default function NotificationsPage() {
       setIncoming(b)
       setOutgoing(c)
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Notifications illisibles', 'error')
+      notify(err instanceof Error ? err.message : t('notif.loadFailed'), 'error')
     } finally {
       setLoading(false)
     }
@@ -110,7 +121,7 @@ export default function NotificationsPage() {
       await markAllRead()
       setItems((prev) => prev.map((n) => (n.read_at ? n : { ...n, read_at: new Date().toISOString() })))
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Action impossible', 'error')
+      notify(err instanceof Error ? err.message : t('notif.actionFailed'), 'error')
     }
   }
 
@@ -119,16 +130,16 @@ export default function NotificationsPage() {
     try {
       if (ok) {
         await acceptFollowRequest(r.requester)
-        notify(`Demande acceptée — @${r.profile?.username ?? '?'} te suit 🤝`, 'success')
+        notify(t('notif.requestAccepted', { who: `@${r.profile?.username ?? '?'}` }), 'success')
       } else {
         await declineFollowRequest(r.requester)
-        notify('Demande refusée', 'info')
+        notify(t('notif.requestDeclined'), 'info')
       }
       const [a, b] = await Promise.all([listNotifications(), listIncomingFollowRequests()])
       setItems(a)
       setIncoming(b)
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Action impossible', 'error')
+      notify(err instanceof Error ? err.message : t('notif.actionFailed'), 'error')
     } finally {
       setBusy(null)
     }
@@ -138,10 +149,10 @@ export default function NotificationsPage() {
     setBusy(r.target)
     try {
       await cancelFollowRequest(r.target)
-      notify('Demande annulée', 'info')
+      notify(t('notif.requestCancelled'), 'info')
       setOutgoing((prev) => prev.filter((x) => x.target !== r.target))
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Action impossible', 'error')
+      notify(err instanceof Error ? err.message : t('notif.actionFailed'), 'error')
     } finally {
       setBusy(null)
     }
@@ -159,26 +170,26 @@ export default function NotificationsPage() {
   return (
     <div>
       <PageHeader
-        title="Notifications"
+        title={t('notif.title')}
         back
-        subtitle={unread > 0 ? `${unread} non lue${unread > 1 ? 's' : ''}` : 'Tout est à jour'}
+        subtitle={unread > 0 ? `${unread} ${unread > 1 ? t('notif.unreadMany') : t('notif.unreadOne')}` : t('notif.allCaughtUp')}
         actions={
           unread > 0 ? (
             <Button size="sm" variant="ghost" onClick={() => void readAll()}>
-              <Check size={15} /> Tout lire
+              <Check size={15} /> {t('notif.markAllRead')}
             </Button>
           ) : undefined
         }
       />
       <Page className="max-w-2xl space-y-4 pb-10">
         {loading ? (
-          <p className="py-8 text-center text-sm text-muted">Chargement…</p>
+          <p className="py-8 text-center text-sm text-muted">{t('common.loading')}</p>
         ) : (
           <>
             {incoming.length > 0 && (
               <section className="space-y-2">
                 <p className="text-xs font-extrabold tracking-wide text-muted uppercase">
-                  Demandes d'abonnement ({incoming.length})
+                  {t('notif.incomingTitle', { count: incoming.length })}
                 </p>
                 {incoming.map((r) => (
                   <Card key={r.requester} className="border-accent-line bg-accent-soft p-3">
@@ -194,7 +205,7 @@ export default function NotificationsPage() {
                           {r.profile?.display_name && (
                             <span className="block truncate text-xs text-muted">{r.profile.display_name}</span>
                           )}
-                          <span className="block text-[11px] text-muted">veut te suivre · {fmtWhen(r.created_at)}</span>
+                          <span className="block text-[11px] text-muted">{t('notif.wantsToFollow')} · {fmtWhen(r.created_at)}</span>
                         </span>
                       </button>
                     </div>
@@ -206,7 +217,7 @@ export default function NotificationsPage() {
                         disabled={busy === r.requester}
                         onClick={() => void decide(r, true)}
                       >
-                        <Check size={14} /> Accepter
+                        <Check size={14} /> {t('notif.accept')}
                       </Button>
                       <Button
                         size="sm"
@@ -215,7 +226,7 @@ export default function NotificationsPage() {
                         disabled={busy === r.requester}
                         onClick={() => void decide(r, false)}
                       >
-                        <X size={14} /> Refuser
+                        <X size={14} /> {t('notif.decline')}
                       </Button>
                     </div>
                   </Card>
@@ -226,7 +237,7 @@ export default function NotificationsPage() {
             {outgoing.length > 0 && (
               <section className="space-y-2">
                 <p className="text-xs font-extrabold tracking-wide text-muted uppercase">
-                  Demandes envoyées ({outgoing.length})
+                  {t('notif.outgoingTitle', { count: outgoing.length })}
                 </p>
                 {outgoing.map((r) => (
                   <Card key={r.target} className="flex items-center gap-3 p-3">
@@ -241,11 +252,11 @@ export default function NotificationsPage() {
                         {r.profile?.display_name && (
                           <span className="block truncate text-xs text-muted">{r.profile.display_name}</span>
                         )}
-                        <span className="block text-[11px] text-muted">en attente · {fmtWhen(r.created_at)}</span>
+                        <span className="block text-[11px] text-muted">{t('notif.pending')} · {fmtWhen(r.created_at)}</span>
                       </span>
                     </button>
                     <Button size="sm" variant="ghost" disabled={busy === r.target} onClick={() => void cancel(r)}>
-                      Annuler
+                      {t('common.cancel')}
                     </Button>
                   </Card>
                 ))}
@@ -253,13 +264,13 @@ export default function NotificationsPage() {
             )}
 
             <section className="space-y-2">
-              <p className="text-xs font-extrabold tracking-wide text-muted uppercase">Activité récente</p>
+              <p className="text-xs font-extrabold tracking-wide text-muted uppercase">{t('notif.recentActivity')}</p>
               {items.length === 0 ? (
                 <Card>
                   <EmptyState
                     icon={<BellRing size={24} />}
-                    title="Aucune notification"
-                    message="Demandes d'abonnement, invitations et matchs apparaîtront ici."
+                    title={t('notif.emptyTitle')}
+                    message={t('notif.emptyMessage')}
                   />
                 </Card>
               ) : (

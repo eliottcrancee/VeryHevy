@@ -1,6 +1,7 @@
 import type { Exercise, ExerciseCategory, ExerciseLevel, TrackingType } from '@/types'
 import { slug, SEED_EXERCISES } from './seed'
 import { uid } from './utils'
+import { t } from './i18n'
 
 /* ------------------------------------------------------------------
    Import de la base free-exercise-db (876 exercices + photos)
@@ -115,9 +116,9 @@ export function fromFreeDbExercise(raw: FreeDbExercise): Exercise {
 
 export async function fetchFreeExerciseDb(url = FREE_EXERCISE_DB_URL): Promise<Exercise[]> {
   const res = await fetch(url, { cache: 'no-cache' })
-  if (!res.ok) throw new Error(`Téléchargement impossible (HTTP ${res.status})`)
+  if (!res.ok) throw new Error(t('lib.downloadError', { status: res.status }))
   const json: unknown = await res.json()
-  if (!Array.isArray(json)) throw new Error('Format inattendu : tableau JSON attendu')
+  if (!Array.isArray(json)) throw new Error(t('lib.badFormat'))
   return (json as FreeDbExercise[]).map(fromFreeDbExercise)
 }
 
@@ -126,7 +127,7 @@ export async function fetchFreeExerciseDb(url = FREE_EXERCISE_DB_URL): Promise<E
 ------------------------------------------------------------------ */
 
 export function parseExternalExercises(json: unknown): Exercise[] {
-  if (!Array.isArray(json)) throw new Error('Le fichier doit contenir un tableau JSON.')
+  if (!Array.isArray(json)) throw new Error(t('lib.jsonArray'))
   const out: Exercise[] = []
   for (const item of json as Record<string, unknown>[]) {
     if (!item || typeof item !== 'object') continue

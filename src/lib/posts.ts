@@ -4,19 +4,20 @@
  */
 import type { Post, PostComment, PostVisibility, SocialProfile, Workout, WorkoutSnapshot } from '@/types'
 import { getSupabase } from './supabase'
+import { t } from './i18n'
 import { fetchSocialProfiles } from './social'
 import { workoutDurationSeconds, workoutSets, workoutVolume } from './calc'
 
 function sbOrThrow() {
   const sb = getSupabase()
-  if (!sb) throw new Error('Cloud non configuré')
+  if (!sb) throw new Error(t('lib.cloudOff'))
   return sb
 }
 
 async function myId(): Promise<string> {
   const sb = sbOrThrow()
   const { data: { session } } = await sb.auth.getSession()
-  if (!session?.user) throw new Error('Non connecté')
+  if (!session?.user) throw new Error(t('lib.notConnected'))
   return session.user.id
 }
 
@@ -37,15 +38,15 @@ export function compressImage(file: File, maxDim = 1600, quality = 0.82): Promis
       canvas.height = h
       const ctx = canvas.getContext('2d')
       if (!ctx) {
-        reject(new Error('Canvas indisponible'))
+        reject(new Error(t('lib.noCanvas')))
         return
       }
       ctx.drawImage(img, 0, 0, w, h)
-      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Compression impossible'))), 'image/jpeg', quality)
+      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error(t('lib.compressFailed')))), 'image/jpeg', quality)
     }
     img.onerror = () => {
       URL.revokeObjectURL(url)
-      reject(new Error('Image illisible'))
+      reject(new Error(t('lib.imageUnreadable')))
     }
     img.src = url
   })
@@ -53,11 +54,11 @@ export function compressImage(file: File, maxDim = 1600, quality = 0.82): Promis
 
 async function uploadPostPhoto(file: File, userId: string): Promise<string> {
   const sb = sbOrThrow()
-  if (file.size > 8 * 1024 * 1024) throw new Error('Photo trop lourde (max 8 Mo)')
+  if (file.size > 8 * 1024 * 1024) throw new Error(t('lib.photoHeavy'))
   const blob = await compressImage(file)
   const path = `${userId}/${crypto.randomUUID()}.jpg`
   const { error } = await sb.storage.from('post-photos').upload(path, blob, { contentType: 'image/jpeg' })
-  if (error) throw new Error(`Upload : ${error.message}`)
+  if (error) throw new Error(t('lib.uploadError', { msg: error.message }))
   return path
 }
 
@@ -92,7 +93,7 @@ export function buildWorkoutSnapshot(w: Workout): WorkoutSnapshot {
       .filter((we) => we.sets.length > 0)
       .map((we) => ({
         exerciseId: we.exerciseId,
-        name: we.exerciseName ?? 'Exercice',
+        name: we.exerciseName ?? t('lib.exerciseFallback'),
         sets: we.sets.map((s) => ({ reps: s.reps ?? null, weight: s.weight ?? null, duration: s.duration ?? null })),
       })),
   }
@@ -124,7 +125,7 @@ export async function createPost(input: {
     .single()
   if (error) {
     if (photo_url) void sb.storage.from('post-photos').remove([photo_url])
-    throw new Error(`Publication : ${error.message}`)
+    throw new Error(t('lib.postError', { msg: error.message }))
   }
   return (await withSignedPhotos([data as Post]))[0]
 }
@@ -134,7 +135,7 @@ export async function listFeed(limit = 20, offset = 0): Promise<Post[]> {
   const sb = sbOrThrow()
   const me = await myId()
   const { data: follows, error: fErr } = await sb.from('follows').select('followed').eq('follower', me)
-  if (fErr) throw new Error(`Feed : ${fErr.message}`)
+  if (fErr) throw new Error(t('lib.feedError', { msg: fErr.message }))
   const ids = [me, ...((follows as { followed: string }[] ?? []).map((f) => f.followed))]
   const { data, error } = await sb
     .from('posts')
@@ -142,7 +143,7 @@ export async function listFeed(limit = 20, offset = 0): Promise<Post[]> {
     .in('user_id', ids)
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1)
-  if (error) throw new Error(`Feed : ${error.message}`)
+  if (error) throw new Error(t('lib.feedError', { msg: error.message }))
   const posts = (data as Post[]) ?? []
   if (!posts.length) return posts
 
@@ -167,7 +168,7 @@ export async function listDiscoverPosts(limit = 6): Promise<Post[]> {
   const { data, error } = await sb.from('posts').select('*')
     .eq('visibility', 'public').neq('user_id', me)
     .order('created_at', { ascending: false }).limit(limit)
-  if (error) throw new Error(`Découverte : ${error.message}`)
+  if (error) throw new Error(t('lib.discoverError', { msg: error.message }))
   const posts = (data as Post[]) ?? []
   if (!posts.length) return []
   const authors = await fetchSocialProfiles([...new Set(posts.map((p) => p.user_id))])
@@ -189,7 +190,7 @@ export async function listUserPosts(userId: string, limit = 20, offset = 0): Pro
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1)
-  if (error) throw new Error(`Posts : ${error.message}`)
+  if (error) throw new Error(t('lib.postsError', { msg: error.message }))
   const posts = (data as Post[]) ?? []
   if (!posts.length) return posts
   const authors = await fetchSocialProfiles([userId])
@@ -216,7 +217,7 @@ export async function listMyPosts(limit = 20, offset = 0): Promise<Post[]> {
     .eq('user_id', me)
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1)
-  if (error) throw new Error(`Posts : ${error.message}`)
+  if (error) throw new Error(t('lib.postsError', { msg: error.message }))
   const authors = await fetchSocialProfiles([me])
   return withSignedPhotos(((data as Post[]) ?? []).map((p) => ({ ...p, author: authors.get(p.user_id) ?? null, liked_by_me: false })))
 }
@@ -225,7 +226,7 @@ export async function deletePost(postId: string): Promise<void> {
   const sb = sbOrThrow()
   const { data } = await sb.from('posts').select('photo_url').eq('id', postId).maybeSingle()
   const { error } = await sb.from('posts').delete().eq('id', postId)
-  if (error) throw new Error(`Suppression : ${error.message}`)
+  if (error) throw new Error(t('lib.deleteError', { msg: error.message }))
   const path = photoPath((data as { photo_url?: string } | null)?.photo_url)
   if (path) await sb.storage.from('post-photos').remove([path])
 }
@@ -234,7 +235,7 @@ export async function updatePost(postId: string, caption: string, visibility: Po
   const sb = sbOrThrow()
   const { error } = await sb.from('posts').update({ caption: caption.trim().slice(0, 500), visibility })
     .eq('id', postId)
-  if (error) throw new Error(`Modification : ${error.message}`)
+  if (error) throw new Error(t('lib.editError', { msg: error.message }))
 }
 
 /* ------------------------------ likes ------------------------------ */
@@ -244,11 +245,11 @@ export async function toggleLike(post: Post): Promise<boolean> {
   const me = await myId()
   if (post.liked_by_me) {
     const { error } = await sb.from('post_likes').delete().eq('post_id', post.id).eq('user_id', me)
-    if (error) throw new Error(`Unlike : ${error.message}`)
+    if (error) throw new Error(t('lib.unlikeError', { msg: error.message }))
     return false
   }
   const { error } = await sb.from('post_likes').insert({ post_id: post.id, user_id: me })
-  if (error && !error.message.includes('duplicate')) throw new Error(`Like : ${error.message}`)
+  if (error && !error.message.includes('duplicate')) throw new Error(t('lib.likeError', { msg: error.message }))
   return true
 }
 
@@ -262,7 +263,7 @@ export async function listComments(postId: string): Promise<PostComment[]> {
     .eq('post_id', postId)
     .order('created_at', { ascending: true })
     .limit(100)
-  if (error) throw new Error(`Commentaires : ${error.message}`)
+  if (error) throw new Error(t('lib.commentsError', { msg: error.message }))
   const list = (data as PostComment[]) ?? []
   const authors = await fetchSocialProfiles([...new Set(list.map((c) => c.user_id))])
   return list.map((c) => ({ ...c, author: authors.get(c.user_id) ?? null }))
@@ -272,13 +273,13 @@ export async function addComment(postId: string, text: string): Promise<PostComm
   const sb = sbOrThrow()
   const me = await myId()
   const clean = text.trim().slice(0, 280)
-  if (!clean) throw new Error('Commentaire vide')
+  if (!clean) throw new Error(t('lib.emptyComment'))
   const { data, error } = await sb
     .from('post_comments')
     .insert({ post_id: postId, user_id: me, text: clean })
     .select('*')
     .single()
-  if (error) throw new Error(`Commentaire : ${error.message}`)
+  if (error) throw new Error(t('lib.commentError', { msg: error.message }))
   const authors = await fetchSocialProfiles([me])
   return { ...(data as PostComment), author: authors.get(me) ?? null }
 }
@@ -286,7 +287,7 @@ export async function addComment(postId: string, text: string): Promise<PostComm
 export async function deleteComment(commentId: string): Promise<void> {
   const sb = sbOrThrow()
   const { error } = await sb.from('post_comments').delete().eq('id', commentId)
-  if (error) throw new Error(`Suppression : ${error.message}`)
+  if (error) throw new Error(t('lib.deleteError', { msg: error.message }))
 }
 
 /* ------------------------- workout d'un post ------------------------- */
@@ -301,10 +302,10 @@ export async function getPostWorkout(post: Pick<Post, 'user_id' | 'workout_id'>)
     .eq('user_id', post.user_id)
     .eq('id', post.workout_id)
     .maybeSingle()
-  if (error) throw new Error(`Séance : ${error.message}`)
+  if (error) throw new Error(t('lib.workoutError', { msg: error.message }))
   return ((data as { data: Workout } | null)?.data ?? null) as Workout | null
 }
 
-export function displayAuthor(a?: SocialProfile | null, fallback = 'Sportif'): string {
+export function displayAuthor(a?: SocialProfile | null, fallback = t('lib.athlete')): string {
   return a?.display_name?.trim() || (a?.username ? `@${a.username}` : fallback)
 }

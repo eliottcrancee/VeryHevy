@@ -19,13 +19,14 @@ import { Button, IconButton, Toaster } from '@/components/ui'
 import { ScrollTargetProvider } from '@/components/ui'
 import { Logo } from '@/components/Logo'
 import { useAuth } from '@/lib/auth'
+import { t, useLang } from '@/lib/i18n'
 import { loadHome, loadMyPosts, loadMyProfile, loadSessions } from '@/lib/pagePreload'
 
 const NAV = [
-  { to: '/', label: 'Accueil', icon: House, end: true },
-  { to: '/explorer', label: 'Explorer', icon: MapPin },
-  { to: '/programmes', label: 'Programmes', icon: ListChecks },
-  { to: '/profil', label: 'Profil', icon: UserRound },
+  { to: '/', key: 'nav.home', icon: House, end: true },
+  { to: '/explorer', key: 'nav.explorer', icon: MapPin },
+  { to: '/programmes', key: 'nav.programs', icon: ListChecks },
+  { to: '/profil', key: 'nav.profile', icon: UserRound },
 ]
 
 /* ------------------------------------------------------------------ */
@@ -42,6 +43,7 @@ function useTick(active: boolean, intervalMs = 250) {
 }
 
 export function RestTimerBar() {
+  useLang()
   const restTimer = useStore((s) => s.restTimer)
   const stopRest = useStore((s) => s.stopRest)
   const adjustRest = useStore((s) => s.adjustRest)
@@ -92,8 +94,8 @@ export function RestTimerBar() {
           <button
             type="button"
             onClick={() => (paused ? resumeRest() : pauseRest())}
-            title={paused ? 'Reprendre le chrono' : 'Mettre en pause'}
-            aria-label={paused ? 'Reprendre le chrono' : 'Mettre en pause'}
+            title={paused ? t('app.restResume') : t('app.restPause')}
+            aria-label={paused ? t('app.restResume') : t('app.restPause')}
             className={cn(
               'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-transform active:scale-95',
               finished ? 'bg-success text-white' : paused ? 'bg-warning/20 text-warning' : 'bg-accent-soft text-accent',
@@ -104,11 +106,11 @@ export function RestTimerBar() {
           <div className="min-w-0 flex-1">
             <div className="flex items-baseline gap-2">
               <span className="tabular text-xl font-extrabold">
-                {finished ? 'Repos terminé' : formatDuration(remaining)}
+                {finished ? t('app.restDone') : formatDuration(remaining)}
               </span>
               {paused && !finished && (
                 <span className="rounded bg-warning/15 px-1.5 py-0.5 text-[10px] font-bold text-warning uppercase">
-                  pause
+                  {t('app.restPausedBadge')}
                 </span>
               )}
               {restTimer.label && !finished && (
@@ -123,13 +125,13 @@ export function RestTimerBar() {
             </div>
           </div>
           <div className="flex items-center gap-1">
-            <IconButton label="-15 s" onClick={() => adjustRest(-15)} className="h-8 w-8 text-xs font-bold">
+            <IconButton label={t('app.restMinus15')} onClick={() => adjustRest(-15)} className="h-8 w-8 text-xs font-bold">
               −15
             </IconButton>
-            <IconButton label="+15 s" onClick={() => adjustRest(15)} className="h-8 w-8 text-xs font-bold">
+            <IconButton label={t('app.restPlus15')} onClick={() => adjustRest(15)} className="h-8 w-8 text-xs font-bold">
               +15
             </IconButton>
-            <IconButton label="Arrêter le repos" onClick={stopRest}>
+            <IconButton label={t('app.restStop')} onClick={stopRest}>
               <X size={16} />
             </IconButton>
           </div>
@@ -144,6 +146,7 @@ export function RestTimerBar() {
 /* ------------------------------------------------------------------ */
 
 function ActiveWorkoutPill({ compact }: { compact?: boolean }) {
+  useLang()
   const workout = useStore(selectActiveWorkout)
   const navigate = useNavigate()
   const clockPaused = Boolean(workout?.finishedAt)
@@ -157,7 +160,7 @@ function ActiveWorkoutPill({ compact }: { compact?: boolean }) {
   if (!workout) {
     return compact ? null : (
       <Button variant="primary" block onClick={() => navigate('/seance')}>
-        <Plus size={18} /> Démarrer une séance
+        <Plus size={18} /> {t('app.startWorkout')}
       </Button>
     )
   }
@@ -174,9 +177,9 @@ function ActiveWorkoutPill({ compact }: { compact?: boolean }) {
         <Play size={15} fill="currentColor" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[13px] font-bold">Séance en cours</span>
+        <span className="block truncate text-[13px] font-bold">{t('app.activeWorkout')}</span>
         <span className="tabular block text-[11px] text-muted">
-          {formatDuration(elapsed)} · {doneSets} série{doneSets > 1 ? 's' : ''} validée{doneSets > 1 ? 's' : ''}
+          {formatDuration(elapsed)} · {doneSets} {doneSets > 1 ? t('app.setsDoneMany') : t('app.setsDoneOne')}
         </span>
       </span>
     </button>
@@ -189,6 +192,7 @@ function ActiveWorkoutPill({ compact }: { compact?: boolean }) {
 
 export function AppShell() {
   const { cloudEnabled, user } = useAuth()
+  useLang()
   const toasts = useStore((s) => s.toasts)
   const location = useLocation()
   const [scrollEl, setScrollEl] = useState<HTMLElement | null>(null)
@@ -269,7 +273,7 @@ export function AppShell() {
                 }
               >
                 <item.icon size={18} />
-                {item.label}
+                {t(item.key)}
               </NavLink>
             ))}
           </nav>
@@ -289,7 +293,7 @@ export function AppShell() {
               }
             >
               <SettingsIcon size={18} />
-              Réglages
+              {t('nav.settings')}
             </NavLink>
           </div>
         </aside>
@@ -332,7 +336,7 @@ export function AppShell() {
                     {({ isActive }) => (
                       <>
                         <item.icon size={20} strokeWidth={isActive ? 2.5 : 2} />
-                        {item.label}
+                        {t(item.key)}
                       </>
                     )}
                   </NavLink>

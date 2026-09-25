@@ -37,6 +37,7 @@ import { ProfileAvatar } from '@/components/ProfileAvatar'
 import type { Post, PostVisibility, SocialProfile } from '@/types'
 import { normalizeUsername } from '@/types'
 import { formatDuration, formatVolume } from '@/lib/utils'
+import { t, useLang } from '@/lib/i18n'
 import { Page, PageHeader } from '@/components/PageHeader'
 import {
   Button,
@@ -82,6 +83,7 @@ function Avatar({ url, name, size = 64 }: { url?: string | null; name: string; s
 export default function ProfilePage() {
   const { username: routeUsername } = useParams()
   const { user, cloudEnabled } = useAuth()
+  useLang()
   const userId = user?.id
   const navigate = useNavigate()
   const workouts = useStore((s) => s.workouts)
@@ -120,7 +122,7 @@ export default function ProfilePage() {
       setUserPostsMore(page.length === 20)
       setUserPostsError(null)
     } catch (err) {
-      setUserPostsError(err instanceof Error ? err.message : 'Posts illisibles')
+      setUserPostsError(err instanceof Error ? err.message : t('profile.postsFailed'))
     } finally {
       setLoadingUserPosts(false)
     }
@@ -185,7 +187,7 @@ export default function ProfilePage() {
       setMyPostsMore(page.length === 20)
       setMyPostsError(null)
     } catch (err) {
-      setMyPostsError(err instanceof Error ? err.message : 'Posts illisibles')
+      setMyPostsError(err instanceof Error ? err.message : t('profile.postsFailed'))
     } finally {
       setLoadingPosts(false)
     }
@@ -197,7 +199,7 @@ export default function ProfilePage() {
       const page = await listUserPosts(uid, 20, userPosts.length)
       setUserPosts((old) => [...old, ...page])
       setUserPostsMore(page.length === 20)
-    } catch (err) { setUserPostsError(err instanceof Error ? err.message : 'Chargement impossible') }
+    } catch (err) { setUserPostsError(err instanceof Error ? err.message : t('profile.loadFailed')) }
     finally { setLoadingUserPosts(false) }
   }
   const moreMyPosts = async () => {
@@ -206,7 +208,7 @@ export default function ProfilePage() {
       const page = await listMyPosts(20, myPosts.length)
       setMyPosts((old) => [...old, ...page])
       setMyPostsMore(page.length === 20)
-    } catch (err) { setMyPostsError(err instanceof Error ? err.message : 'Chargement impossible') }
+    } catch (err) { setMyPostsError(err instanceof Error ? err.message : t('profile.loadFailed')) }
     finally { setLoadingPosts(false) }
   }
 
@@ -220,7 +222,7 @@ export default function ProfilePage() {
     (meta.full_name as string | undefined) ??
     (meta.name as string | undefined) ??
     user?.email?.split('@')[0] ??
-    'Sportif'
+    t('lib.athlete')
   const avatar =
     myProfile?.avatar_url ??
     (meta.avatar_url as string | undefined) ??
@@ -235,22 +237,22 @@ export default function ProfilePage() {
       } else if (following === 'requested') {
         await cancelFollowRequest(publicProfile.id)
         setFollowing('none')
-        notify('Demande annulée', 'info')
+        notify(t('profile.requestCancelled'), 'info')
       } else {
         const next = await requestFollow(publicProfile.id)
         setFollowing(next)
-        const who = publicProfile.username ? `@${publicProfile.username}` : (publicProfile.display_name ?? 'ce profil')
+        const who = publicProfile.username ? `@${publicProfile.username}` : (publicProfile.display_name ?? t('profile.thisProfile'))
         notify(
           next === 'requested'
-            ? `Demande envoyée à ${who} 🔒`
-            : `Tu suis ${who} 🎉`,
+            ? t('profile.requestSent', { who })
+            : t('profile.nowFollowing', { who }),
           'success',
         )
       }
       const fresh = await fetchProfileByUsername(publicProfile.username ?? '')
       setPublicProfile(fresh)
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Action impossible', 'error')
+      notify(err instanceof Error ? err.message : t('profile.actionFailed'), 'error')
     } finally {
       setFollowBusy(false)
     }
@@ -259,7 +261,7 @@ export default function ProfilePage() {
   /* ------------------------- vue profil public ------------------------- */
   if (isPublicView) {
     const p = publicProfile
-    const pname = p?.username ? `@${p.username}` : (p?.display_name ?? 'ce profil')
+    const pname = p?.username ? `@${p.username}` : (p?.display_name ?? t('profile.thisProfile'))
 
     const doBlock = async () => {
       if (!p) return
@@ -268,9 +270,9 @@ export default function ProfilePage() {
         await blockUser(p.id)
         setBlockedByMe(true)
         setFollowing('none')
-        notify(`${pname} bloqué : il ne te voit plus`, 'success')
+        notify(t('profile.blocked', { who: pname }), 'success')
       } catch (err) {
-        notify(err instanceof Error ? err.message : 'Blocage impossible', 'error')
+        notify(err instanceof Error ? err.message : t('profile.blockFailed'), 'error')
       } finally {
         setFollowBusy(false)
         setConfirmBlock(false)
@@ -283,22 +285,22 @@ export default function ProfilePage() {
       try {
         await unblockUser(p.id)
         setBlockedByMe(false)
-        notify(`Compte ${pname} débloqué`, 'success')
+        notify(t('profile.unblocked', { who: pname }), 'success')
       } catch (err) {
-        notify(err instanceof Error ? err.message : 'Déblocage impossible', 'error')
+        notify(err instanceof Error ? err.message : t('profile.unblockFailed'), 'error')
       } finally {
         setFollowBusy(false)
       }
     }
     return (
       <div>
-        <PageHeader title={p ? `@${p.username}` : 'Profil'} back subtitle="Profil public" />
+        <PageHeader title={p ? `@${p.username}` : t('nav.profile')} back subtitle={t('profile.publicSubtitle')} />
         <Page className="max-w-3xl space-y-4 pb-10">
           {loadingProfile || p === undefined ? (
-            <p className="text-sm text-muted">Chargement…</p>
+            <p className="text-sm text-muted">{t('common.loading')}</p>
           ) : p === null ? (
             <Card>
-              <EmptyState title="Pseudo introuvable" message="Ce profil n'existe pas ou a été supprimé." />
+              <EmptyState title={t('profile.usernameNotFound')} message={t('profile.notFoundMessage')} />
             </Card>
           ) : (
             <>
@@ -310,7 +312,7 @@ export default function ProfilePage() {
                     {/* Cadenas : profil privé ET inaccessible (non suivi). Ni pour
                         moi, ni une fois ami (demande acceptée). */}
                     {p.visibility === 'private' && following !== 'following' && p.id !== user?.id && (
-                      <span className="ml-1.5 text-sm" title="Compte privé">🔒</span>
+                      <span className="ml-1.5 text-sm" title={t('profile.privateAccount')}>🔒</span>
                     )}
                   </p>
                   {p.display_name && <p className="truncate text-sm text-muted">@{p.username}</p>}
@@ -321,17 +323,17 @@ export default function ProfilePage() {
                     <button
                       type="button"
                       className="underline decoration-dotted underline-offset-2"
-                      onClick={() => setFollowList({ tab: 'followers', userId: p.id, title: `Abonnés de ${pname}` })}
+                      onClick={() => setFollowList({ tab: 'followers', userId: p.id, title: t('profile.followersOf', { who: pname }) })}
                     >
-                      abonné{p.followers_count !== 1 ? 's' : ''}
+                      {p.followers_count !== 1 ? t('profile.followerMany') : t('profile.followerOne')}
                     </button>
                     {' · '}{p.following_count}{' '}
                     <button
                       type="button"
                       className="underline decoration-dotted underline-offset-2"
-                      onClick={() => setFollowList({ tab: 'following', userId: p.id, title: `Abonnements de ${pname}` })}
+                      onClick={() => setFollowList({ tab: 'following', userId: p.id, title: t('profile.followingOf', { who: pname }) })}
                     >
-                      abonnement{p.following_count !== 1 ? 's' : ''}
+                      {p.following_count !== 1 ? t('profile.followingMany') : t('profile.followingOne')}
                     </button>
                   </p>
                 </div>
@@ -339,13 +341,13 @@ export default function ProfilePage() {
               {user && p.id !== user.id && (
                 blockedByMe ? (
                   <Card className="border-danger/40 bg-danger/10 p-3 text-center">
-                    <p className="text-sm font-bold">Profil bloqué 🚫</p>
+                    <p className="text-sm font-bold">{t('profile.blockedTitle')}</p>
                     <p className="mt-0.5 text-xs text-muted">
-                      @{p.username} ne te voit plus. Tu le vois encore pour pouvoir le débloquer.
+                      {t('profile.blockedHint', { who: `@${p.username}` })}
                     </p>
                     <div className="mt-2.5">
                       <Button size="sm" disabled={followBusy} onClick={() => void doUnblock()}>
-                        Débloquer
+                        {t('profile.unblock')}
                       </Button>
                     </div>
                   </Card>
@@ -358,7 +360,7 @@ export default function ProfilePage() {
                       onClick={() => void toggleFollow()}
                     >
                       {following === 'following' ? <UserMinus size={16} /> : <UserPlus size={16} />}
-                      {following === 'following' ? 'Ne plus suivre' : following === 'requested' ? 'Demandé — annuler' : p.visibility === 'private' ? 'Demander à suivre 🔒' : 'Suivre'}
+                      {following === 'following' ? t('profile.unfollow') : following === 'requested' ? t('profile.requestedCancel') : p.visibility === 'private' ? t('profile.askFollow') : t('profile.follow')}
                     </Button>
                     <button
                       type="button"
@@ -366,29 +368,29 @@ export default function ProfilePage() {
                       onClick={() => setConfirmBlock(true)}
                       className="mx-auto block text-xs font-semibold text-danger/80 underline decoration-dotted underline-offset-2"
                     >
-                      Bloquer ce profil
+                      {t('profile.block')}
                     </button>
                     <button type="button" onClick={() => setReportOpen(true)}
                       className="mx-auto block text-xs font-semibold text-muted underline decoration-dotted underline-offset-2">
-                      Signaler ce profil
+                      {t('profile.report')}
                     </button>
                   </>
                 )
               )}
               <PublicMiniStats posts={userPosts} />
               {userPostsError ? (
-                <Card><EmptyState title="Posts indisponibles" message={userPostsError}
-                  action={<Button onClick={() => void refreshUserPosts(p.id)}>Réessayer</Button>} /></Card>
+                <Card><EmptyState title={t('profile.postsUnavailable')} message={userPostsError}
+                  action={<Button onClick={() => void refreshUserPosts(p.id)}>{t('common.retry')}</Button>} /></Card>
               ) : loadingUserPosts && userPosts.length === 0 ? (
-                <p className="py-4 text-center text-sm text-muted">Chargement des posts…</p>
+                <p className="py-4 text-center text-sm text-muted">{t('profile.loadingPosts')}</p>
               ) : userPosts.length === 0 ? (
                 <Card>
                   <EmptyState
-                    title="Aucun post visible"
+                    title={t('profile.noVisiblePosts')}
                     message={
                       following === 'following' || user?.id === p.id
-                        ? `@${p.username} n'a pas encore publié de post.`
-                        : `Suis @${p.username} pour voir ses posts réservés aux abonnés.`
+                        ? t('profile.noPostYet', { who: `@${p.username}` })
+                        : t('profile.followToSeePosts', { who: `@${p.username}` })
                     }
                   />
                 </Card>
@@ -398,7 +400,7 @@ export default function ProfilePage() {
                     <PostCard key={post.id} post={post} onChanged={() => void refreshUserPosts(p.id)} />
                   ))}
                   {userPostsMore && <Button block disabled={loadingUserPosts} onClick={() => void moreUserPosts(p.id)}>
-                    {loadingUserPosts ? 'Chargement…' : 'Charger plus'}
+                    {loadingUserPosts ? t('common.loading') : t('profile.loadMore')}
                   </Button>}
                 </div>
               )}
@@ -419,16 +421,15 @@ export default function ProfilePage() {
         {p && <ReportDialog open={reportOpen} targetType="profile" targetId={p.id} onClose={() => setReportOpen(false)} />}
         <ConfirmDialog
           open={confirmBlock}
-          title={`Bloquer ${pname} ?`}
+          title={t('profile.blockTitle', { who: pname })}
           message={
             <>
-              Ce profil ne te verra plus : ni ton profil, ni tes posts, ni tes séances,
-              ni ta présence dans ses listes. Il ne pourra plus te suivre.
+              {t('profile.blockMessage1')}
               <br />
-              Toi, tu continueras de le voir pour pouvoir le débloquer (Réglages → Comptes bloqués).
+              {t('profile.blockMessage2')}
             </>
           }
-          confirmLabel="Bloquer"
+          confirmLabel={t('profile.block')}
           danger
           onCancel={() => setConfirmBlock(false)}
           onConfirm={() => void doBlock()}
@@ -441,10 +442,10 @@ export default function ProfilePage() {
   return (
     <div>
       <PageHeader
-        title={myProfile?.username ? `@${myProfile.username}` : 'Profil'}
-        subtitle={myProfile?.city || (!cloudEnabled ? 'Compte local' : undefined)}
+        title={myProfile?.username ? `@${myProfile.username}` : t('nav.profile')}
+        subtitle={myProfile?.city || (!cloudEnabled ? t('profile.localAccount') : undefined)}
         actions={
-          <IconButton label="Réglages" onClick={() => navigate('/reglages')}>
+          <IconButton label={t('nav.settings')} onClick={() => navigate('/reglages')}>
             <SettingsIcon size={20} />
           </IconButton>
         }
@@ -458,8 +459,8 @@ export default function ProfilePage() {
               {cloudEnabled && user && (
                 <button
                   type="button"
-                  title="Modifier le profil"
-                  aria-label="Modifier le profil"
+                  title={t('profile.editAction')}
+                  aria-label={t('profile.editAction')}
                   onClick={() => setEditOpen(true)}
                   className="shrink-0 rounded-lg p-1.5 text-muted transition-colors hover:bg-surface-2 hover:text-ink"
                 >
@@ -470,24 +471,24 @@ export default function ProfilePage() {
             {myProfile?.bio && <p className="mt-1 text-sm">{myProfile.bio}</p>}
             {myProfile?.city && <p className="mt-0.5 text-xs text-muted">📍 {myProfile.city}</p>}
             <p className="mt-1.5 text-xs font-semibold text-muted">
-              💪 {done.length} séance{done.length > 1 ? 's' : ''}
+              {t('profile.doneCount', { count: done.length })}
               {cloudEnabled && myProfile && user && (
                 <>
                   {' · '}{myProfile.followers_count}{' '}
                   <button
                     type="button"
                     className="underline decoration-dotted underline-offset-2"
-                    onClick={() => user && setFollowList({ tab: 'followers', userId: user.id, title: 'Mes abonnés' })}
+                    onClick={() => user && setFollowList({ tab: 'followers', userId: user.id, title: t('profile.myFollowers') })}
                   >
-                    abonné{myProfile.followers_count !== 1 ? 's' : ''}
+                    {myProfile.followers_count !== 1 ? t('profile.followerMany') : t('profile.followerOne')}
                   </button>
                   {' · '}{myProfile.following_count}{' '}
                   <button
                     type="button"
                     className="underline decoration-dotted underline-offset-2"
-                    onClick={() => user && setFollowList({ tab: 'following', userId: user.id, title: 'Mes abonnements' })}
+                    onClick={() => user && setFollowList({ tab: 'following', userId: user.id, title: t('profile.myFollowing') })}
                   >
-                    abonnement{myProfile.following_count !== 1 ? 's' : ''}
+                    {myProfile.following_count !== 1 ? t('profile.followingMany') : t('profile.followingOne')}
                   </button>
                 </>
               )}
@@ -499,9 +500,9 @@ export default function ProfilePage() {
           value={tab}
           onChange={setTab}
           tabs={[
-            { value: 'posts', label: 'Posts', icon: <LayoutGrid size={14} /> },
-            { value: 'historique', label: 'Historique', icon: <History size={14} /> },
-            { value: 'stats', label: 'Stats', icon: <BarChart3 size={14} /> },
+            { value: 'posts', label: t('profile.tabPosts'), icon: <LayoutGrid size={14} /> },
+            { value: 'historique', label: t('history.title'), icon: <History size={14} /> },
+            { value: 'stats', label: t('stats.title'), icon: <BarChart3 size={14} /> },
           ]}
         />
 
@@ -509,20 +510,20 @@ export default function ProfilePage() {
           !cloudEnabled ? (
             <Card>
               <EmptyState
-                title="Tes posts apparaîtront ici"
-                message="Connecte-toi avec Google pour publier tes séances dans le feed."
+                title={t('profile.myPostsTitle')}
+                message={t('profile.myPostsMessage')}
               />
             </Card>
           ) : myPostsError ? (
-            <Card><EmptyState title="Posts indisponibles" message={myPostsError}
-              action={<Button onClick={() => void refreshPosts()}>Réessayer</Button>} /></Card>
+            <Card><EmptyState title={t('profile.postsUnavailable')} message={myPostsError}
+              action={<Button onClick={() => void refreshPosts()}>{t('common.retry')}</Button>} /></Card>
           ) : loadingPosts && myPosts.length === 0 ? (
-            <p className="py-4 text-center text-sm text-muted">Chargement…</p>
+            <p className="py-4 text-center text-sm text-muted">{t('common.loading')}</p>
           ) : myPosts.length === 0 ? (
             <Card>
               <EmptyState
-                title="Aucun post pour l'instant"
-                message="Termine une séance puis publie-la depuis son rapport (icône mégaphone 📣)."
+                title={t('profile.noMyPostsTitle')}
+                message={t('profile.noMyPostsMessage')}
               />
             </Card>
           ) : (
@@ -531,7 +532,7 @@ export default function ProfilePage() {
                 <PostCard key={p.id} post={p} onChanged={() => void refreshPosts()} />
               ))}
               {myPostsMore && <Button block disabled={loadingPosts} onClick={() => void moreMyPosts()}>
-                {loadingPosts ? 'Chargement…' : 'Charger plus'}
+                {loadingPosts ? t('common.loading') : t('profile.loadMore')}
               </Button>}
             </div>
           )
@@ -569,16 +570,17 @@ export default function ProfilePage() {
 
 /** Quelques chiffres d'après ses posts visibles (snapshots). */
 function PublicMiniStats({ posts }: { posts: Post[] }) {
+  useLang()
   const snaps = posts.map((p) => p.workout_snapshot).filter((s): s is NonNullable<typeof s> => Boolean(s))
   if (snaps.length === 0) return null
   const sets = snaps.reduce((n, s) => n + s.sets, 0)
   const volume = snaps.reduce((n, s) => n + s.volume, 0)
   const seconds = snaps.reduce((n, s) => n + s.seconds, 0)
   const cells: { value: string; label: string }[] = [
-    { value: String(posts.length), label: 'Publications' },
-    { value: String(sets), label: 'Séries' },
-    { value: formatVolume(volume, 'kg'), label: 'Volume' },
-    { value: formatDuration(seconds, 'compact'), label: 'Temps' },
+    { value: String(posts.length), label: t('profile.statPosts') },
+    { value: String(sets), label: t('stats.sets') },
+    { value: formatVolume(volume, 'kg'), label: t('stats.volume') },
+    { value: formatDuration(seconds, 'compact'), label: t('stats.time') },
   ]
   return (
     <div>
@@ -590,7 +592,9 @@ function PublicMiniStats({ posts }: { posts: Post[] }) {
           </div>
         ))}
       </div>
-      <p className="mt-1 text-center text-[10px] text-muted">D'après {posts.length === 1 ? 'sa publication visible' : `ses ${posts.length} publications visibles`}</p>
+      <p className="mt-1 text-center text-[10px] text-muted">
+        {posts.length === 1 ? t('profile.basedOnOne') : t('profile.basedOnMany', { count: posts.length })}
+      </p>
     </div>
   )
 }export interface FollowListInfo {
@@ -603,6 +607,7 @@ function FollowListModal({ info, onClose }: { info: FollowListInfo | null; onClo
   const navigate = useNavigate()
   const { user } = useAuth()
   const notify = useStore((s) => s.notify)
+  useLang()
   const [tab, setTab] = useState<'followers' | 'following'>(info?.tab ?? 'followers')
   const [lists, setLists] = useState<Partial<Record<'followers' | 'following', SocialProfile[]>>>({})
   const [myFollows, setMyFollows] = useState<Set<string>>(new Set())
@@ -623,7 +628,7 @@ function FollowListModal({ info, onClose }: { info: FollowListInfo | null; onClo
     setLoading(true)
     const fn = tab === 'followers' ? listFollowers(info.userId) : listFollowing(info.userId)
     fn.then((l) => setLists((prev) => ({ ...prev, [tab]: l })))
-      .catch((err) => notify(err instanceof Error ? err.message : 'Liste illisible', 'error'))
+      .catch((err) => notify(err instanceof Error ? err.message : t('profile.listFailed'), 'error'))
       .finally(() => setLoading(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [info, tab])
@@ -645,9 +650,9 @@ function FollowListModal({ info, onClose }: { info: FollowListInfo | null; onClo
       await unfollowUser(id)
       setMyFollows((prev) => { const next = new Set(prev); next.delete(id); return next })
       setLists((prev) => ({ ...prev, following: (prev.following ?? []).filter((p) => p.id !== id) }))
-      notify('Abonnement retiré : tu ne le suis plus', 'info')
+      notify(t('profile.followRemoved'), 'info')
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Action impossible', 'error')
+      notify(err instanceof Error ? err.message : t('profile.actionFailed'), 'error')
     } finally {
       setBusyId(null)
     }
@@ -658,9 +663,9 @@ function FollowListModal({ info, onClose }: { info: FollowListInfo | null; onClo
     try {
       await removeFollower(id)
       setLists((prev) => ({ ...prev, followers: (prev.followers ?? []).filter((p) => p.id !== id) }))
-      notify('Abonné retiré : il ne te suit plus', 'info')
+      notify(t('profile.followerRemoved'), 'info')
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Action impossible', 'error')
+      notify(err instanceof Error ? err.message : t('profile.actionFailed'), 'error')
     } finally {
       setBusyId(null)
     }
@@ -672,16 +677,16 @@ function FollowListModal({ info, onClose }: { info: FollowListInfo | null; onClo
         value={tab}
         onChange={setTab}
         tabs={[
-          { value: 'followers', label: `Abonnés (${lists.followers?.length ?? '…'})` },
-          { value: 'following', label: `Abonnements (${lists.following?.length ?? '…'})` },
+          { value: 'followers', label: t('profile.followersCount', { n: lists.followers?.length ?? '…' }) },
+          { value: 'following', label: t('profile.followingCount', { n: lists.following?.length ?? '…' }) },
         ]}
       />
       <div className="mt-3 space-y-1.5">
         {loading ? (
-          <p className="py-6 text-center text-sm text-muted">Chargement…</p>
+          <p className="py-6 text-center text-sm text-muted">{t('common.loading')}</p>
         ) : rows.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted">
-            {tab === 'followers' ? 'Aucun abonné pour l’instant.' : 'Aucun abonnement pour l’instant.'}
+            {tab === 'followers' ? t('profile.noFollowers') : t('profile.noFollowing')}
           </p>
         ) : (
           rows.map((p) => (
@@ -692,7 +697,7 @@ function FollowListModal({ info, onClose }: { info: FollowListInfo | null; onClo
                   <span className="block truncate text-sm font-bold">
                     @{p.username ?? '?'}
                     {p.visibility === 'private' && p.id !== user?.id && !myFollows.has(p.id) && (
-                      <span className="ml-1" title="Compte privé">🔒</span>
+                      <span className="ml-1" title={t('profile.privateAccount')}>🔒</span>
                     )}
                   </span>
                   {p.display_name && <span className="block truncate text-xs text-muted">{p.display_name}</span>}
@@ -700,12 +705,12 @@ function FollowListModal({ info, onClose }: { info: FollowListInfo | null; onClo
               </button>
               {mine && tab === 'following' && (
                 <Button size="sm" variant="ghost" disabled={busyId === p.id} onClick={() => void remove(p.id)}>
-                  <UserMinus size={14} /> Ne plus suivre
+                  <UserMinus size={14} /> {t('profile.unfollow')}
                 </Button>
               )}
               {mine && tab === 'followers' && (
                 <Button size="sm" variant="ghost" disabled={busyId === p.id} onClick={() => void kick(p.id)}>
-                  <UserMinus size={14} /> Retirer
+                  <UserMinus size={14} /> {t('common.remove')}
                 </Button>
               )}
             </div>
@@ -734,6 +739,7 @@ function EditProfileModal({
   onSaved: (p: SocialProfile, vis: PostVisibility | null) => void
 }) {
   const notify = useStore((s) => s.notify)
+  useLang()
   const [username, setUsername] = useState(initial?.username ?? '')
   const [name, setName] = useState(initial?.display_name ?? '')
   const [avatar, setAvatar] = useState<string | null>(initial?.avatar_url ?? null)
@@ -766,9 +772,9 @@ function EditProfileModal({
     try {
       const url = await uploadAvatar(file)
       setAvatar(url)
-      notify('Photo mise à jour 📸', 'success')
+      notify(t('profile.photoUpdated'), 'success')
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Upload impossible', 'error')
+      notify(err instanceof Error ? err.message : t('profile.uploadFailed'), 'error')
     } finally {
       setUploading(false)
     }
@@ -780,18 +786,18 @@ function EditProfileModal({
 
   const check = async () => {
     if (!valid) {
-      setHint('3-20 caractères : minuscules, chiffres, . ou _')
+      setHint(t('profile.usernameRule'))
       return
     }
     if (!usernameChanged) {
-      setHint('C’est déjà ton pseudo ✔')
+      setHint(t('profile.alreadyYours'))
       return
     }
     setChecking(true)
     try {
-      setHint((await isUsernameAvailable(clean)) ? `@${clean} disponible 🎉` : `@${clean} déjà pris`)
+      setHint((await isUsernameAvailable(clean)) ? t('profile.usernameAvailable', { name: `@${clean}` }) : t('profile.usernameTaken', { name: `@${clean}` }))
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Vérification impossible', 'error')
+      notify(err instanceof Error ? err.message : t('profile.checkFailed'), 'error')
     } finally {
       setChecking(false)
     }
@@ -809,23 +815,23 @@ function EditProfileModal({
         city,
         visibility: account,
       })
-      notify(usernameChanged ? `Pseudo → @${clean} 🎉` : 'Profil mis à jour', 'success')
+      notify(usernameChanged ? t('profile.usernameChanged', { name: `@${clean}` }) : t('profile.updated'), 'success')
       onSaved(p, postVis)
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Sauvegarde impossible', 'error')
+      notify(err instanceof Error ? err.message : t('profile.saveFailed'), 'error')
     } finally {
       setSaving(false)
     }
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Modifier le profil">
+    <Modal open={open} onClose={onClose} title={t('profile.editTitle')}>
       <div className="space-y-3">
         <div className="flex items-center gap-3">
           <ProfileAvatar url={avatar ?? googleAvatar} name={name || username || '?'} size={64} />
           <div className="min-w-0 flex-1 space-y-1.5">
             <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-surface-2 px-2.5 py-1.5 text-xs font-bold hover:brightness-105">
-              {uploading ? 'Envoi…' : '📸 Choisir une photo'}
+              {uploading ? t('lib.sending') : t('profile.choosePhoto')}
               <input
                 type="file"
                 accept="image/*"
@@ -845,46 +851,46 @@ function EditProfileModal({
                 onClick={() => setAvatar(googleAvatar)}
                 className="block text-[11px] font-semibold text-muted underline decoration-dotted underline-offset-2"
               >
-                Reprendre la photo Google
+                {t('profile.useGooglePhoto')}
               </button>
             )}
           </div>
         </div>
-        <Field label="Pseudo" hint="Unique, 3-20 caractères">
-          <Input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="ton.pseudo" autoComplete="off" />
+        <Field label={t('profile.usernameField')} hint={t('profile.usernameHint')}>
+          <Input value={username} onChange={(e) => setUsername(e.target.value)} placeholder={t('profile.usernamePlaceholder')} autoComplete="off" />
         </Field>
         <div>
           <Button size="sm" disabled={!valid || checking} onClick={() => void check()}>
-            {checking ? 'Vérification…' : 'Vérifier la dispo'}
+            {checking ? t('welcome.checking') : t('welcome.check')}
           </Button>
           {hint && <p className="mt-1 text-xs text-muted">{hint}</p>}
         </div>
-        <Field label="Nom affiché" hint="Ton prénom ou surnom, 60 caractères max">
+        <Field label={t('profile.displayNameField')} hint={t('profile.displayNameHint')}>
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Léa" autoComplete="off" maxLength={60} />
         </Field>
-        <Field label="Bio" hint="160 caractères max">
-          <Textarea value={bio} onChange={(e) => setBio(e.target.value)} rows={2} maxLength={160} placeholder="Objectifs, salle, devise…" />
+        <Field label={t('profile.bioField')} hint={t('profile.bioHint')}>
+          <Textarea value={bio} onChange={(e) => setBio(e.target.value)} rows={2} maxLength={160} placeholder={t('profile.bioPlaceholder')} />
         </Field>
-        <Field label="Ville">
+        <Field label={t('profile.cityField')}>
           <Input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Lyon" autoComplete="off" />
         </Field>
-        <Field label="Compte" hint="Privé : chaque nouvel abonné devra être accepté">
+        <Field label={t('profile.accountField')} hint={t('profile.accountHint')}>
           <Select value={account} onChange={(e) => setAccount(e.target.value as 'public' | 'private')}>
-            <option value="public">Public — suivi direct</option>
-            <option value="private">Privé 🔒 — sur demande</option>
+            <option value="public">{t('profile.accountPublic')}</option>
+            <option value="private">{t('profile.accountPrivate')}</option>
           </Select>
         </Field>
-        <Field label="Visibilité par défaut des posts">
+        <Field label={t('profile.defaultPostVisibility')}>
           <Select value={postVis} onChange={(e) => setPostVis(e.target.value as PostVisibility)}>
-            <option value="followers">Abonnés (recommandé)</option>
-            <option value="public">Public</option>
-            <option value="private">Privé (moi uniquement)</option>
+            <option value="followers">{t('post.visFollowersRecommended')}</option>
+            <option value="public">{t('post.visPublic')}</option>
+            <option value="private">{t('post.visPrivateOnlyMe')}</option>
           </Select>
         </Field>
         <div className="flex gap-2">
-          <Button variant="ghost" block onClick={onClose}>Annuler</Button>
+          <Button variant="ghost" block onClick={onClose}>{t('common.cancel')}</Button>
           <Button variant="primary" block disabled={!valid || saving} onClick={() => void save()}>
-            {saving ? 'Enregistrement…' : 'Enregistrer'}
+            {saving ? t('profile.saving') : t('common.save')}
           </Button>
         </div>
       </div>

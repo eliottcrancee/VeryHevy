@@ -4,19 +4,20 @@
 import type { SocialProfile } from '@/types'
 import { normalizeUsername } from '@/types'
 import { getSupabase } from './supabase'
+import { t } from './i18n'
 
 const PROFILE_COLUMNS = 'id,username,display_name,avatar_url,bio,city,visibility,followers_count,following_count,updated_at'
 
 function sbOrThrow() {
   const sb = getSupabase()
-  if (!sb) throw new Error('Cloud non configuré')
+  if (!sb) throw new Error(t('lib.cloudOff'))
   return sb
 }
 
 async function myId(): Promise<string> {
   const sb = sbOrThrow()
   const { data: { session } } = await sb.auth.getSession()
-  if (!session?.user) throw new Error('Non connecté')
+  if (!session?.user) throw new Error(t('lib.notConnected'))
   return session.user.id
 }
 
@@ -25,7 +26,7 @@ export async function getMyProfile(): Promise<SocialProfile | null> {
   const sb = sbOrThrow()
   const id = await myId()
   const { data, error } = await sb.from('profiles').select(PROFILE_COLUMNS).eq('id', id).maybeSingle()
-  if (error) throw new Error(`Profil : ${error.message}`)
+  if (error) throw new Error(t('lib.profileError', { msg: error.message }))
   return (data as SocialProfile | null) ?? null
 }
 
@@ -35,7 +36,7 @@ export async function isUsernameAvailable(wanted: string): Promise<boolean> {
   const clean = normalizeUsername(wanted)
   if (!clean) return false
   const { data, error } = await sb.rpc('is_username_available', { wanted: clean })
-  if (error) throw new Error(`Pseudo : ${error.message}`)
+  if (error) throw new Error(t('lib.usernameError', { msg: error.message }))
   return Boolean(data)
 }
 
@@ -45,14 +46,14 @@ export async function claimUsername(wanted: string): Promise<SocialProfile> {
   const id = await myId()
   const username = normalizeUsername(wanted)
   if (!/^[a-z0-9_.]{3,20}$/.test(username)) {
-    throw new Error('Pseudo : 3-20 caractères, minuscules, chiffres, . ou _')
+    throw new Error(t('lib.usernameRule'))
   }
   const { data: { user } } = await sb.auth.getUser()
   const meta = (user?.user_metadata ?? {}) as Record<string, unknown>
   const display =
     (meta.full_name as string | undefined) ??
     (meta.name as string | undefined) ??
-    (user?.email?.split('@')[0] ?? 'Sportif')
+    (user?.email?.split('@')[0] ?? t('lib.athlete'))
   const avatar =
     (meta.avatar_url as string | undefined) ??
     (meta.picture as string | undefined) ??
@@ -67,9 +68,9 @@ export async function claimUsername(wanted: string): Promise<SocialProfile> {
     .single()
   if (error) {
     if (error.message.includes('duplicate') || error.message.includes('unique')) {
-      throw new Error('Ce pseudo est déjà pris')
+      throw new Error(t('lib.usernameTaken'))
     }
-    throw new Error(`Pseudo : ${error.message}`)
+    throw new Error(t('lib.usernameError', { msg: error.message }))
   }
   return data as SocialProfile
 }
@@ -80,7 +81,7 @@ export async function fetchProfileByUsername(username: string): Promise<SocialPr
   const clean = normalizeUsername(username)
   if (!clean) return null
   const { data, error } = await sb.from('profiles').select(PROFILE_COLUMNS).ilike('username', clean).maybeSingle()
-  if (error) throw new Error(`Profil : ${error.message}`)
+  if (error) throw new Error(t('lib.profileError', { msg: error.message }))
   return (data as SocialProfile | null) ?? null
 }
 
@@ -98,7 +99,7 @@ export async function searchProfiles(query: string, limit = 8): Promise<SocialPr
     .ilike('username', `%${clean}%`)
     .order('followers_count', { ascending: false })
     .limit(limit)
-  if (error) throw new Error(`Recherche : ${error.message}`)
+  if (error) throw new Error(t('lib.searchError', { msg: error.message }))
   return (data as SocialProfile[]) ?? []
 }
 
@@ -115,19 +116,19 @@ export async function updateMyProfile(
   if (patch.display_name !== undefined) clean.display_name = patch.display_name?.slice(0, 60) ?? null
   if (patch.avatar_url !== undefined) clean.avatar_url = patch.avatar_url
   if (patch.username !== undefined) {
-    if (patch.username === null) throw new Error('Pseudo requis')
+    if (patch.username === null) throw new Error(t('lib.usernameRequired'))
     const username = normalizeUsername(patch.username)
     if (!/^[a-z0-9_.]{3,20}$/.test(username)) {
-      throw new Error('Pseudo : 3-20 caractères, minuscules, chiffres, . ou _')
+      throw new Error(t('lib.usernameRule'))
     }
     clean.username = username
   }
   const { data, error } = await sb.from('profiles').update(clean).eq('id', id).select(PROFILE_COLUMNS).single()
   if (error) {
     if (error.message.includes('duplicate') || error.message.includes('unique')) {
-      throw new Error('Ce pseudo est déjà pris')
+      throw new Error(t('lib.usernameTaken'))
     }
-    throw new Error(`Profil : ${error.message}`)
+    throw new Error(t('lib.profileError', { msg: error.message }))
   }
   return data as SocialProfile
 }
@@ -137,7 +138,7 @@ export async function listMyFollowIds(): Promise<Set<string>> {
   const sb = sbOrThrow()
   const me = await myId()
   const { data, error } = await sb.from('follows').select('followed').eq('follower', me)
-  if (error) throw new Error(`Follows : ${error.message}`)
+  if (error) throw new Error(t('lib.followsError', { msg: error.message }))
   return new Set(((data as { followed: string }[] ?? []).map((f) => f.followed)))
 }
 
@@ -147,7 +148,7 @@ export async function fetchSocialProfiles(ids: string[]): Promise<Map<string, So
   if (!ids.length) return map
   const sb = sbOrThrow()
   const { data, error } = await sb.from('profiles').select(PROFILE_COLUMNS).in('id', ids)
-  if (error) throw new Error(`Profils : ${error.message}`)
+  if (error) throw new Error(t('lib.profilesError', { msg: error.message }))
   for (const p of (data as SocialProfile[]) ?? []) map.set(p.id, p)
   return map
 }
@@ -156,9 +157,9 @@ export async function fetchSocialProfiles(ids: string[]): Promise<Map<string, So
 export async function followUser(targetId: string): Promise<void> {
   const sb = sbOrThrow()
   const me = await myId()
-  if (targetId === me) throw new Error('Impossible de se suivre soi-même')
+  if (targetId === me) throw new Error(t('lib.selfFollow'))
   const { error } = await sb.from('follows').insert({ follower: me, followed: targetId })
-  if (error && !error.message.includes('duplicate')) throw new Error(`Suivre : ${error.message}`)
+  if (error && !error.message.includes('duplicate')) throw new Error(t('lib.followError', { msg: error.message }))
 }
 
 export type FollowState = 'following' | 'requested' | 'none'
@@ -184,16 +185,16 @@ export async function followStatus(targetId: string): Promise<FollowState> {
 export async function requestFollow(targetId: string): Promise<FollowState> {
   const sb = sbOrThrow()
   const me = await myId()
-  if (targetId === me) throw new Error('Impossible de se suivre soi-même')
+  if (targetId === me) throw new Error(t('lib.selfFollow'))
   const { data: target } = await sb
     .from('profiles')
     .select('visibility,username')
     .eq('id', targetId)
     .maybeSingle()
-  const t = target as { visibility: string | null; username: string | null } | null
-  if (t?.visibility === 'private') {
+  const targetProfile = target as { visibility: string | null; username: string | null } | null
+  if (targetProfile?.visibility === 'private') {
     const { error } = await sb.from('follow_requests').insert({ requester: me, target: targetId })
-    if (error && !error.message.includes('duplicate')) throw new Error(`Demande : ${error.message}`)
+    if (error && !error.message.includes('duplicate')) throw new Error(t('lib.requestError', { msg: error.message }))
     return 'requested'
   }
   await followUser(targetId)
@@ -204,7 +205,7 @@ export async function unfollowUser(targetId: string): Promise<void> {
   const sb = sbOrThrow()
   const me = await myId()
   const { error } = await sb.from('follows').delete().eq('follower', me).eq('followed', targetId)
-  if (error) throw new Error(`Ne plus suivre : ${error.message}`)
+  if (error) throw new Error(t('lib.unfollowError', { msg: error.message }))
 }
 
 /** Est-ce que je suis target ? */
@@ -217,7 +218,7 @@ export async function amIFollowing(targetId: string): Promise<boolean> {
     .eq('follower', me)
     .eq('followed', targetId)
     .maybeSingle()
-  if (error) throw new Error(`Follow : ${error.message}`)
+  if (error) throw new Error(t('lib.followStatusError', { msg: error.message }))
   return Boolean(data)
 }
 
@@ -229,7 +230,7 @@ export async function listFollowers(userId: string): Promise<SocialProfile[]> {
     .select('follower')
     .eq('followed', userId)
     .order('created_at', { ascending: false })
-  if (error) throw new Error(`Abonnés : ${error.message}`)
+  if (error) throw new Error(t('lib.followersError', { msg: error.message }))
   const ids = ((data as { follower: string }[] ?? []).map((f) => f.follower))
   const map = await fetchSocialProfiles(ids)
   return ids.map((id) => map.get(id)).filter((p): p is SocialProfile => Boolean(p))
@@ -243,7 +244,7 @@ export async function listFollowing(userId: string): Promise<SocialProfile[]> {
     .select('followed')
     .eq('follower', userId)
     .order('created_at', { ascending: false })
-  if (error) throw new Error(`Abonnements : ${error.message}`)
+  if (error) throw new Error(t('lib.followingError', { msg: error.message }))
   const ids = ((data as { followed: string }[] ?? []).map((f) => f.followed))
   const map = await fetchSocialProfiles(ids)
   return ids.map((id) => map.get(id)).filter((p): p is SocialProfile => Boolean(p))
@@ -256,7 +257,7 @@ export async function removeFollower(userId: string): Promise<void> {
   const sb = sbOrThrow()
   const me = await myId()
   const { error } = await sb.from('follows').delete().eq('follower', userId).eq('followed', me)
-  if (error) throw new Error(`Retrait : ${error.message}`)
+  if (error) throw new Error(t('lib.removeError', { msg: error.message }))
 }
 
 /**
@@ -267,13 +268,13 @@ export async function removeFollower(userId: string): Promise<void> {
 export async function blockUser(targetId: string): Promise<void> {
   const sb = sbOrThrow()
   const me = await myId()
-  if (targetId === me) throw new Error('Impossible de se bloquer soi-même')
+  if (targetId === me) throw new Error(t('lib.selfBlock'))
   await sb.from('follows').delete().eq('follower', me).eq('followed', targetId)
   await sb.from('follows').delete().eq('follower', targetId).eq('followed', me)
   await sb.from('follow_requests').delete().eq('requester', me).eq('target', targetId)
   await sb.from('follow_requests').delete().eq('requester', targetId).eq('target', me)
   const { error } = await sb.from('blocks').insert({ blocker: me, blocked: targetId })
-  if (error && !error.message.includes('duplicate')) throw new Error(`Blocage : ${error.message}`)
+  if (error && !error.message.includes('duplicate')) throw new Error(t('lib.blockError', { msg: error.message }))
 }
 
 /** Débloquer. */
@@ -281,7 +282,7 @@ export async function unblockUser(targetId: string): Promise<void> {
   const sb = sbOrThrow()
   const me = await myId()
   const { error } = await sb.from('blocks').delete().eq('blocker', me).eq('blocked', targetId)
-  if (error) throw new Error(`Déblocage : ${error.message}`)
+  if (error) throw new Error(t('lib.unblockError', { msg: error.message }))
 }
 
 /** Ai-je bloqué target ? */
@@ -294,7 +295,7 @@ export async function isBlockedByMe(targetId: string): Promise<boolean> {
     .eq('blocker', me)
     .eq('blocked', targetId)
     .maybeSingle()
-  if (error) throw new Error(`Blocage : ${error.message}`)
+  if (error) throw new Error(t('lib.blockError', { msg: error.message }))
   return Boolean(data)
 }
 
@@ -302,7 +303,7 @@ export async function isBlockedByMe(targetId: string): Promise<boolean> {
 export async function listMyBlocks(): Promise<SocialProfile[]> {  const sb = sbOrThrow()
   const me = await myId()
   const { data, error } = await sb.from('blocks').select('blocked').eq('blocker', me)
-  if (error) throw new Error(`Bloqués : ${error.message}`)
+  if (error) throw new Error(t('lib.blockedError', { msg: error.message }))
   const ids = ((data as { blocked: string }[] ?? []).map((b) => b.blocked))
   const map = await fetchSocialProfiles(ids)
   return ids.map((id) => map.get(id)).filter((p): p is SocialProfile => Boolean(p))
@@ -314,8 +315,8 @@ export async function listMyBlocks(): Promise<SocialProfile[]> {  const sb = sbO
 export async function uploadAvatar(file: File): Promise<string> {
   const sb = sbOrThrow()
   const me = await myId()
-  if (!file.type.startsWith('image/')) throw new Error('Fichier image requis')
-  if (file.size > 8 * 1024 * 1024) throw new Error('Photo trop lourde (max 8 Mo)')
+  if (!file.type.startsWith('image/')) throw new Error(t('lib.imageRequired'))
+  if (file.size > 8 * 1024 * 1024) throw new Error(t('lib.photoHeavy'))
   const { compressImage } = await import('./posts')
   const blob = await compressImage(file, 512, 0.85)
   const path = `${me}/avatar.jpg`
@@ -323,7 +324,7 @@ export async function uploadAvatar(file: File): Promise<string> {
     contentType: 'image/jpeg',
     upsert: true,
   })
-  if (error) throw new Error(`Upload : ${error.message}`)
+  if (error) throw new Error(t('lib.uploadError', { msg: error.message }))
   const url = sb.storage.from('avatars').getPublicUrl(path).data.publicUrl
   return `${url}?v=${Date.now()}`
 }

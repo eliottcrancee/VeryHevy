@@ -11,8 +11,17 @@ import { Button, Checkbox, Field, IconButton, Input, Modal, Select, Textarea } f
 import { Chip } from '@/components/ui'
 import { useStore } from '@/store/store'
 import { cn, tintBg, tintText } from '@/lib/utils'
+import { t, tx, useLang } from '@/lib/i18n'
 
 const LEVELS: ExerciseLevel[] = ['débutant', 'intermédiaire', 'avancé']
+
+/** Noms de colonnes traduisibles (clé i18n par champ de série). */
+const FIELD_KEYS = {
+  weight: 'exercise.fWeight',
+  reps: 'exercise.fReps',
+  duration: 'exercise.fDuration',
+  distance: 'exercise.fDistance',
+} as const
 
 interface Props {
   open: boolean
@@ -23,6 +32,7 @@ interface Props {
 }
 
 export function ExerciseFormModal({ open, onClose, exercise, onCreated }: Props) {
+  useLang()
   const addExercise = useStore((s) => s.addExercise)
   const updateExercise = useStore((s) => s.updateExercise)
   const deleteExercise = useStore((s) => s.deleteExercise)
@@ -90,7 +100,7 @@ export function ExerciseFormModal({ open, onClose, exercise, onCreated }: Props)
         // Base intégrée en lecture seule : on crée une copie personnalisée.
         const created = addExercise({ ...payload, name: `${name.trim()} (copie)` })
         onCreated?.(created)
-        notify('Copie personnalisée créée', 'success')
+        notify(t('exercise.copyCreated2'), 'success')
         onClose()
         return
       }
@@ -106,13 +116,13 @@ export function ExerciseFormModal({ open, onClose, exercise, onCreated }: Props)
     <Modal
       open={open}
       onClose={onClose}
-      title={exercise ? 'Modifier l’exercice' : 'Nouvel exercice'}
+      title={exercise ? t('exercise.editTitle') : t('exercise.newTitle')}
       size="lg"
       footer={
         <div className="flex items-center gap-2">
           {exercise && exercise.isCustom && (
             <IconButton
-              label="Supprimer"
+              label={t('common.delete')}
               className="h-10 w-10 border border-line text-danger"
               onClick={() => {
                 deleteExercise(exercise.id)
@@ -123,10 +133,10 @@ export function ExerciseFormModal({ open, onClose, exercise, onCreated }: Props)
             </IconButton>
           )}
           <Button className="flex-1" onClick={onClose}>
-            Annuler
+            {t('common.cancel')}
           </Button>
           <Button variant="primary" className="flex-1" onClick={save} disabled={!name.trim()}>
-            {exercise ? (readOnly ? 'Dupliquer et enregistrer' : 'Enregistrer') : 'Créer'}
+            {exercise ? (readOnly ? t('exercise.duplicateSave') : t('common.save')) : t('exercise.create')}
           </Button>
         </div>
       }
@@ -134,29 +144,28 @@ export function ExerciseFormModal({ open, onClose, exercise, onCreated }: Props)
       <div className="space-y-4">
         {readOnly && (
           <p className="rounded-xl border border-accent-line bg-accent-soft px-3 py-2.5 text-[13px] font-medium text-accent">
-            Exercice de la base VeryHevy (lecture seule). L’enregistrement créera une copie personnalisée
-            modifiable.
+            {t('exercise.readonlyHint')}
           </p>
         )}
-        <Field label="Nom de l’exercice">
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex. Développé incliné" autoFocus />
+        <Field label={t('exercise.nameLabel')}>
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('exercise.nameEx')} autoFocus />
         </Field>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Catégorie">
+          <Field label={t('exercise.category')}>
             <Select value={category} onChange={(e) => setCategory(e.target.value as ExerciseCategory)}>
               {Object.entries(CATEGORY_META).map(([key, meta]) => (
                 <option key={key} value={key}>
-                  {meta.emoji} {meta.label}
+                  {meta.emoji} {tx('cat', key)}
                 </option>
               ))}
             </Select>
           </Field>
-          <Field label="Matériel">
+          <Field label={t('exercise.equipment')}>
             <Select value={equipment} onChange={(e) => setEquipment(e.target.value)}>
               {EQUIPMENT_LIST.map((eq) => (
                 <option key={eq} value={eq}>
-                  {eq}
+                  {tx('equip', eq)}
                 </option>
               ))}
             </Select>
@@ -164,85 +173,86 @@ export function ExerciseFormModal({ open, onClose, exercise, onCreated }: Props)
         </div>
 
         <Field
-          label="Suivi"
-          hint={`Colonnes enregistrées : ${TRACKING_TYPES[tracking].fields
-            .map((f) => ({ weight: 'poids', reps: 'reps', duration: 'durée', distance: 'distance' })[f])
-            .join(' + ')}`}
+          label={t('exercise.trackingLabel')}
+          hint={t('exercise.trackingHint', {
+            fields: TRACKING_TYPES[tracking].fields.map((f) => t(FIELD_KEYS[f])).join(' + '),
+          })}
         >
           <Select value={tracking} onChange={(e) => setTracking(e.target.value as TrackingType)}>
-            {Object.entries(TRACKING_TYPES).map(([key, meta]) => (
+            {Object.keys(TRACKING_TYPES).map((key) => (
               <option key={key} value={key}>
-                {meta.label}
+                {tx('track', key)}
               </option>
             ))}
           </Select>
         </Field>
 
-        <Field label="Niveau">
+        <Field label={t('exercise.levelLabel')}>
           <div className="flex gap-2">
             {LEVELS.map((l) => (
               <Chip key={l} active={level === l} onClick={() => setLevel(l)}>
-                {l}
+                {tx('level', l)}
               </Chip>
             ))}
           </div>
         </Field>
 
-        <Field label="Muscles principaux">
+        <Field label={t('exercise.mainMuscles')}>
           <div className="flex flex-wrap gap-1.5">
             {MUSCLE_GROUPS.map((m) => (
               <Chip key={m} active={primary.includes(m)} onClick={() => toggle(primary, setPrimary, m)}>
-                {m}
+                {tx('muscle', m)}
               </Chip>
             ))}
           </div>
         </Field>
 
-        <Field label="Muscles secondaires">
+        <Field label={t('exercise.secondMuscles')}>
           <div className="flex flex-wrap gap-1.5">
             {MUSCLE_GROUPS.filter((m) => !primary.includes(m)).map((m) => (
               <Chip key={m} active={secondary.includes(m)} onClick={() => toggle(secondary, setSecondary, m)}>
-                {m}
+                {tx('muscle', m)}
               </Chip>
             ))}
           </div>
         </Field>
 
-        <Field label="Nom alternatif (recherche)">
-          <Input value={altName} onChange={(e) => setAltName(e.target.value)} placeholder="Ex. Bench press" />
+        <Field label={t('exercise.altNameLabel')}>
+          <Input value={altName} onChange={(e) => setAltName(e.target.value)} placeholder={t('exercise.altNameEx')} />
         </Field>
 
-        <Field label="Conseil / note technique">
+        <Field label={t('exercise.tipsLabel')}>
           <Textarea
             value={tips}
             onChange={(e) => setTips(e.target.value)}
-            placeholder="Un point clé d’exécution à retenir…"
+            placeholder={t('exercise.tipsEx')}
             className="min-h-16"
           />
         </Field>
 
-        <Field label="Instructions (une par ligne)">
+        <Field label={t('exercise.instructionsLabel')}>
           <Textarea value={instructions} onChange={(e) => setInstructions(e.target.value)} />
         </Field>
 
-        <Field label="Images (URL, une par ligne)">
+        <Field label={t('exercise.imagesLabel')}>
           <Textarea value={images} onChange={(e) => setImages(e.target.value)} className="min-h-16" />
         </Field>
 
-        <Checkbox checked={favorite} onChange={setFavorite} label="Ajouter aux favoris" />
+        <Checkbox checked={favorite} onChange={setFavorite} label={t('exercise.addFav')} />
       </div>
     </Modal>
   )
 }
 
 export function CategoryBadge({ category, className }: { category: ExerciseCategory; className?: string }) {
+  useLang()
   const meta = CATEGORY_META[category]
   return (
     <span
       className={cn('rounded-md px-1.5 py-0.5 text-[10px] font-bold', className)}
       style={{ color: tintText(meta.color), background: tintBg(meta.color) }}
     >
-      {meta.emoji} {meta.label}
+      {meta.emoji} {tx('cat', category)}
     </span>
   )
 }

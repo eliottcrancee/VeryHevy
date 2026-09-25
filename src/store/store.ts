@@ -28,6 +28,7 @@ import { createSeedRoutines, SEED_EXERCISES } from '@/lib/seed'
 import { SEED_IMAGES } from '@/lib/seed-images'
 import { mergeExercises } from '@/lib/importers'
 import { uid } from '@/lib/utils'
+import { t } from '@/lib/i18n'
 
 export const DATA_VERSION = 1
 const STORAGE_KEY = 'veryhevy-store'
@@ -55,6 +56,7 @@ export const DEFAULT_SETTINGS: Settings = {
   firstDayOfWeek: 1,
   sync: { url: '', token: '', enabled: false },
   defaultPostVisibility: 'followers',
+  lang: 'fr',
   lastSyncAt: null,
   recordsSince: null,
 }
@@ -418,7 +420,7 @@ export const useStore = create<StoreState>()(
           syncDeleted: [...get().syncDeleted, ...tombstones],
         })
         set({ routines: createSeedRoutines(get().exercises) })
-        get().notify('Données réinitialisées', 'success')
+        get().notify(t('lib.dataReset'), 'success')
       },
 
       importData: (data) => {
@@ -444,7 +446,10 @@ export const useStore = create<StoreState>()(
           },
         })
         get().notify(
-          `Import réussi : ${workouts.length - current.workouts.length} séance(s), ${routines.length - current.routines.length} programme(s)`,
+          t('lib.importDone', {
+            a: workouts.length - current.workouts.length,
+            b: routines.length - current.routines.length,
+          }),
           'success',
         )
       },
@@ -479,7 +484,7 @@ export const useStore = create<StoreState>()(
         // Seuls les exercices personnalisés sont modifiables : la base
         // intégrée reste en lecture seule (dupliquez pour personnaliser).
         if (!target || !target.isCustom) {
-          if (target) get().notify('Exercice de la base : dupliquez-le pour le personnaliser', 'info')
+          if (target) get().notify(t('lib.baseReadonlyToast'), 'info')
           return
         }
         const now = new Date().toISOString()
@@ -495,7 +500,7 @@ export const useStore = create<StoreState>()(
       deleteExercise: (id) => {
         const target = get().exercises.find((e) => e.id === id)
         if (target && !target.isCustom) {
-          get().notify('Impossible de supprimer un exercice de la base', 'error')
+          get().notify(t('lib.baseDeleteDenied'), 'error')
           return
         }
         // La bibliothèque perd l'exercice, mais l'historique garde sa trace :
@@ -513,7 +518,7 @@ export const useStore = create<StoreState>()(
           syncDeleted: addTomb(get().syncDeleted, 'exercise', id),
         })
         get().notify(
-          target ? `« ${target.name} » supprimé (l'historique garde sa trace)` : 'Exercice supprimé',
+          target ? t('lib.exerciseGone', { name: target.name }) : t('lib.exerciseGone2'),
           'info',
         )
       },
@@ -576,7 +581,7 @@ export const useStore = create<StoreState>()(
         const result = mergeExercises(get().exercises, seedWithImages())
         const restoredIds = result.exercises.filter((e) => !before.has(e.id)).map((e) => e.id)
         if (!restoredIds.length) {
-          get().notify('Base par défaut déjà complète', 'info')
+          get().notify(t('lib.baseComplete'), 'info')
           return
         }
         // Les réintégrés sont horodatés à maintenant et désenterrés : sans ça,
@@ -590,7 +595,7 @@ export const useStore = create<StoreState>()(
             (t) => !(t.kind === 'exercise' && restored.has(t.id)),
           ),
         })
-        get().notify(`${restoredIds.length} exercice(s) réintégré(s)`, 'success')
+        get().notify(t('lib.restoredCount', { n: restoredIds.length }), 'success')
       },
 
       removeImportedExercises: () => {
@@ -610,7 +615,7 @@ export const useStore = create<StoreState>()(
         })
         const removed = before - kept.length
         get().notify(
-          removed > 0 ? `${removed} exercice(s) importé(s) retiré(s)` : 'Aucun exercice importé à retirer',
+          removed > 0 ? t('lib.removedImported', { n: removed }) : t('lib.noImported'),
           removed > 0 ? 'success' : 'info',
         )
         return removed
@@ -702,7 +707,7 @@ export const useStore = create<StoreState>()(
           restTimer: get().activeWorkoutId === id ? { endsAt: null, totalSeconds: 0 } : get().restTimer,
           syncDeleted: addTomb(get().syncDeleted, 'workout', id),
         })
-        get().notify('Séance supprimée', 'info')
+        get().notify(t('lib.workoutDeleted'), 'info')
       },
 
       finishWorkout: (id, patch) => {
@@ -736,7 +741,7 @@ export const useStore = create<StoreState>()(
           workouts: workoutPatch(base, id, (w) => ({ ...w, status: 'active' })),
           activeWorkoutId: id,
         })
-        get().notify('Séance rouverte — chrono en pause', 'info')
+        get().notify(t('lib.workoutReopened'), 'info')
       },
 
       pauseWorkoutClock: (id) => {
@@ -745,7 +750,7 @@ export const useStore = create<StoreState>()(
         set({
           workouts: workoutPatch(get().workouts, id, (x) => ({ ...x, finishedAt: new Date().toISOString() })),
         })
-        get().notify('Chrono en pause', 'info')
+        get().notify(t('lib.chronoPaused'), 'info')
       },
 
       resumeWorkoutClock: (id) => {
@@ -945,7 +950,7 @@ export const useStore = create<StoreState>()(
         // Pas de validation dans le vide : il faut au moins reps, durée ou
         // distance (le poids seul ne suffit pas, `NaN` jamais).
         if (nextCompleted && !isSetValidatable(s)) {
-          get().notify('Renseigne au moins reps, durée ou distance avant de valider', 'error')
+          get().notify(t('lib.needValues'), 'error')
           return
         }
 
@@ -984,7 +989,7 @@ export const useStore = create<StoreState>()(
         // Seules les séries renseignées participent : les vides restent décochées.
         const valid = we.sets.filter((s) => isSetValidatable(s))
         if (!valid.length) {
-          get().notify('Aucune série renseignée à valider', 'error')
+          get().notify(t('lib.noSetsToValidate'), 'error')
           return
         }
         const anyIncomplete = valid.some((s) => !s.completed)
@@ -1033,7 +1038,7 @@ export const useStore = create<StoreState>()(
           routines: get().routines.filter((r) => r.id !== id),
           syncDeleted: addTomb(get().syncDeleted, 'routine', id),
         })
-        get().notify('Programme supprimé', 'info')
+        get().notify(t('lib.programDeleted'), 'info')
       },
 
       duplicateRoutine: (id) => {
@@ -1143,7 +1148,7 @@ export const useStore = create<StoreState>()(
           exercises,
           color: '#4f83ff',
         })
-        get().notify('Programme enregistré', 'success')
+        get().notify(t('lib.programSaved'), 'success')
         return id
       },
 

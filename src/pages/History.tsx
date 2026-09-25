@@ -13,6 +13,7 @@ import {
 } from '@/lib/calc'
 import { formatDate, formatDuration, formatVolume, normalize } from '@/lib/utils'
 import { shareWorkout } from '@/lib/share'
+import { localeOf, t, tx, useLang } from '@/lib/i18n'
 
 type Period = 'tout' | '30j' | '90j' | 'annee'
 
@@ -24,6 +25,7 @@ export default function HistoryPage({ bare = false }: { bare?: boolean }) {
   const notify = useStore((s) => s.notify)
   const [query, setQuery] = useState('')
   const [period, setPeriod] = useState<Period>('tout')
+  const loc = localeOf(useLang())
 
   const filtered = useMemo(() => {
     const now = Date.now()
@@ -56,7 +58,7 @@ export default function HistoryPage({ bare = false }: { bare?: boolean }) {
   const grouped = useMemo(() => {
     const map = new Map<string, typeof filtered>()
     for (const w of filtered) {
-      const key = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' }).format(new Date(w.startedAt))
+      const key = new Intl.DateTimeFormat(loc, { month: 'long', year: 'numeric' }).format(new Date(w.startedAt))
       const list = map.get(key) ?? []
       list.push(w)
       map.set(key, list)
@@ -66,7 +68,7 @@ export default function HistoryPage({ bare = false }: { bare?: boolean }) {
 
   return (
     <div>
-      {!bare && <PageHeader title="Historique" subtitle={`${all.length} séance${all.length > 1 ? 's' : ''} enregistrée${all.length > 1 ? 's' : ''}`} />}
+      {!bare && <PageHeader title={t('history.title')} subtitle={t('history.subtitle', { count: all.length })} />}
 
       <Page className="space-y-5">
         <div className="space-y-2">
@@ -75,17 +77,17 @@ export default function HistoryPage({ bare = false }: { bare?: boolean }) {
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Rechercher une séance, un exercice, une note…"
+              placeholder={t('history.search')}
               className="pl-9"
             />
           </div>
           <div className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1">
             {(
               [
-                ['tout', 'Tout'],
-                ['30j', '30 jours'],
-                ['90j', '3 mois'],
-                ['annee', '1 an'],
+                ['tout', t('common.all')],
+                ['30j', t('history.last30')],
+                ['90j', t('history.last90')],
+                ['annee', t('history.lastYear')],
               ] as [Period, string][]
             ).map(([value, label]) => (
               <Chip key={value} active={period === value} onClick={() => setPeriod(value)}>
@@ -99,12 +101,12 @@ export default function HistoryPage({ bare = false }: { bare?: boolean }) {
           <Card>
             <EmptyState
               icon={<Dumbbell size={26} />}
-              title="Aucune séance trouvée"
-              message={query ? 'Essayez une autre recherche.' : 'Lancez votre première séance pour la voir apparaître ici.'}
+              title={t('history.empty')}
+              message={query ? t('history.emptyQuery') : t('history.emptyHint')}
               action={
                 !query ? (
                   <Button variant="primary" onClick={() => navigate('/seance')}>
-                    Démarrer une séance
+                    {t('history.start')}
                   </Button>
                 ) : undefined
               }
@@ -115,7 +117,7 @@ export default function HistoryPage({ bare = false }: { bare?: boolean }) {
             <section key={month}>
               <h2 className="mb-2 flex items-center justify-between text-[13px] font-bold tracking-wider text-muted uppercase">
                 <span className="capitalize">{month}</span>
-                <span className="font-medium normal-case">{list.length} séance{list.length > 1 ? 's' : ''}</span>
+                <span className="font-medium normal-case">{t('history.monthCount', { count: list.length })}</span>
               </h2>
               <div className="space-y-2">
                 {list.map((w) => {
@@ -132,7 +134,7 @@ export default function HistoryPage({ bare = false }: { bare?: boolean }) {
                             {new Date(w.startedAt).getDate()}
                           </span>
                           <span className="text-[9px] tracking-wide text-muted uppercase">
-                            {new Intl.DateTimeFormat('fr-FR', { month: 'short' }).format(new Date(w.startedAt))}
+                            {new Intl.DateTimeFormat(loc, { month: 'short' }).format(new Date(w.startedAt))}
                           </span>
                         </span>
                         <div className="min-w-0 flex-1">
@@ -140,14 +142,14 @@ export default function HistoryPage({ bare = false }: { bare?: boolean }) {
                             <p className="truncate font-bold">{w.name}</p>
                             {w.status === 'active' && (
                               <span className="shrink-0 rounded bg-accent-soft px-1.5 py-0.5 text-[10px] font-bold text-accent">
-                                en cours
+                                {t('history.active')}
                               </span>
                             )}
                           </div>
                           <p className="text-[11px] text-muted">{formatDate(w.startedAt, 'long')}</p>
                           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted">
-                            <span className="tabular">{w.exercises.length} exercices</span>
-                            <span className="tabular">{workoutSets(w)} séries</span>
+                            <span className="tabular">{t('history.exCount', { n: w.exercises.length })}</span>
+                            <span className="tabular">{t('history.setCount', { n: workoutSets(w) })}</span>
                             <span className="tabular">{formatVolume(workoutVolume(w), settings.unit)}</span>
                             <span className="tabular">{formatDuration(workoutDurationSeconds(w), 'compact')}</span>
                           </div>
@@ -155,7 +157,7 @@ export default function HistoryPage({ bare = false }: { bare?: boolean }) {
                             <div className="mt-2 flex flex-wrap gap-1">
                               {breakdown.slice(0, 4).map((m) => (
                                 <span key={m.muscle} className="rounded bg-surface-2 px-1.5 py-0.5 text-[10px] text-muted">
-                                  {m.muscle}
+                                  {tx('muscle', m.muscle)}
                                 </span>
                               ))}
                             </div>
@@ -170,7 +172,7 @@ export default function HistoryPage({ bare = false }: { bare?: boolean }) {
                           ) : null}
                           <span className="mt-auto flex items-center">
                             <IconButton
-                              label={`Partager en image « ${w.name} »`}
+                              label={t('history.shareLabel', { name: w.name })}
                               className="h-8 w-8"
                               onClick={(e) => {
                                 e.preventDefault()

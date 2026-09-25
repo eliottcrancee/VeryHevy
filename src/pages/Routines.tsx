@@ -4,13 +4,15 @@ import { Copy, Dumbbell, MoreVertical, Pencil, Play, Plus, Trash2 } from 'lucide
 import { useStore, selectActiveWorkout } from '@/store/store'
 import { Page, PageHeader } from '@/components/PageHeader'
 import { Button, Card, EmptyState, IconButton, Input, Menu, Modal, Textarea } from '@/components/ui'
-import { cn, formatDate, pluralize } from '@/lib/utils'
+import { cn, formatDate } from '@/lib/utils'
 import { ExercisePicker } from '@/components/ExercisePicker'
+import { t, useLang } from '@/lib/i18n'
 
 const COLORS = ['#4f83ff', '#22c55e', '#f97316', '#a855f7', '#ef4444', '#0ea5e9', '#eab308', '#14b8a6']
 
 export default function RoutinesPage() {
   const navigate = useNavigate()
+  useLang()
   const routines = useStore((s) => s.routines)
   const workouts = useStore((s) => s.workouts)
   const exercises = useStore((s) => s.exercises)
@@ -34,7 +36,7 @@ export default function RoutinesPage() {
   const folders = useMemo(() => {
     const map = new Map<string, typeof routines>()
     for (const r of routines) {
-      const key = r.folder?.trim() || 'Sans dossier'
+      const key = r.folder?.trim() || t('routine.noFolder')
       const list = map.get(key) ?? []
       list.push(r)
       map.set(key, list)
@@ -46,7 +48,7 @@ export default function RoutinesPage() {
 
   const launch = (id: string) => {
     if (active) {
-      notify('Une séance est déjà en cours. Termine-la pour lancer ce programme.', 'error')
+      notify(t('routine.alreadyRunning'), 'error')
       return
     }
     startWorkout({ templateId: id })
@@ -56,17 +58,17 @@ export default function RoutinesPage() {
   return (
     <div>
       <PageHeader
-        title="Programmes"
-        subtitle={`${pluralize(routines.length, 'programme')} enregistré${routines.length > 1 ? 's' : ''}`}
+        title={t('routine.title')}
+        subtitle={t('routine.subtitle', { n: routines.length })}
         actions={
           <>
             <Link to="/exercices" className="shrink-0">
               <Button size="sm">
-                <Dumbbell size={15} /> Exercices
+                <Dumbbell size={15} /> {t('routine.exercises')}
               </Button>
             </Link>
             <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
-              <Plus size={15} /> Créer
+              <Plus size={15} /> {t('routine.create')}
             </Button>
           </>
         }
@@ -77,11 +79,11 @@ export default function RoutinesPage() {
           <Card>
             <EmptyState
               icon={<Dumbbell size={26} />}
-              title="Aucun programme"
-              message="Un programme regroupe une liste d’exercices à lancer en un clic."
+              title={t('routine.empty')}
+              message={t('routine.emptyHint')}
               action={
                 <Button variant="primary" onClick={() => setCreateOpen(true)}>
-                  <Plus size={16} /> Nouveau programme
+                  <Plus size={16} /> {t('routine.new')}
                 </Button>
               }
             />
@@ -109,20 +111,20 @@ export default function RoutinesPage() {
                         <Menu
                           align="right"
                           trigger={({ toggle }) => (
-                            <IconButton label="Options" onClick={toggle} className="-mt-1 -mr-1">
+                            <IconButton label={t('workout.optionsMenu')} onClick={toggle} className="-mt-1 -mr-1">
                               <MoreVertical size={17} />
                             </IconButton>
                           )}
                           items={[
-                            { label: 'Modifier', icon: <Pencil size={14} />, onClick: () => navigate(`/programmes/${r.id}`) },
-                            { label: 'Dupliquer', icon: <Copy size={14} />, onClick: () => duplicateRoutine(r.id) },
+                            { label: t('workout.edit'), icon: <Pencil size={14} />, onClick: () => navigate(`/programmes/${r.id}`) },
+                            { label: t('routine.duplicate'), icon: <Copy size={14} />, onClick: () => duplicateRoutine(r.id) },
                             {
-                              label: 'Ajouter des exercices',
+                              label: t('routine.addExercises'),
                               icon: <Plus size={14} />,
                               onClick: () => setPickerFor(r.id),
                             },
                             {
-                              label: 'Supprimer',
+                              label: t('common.delete'),
                               icon: <Trash2 size={14} />,
                               danger: true,
                               onClick: () => setDeleteTarget(r.id),
@@ -132,10 +134,10 @@ export default function RoutinesPage() {
                       </div>
 
                       <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted">
-                        <span>{pluralize(r.exercises.length, 'exercice')}</span>
-                        <span>{pluralize(r.exercises.reduce((n, e) => n + e.sets.length, 0), 'série')}</span>
-                        <span>{r.timesPerformed}× réalisé</span>
-                        {r.lastPerformedAt && <span>dernière : {formatDate(r.lastPerformedAt)}</span>}
+                        <span>{t('routine.exNum', { n: r.exercises.length })}</span>
+                        <span>{t('routine.setNum', { n: r.exercises.reduce((n, e) => n + e.sets.length, 0) })}</span>
+                        <span>{t('routine.doneTimes', { n: r.timesPerformed })}</span>
+                        {r.lastPerformedAt && <span>{t('routine.lastDone', { date: formatDate(r.lastPerformedAt) })}</span>}
                       </div>
 
                       <div className="mt-2.5 flex flex-wrap gap-1">
@@ -159,12 +161,12 @@ export default function RoutinesPage() {
                           variant="primary"
                           size="sm"
                           className="flex-1"
-                          onClick={() => (r.exercises.length ? launch(r.id) : notify('Ajoutez d’abord des exercices', 'error'))}
+                          onClick={() => (r.exercises.length ? launch(r.id) : notify(t('routine.needExercises'), 'error'))}
                         >
-                          <Play size={14} /> Démarrer
+                          <Play size={14} /> {t('routine.start')}
                         </Button>
                         <Button size="sm" onClick={() => navigate(`/programmes/${r.id}`)}>
-                          Modifier
+                          {t('workout.edit')}
                         </Button>
                       </div>
 
@@ -179,7 +181,7 @@ export default function RoutinesPage() {
                             if (last) navigate(`/historique/${last.id}`)
                           }}
                         >
-                          Voir la dernière séance réalisée
+                          {t('routine.lastSession')}
                         </button>
                       )}
                     </div>
@@ -195,11 +197,11 @@ export default function RoutinesPage() {
       <Modal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
-        title="Nouveau programme"
+        title={t('routine.new')}
         footer={
           <div className="flex gap-2">
             <Button block onClick={() => setCreateOpen(false)}>
-              Annuler
+              {t('common.cancel')}
             </Button>
             <Button
               block
@@ -209,7 +211,7 @@ export default function RoutinesPage() {
                 const id = createRoutine({
                   name: newName.trim(),
                   description: newDesc.trim() || undefined,
-                  folder: newFolder.trim() || 'Sans dossier',
+                  folder: newFolder.trim() || t('routine.noFolder'),
                   color: newColor,
                 })
                 setCreateOpen(false)
@@ -218,22 +220,22 @@ export default function RoutinesPage() {
                 navigate(`/programmes/${id}`)
               }}
             >
-              Créer
+              {t('routine.create')}
             </Button>
           </div>
         }
       >
         <div className="space-y-4">
-          <Input placeholder="Nom du programme" value={newName} onChange={(e) => setNewName(e.target.value)} autoFocus />
+          <Input placeholder={t('routine.namePh')} value={newName} onChange={(e) => setNewName(e.target.value)} autoFocus />
           <Textarea
-            placeholder="Description (optionnel)"
+            placeholder={t('routine.descPh')}
             value={newDesc}
             onChange={(e) => setNewDesc(e.target.value)}
             className="min-h-16"
           />
-          <Input placeholder="Dossier" value={newFolder} onChange={(e) => setNewFolder(e.target.value)} />
+          <Input placeholder={t('routine.folder')} value={newFolder} onChange={(e) => setNewFolder(e.target.value)} />
           <div>
-            <p className="mb-2 text-xs font-semibold text-muted">Couleur</p>
+            <p className="mb-2 text-xs font-semibold text-muted">{t('routine.color')}</p>
             <div className="flex gap-2">
               {COLORS.map((c) => (
                 <button
@@ -265,11 +267,11 @@ export default function RoutinesPage() {
         }}
       />
 
-      <Modal open={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)} title="Supprimer le programme ?" size="sm">
-        <p className="text-sm text-muted">Les séances déjà réalisées ne seront pas affectées.</p>
+      <Modal open={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)} title={t('routine.deleteTitle')} size="sm">
+        <p className="text-sm text-muted">{t('routine.deleteMessage')}</p>
         <div className="mt-4 flex gap-2">
           <Button block onClick={() => setDeleteTarget(null)}>
-            Annuler
+            {t('common.cancel')}
           </Button>
           <Button
             block
@@ -279,7 +281,7 @@ export default function RoutinesPage() {
               setDeleteTarget(null)
             }}
           >
-            Supprimer
+            {t('common.delete')}
           </Button>
         </div>
       </Modal>

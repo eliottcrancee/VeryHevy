@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom'
 import { CloudOff } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
 import { isCloudEnabled } from '@/lib/supabase'
+import { t, useLang } from '@/lib/i18n'
 import { Logo } from '@/components/Logo'
 import { Button, Card } from '@/components/ui'
 
@@ -22,6 +23,7 @@ function GoogleMark() {
 
 export default function LoginPage() {
   const { cloudEnabled, user, loading, signInWithGoogle } = useAuth()
+  useLang()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -35,7 +37,7 @@ export default function LoginPage() {
     try {
       await signInWithGoogle()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Connexion impossible')
+      setError(err instanceof Error ? err.message : t('auth.loginFailed'))
       setBusy(false)
     }
   }
@@ -47,22 +49,22 @@ export default function LoginPage() {
       </span>
       <Card className="w-full max-w-sm space-y-5 p-6 text-center">
         <div>
-          <h1 className="text-xl font-extrabold tracking-tight">Bienvenue sur VeryHevy</h1>
+          <h1 className="text-xl font-extrabold tracking-tight">{t('auth.title')}</h1>
           <p className="mt-1 text-sm text-muted">
-            Connectez-vous pour retrouver vos séances sur tous vos appareils.
+            {t('auth.subtitle')}
           </p>
         </div>
         <Button variant="primary" size="lg" block onClick={login} disabled={busy}>
-          <GoogleMark /> {busy ? 'Redirection vers Google…' : 'Se connecter avec Google'}
+          <GoogleMark /> {busy ? t('auth.redirecting') : t('auth.googleSignIn')}
         </Button>
         {error && <p className="text-sm text-danger">{error}</p>}
         <p className="text-[11px] text-muted">
-          Vos données restent privées : chaque compte ne voit que les siennes.
+          {t('auth.privacy')}
         </p>
       </Card>
       {!isCloudEnabled && (
         <p className="flex items-center gap-1.5 text-xs text-muted">
-          <CloudOff size={13} /> Cloud non configuré — mode local uniquement.
+          <CloudOff size={13} /> {t('auth.localOnly')}
         </p>
       )}
     </div>

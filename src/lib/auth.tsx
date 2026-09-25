@@ -3,6 +3,7 @@ import type { Session, User } from '@supabase/supabase-js'
 import { getSupabase, isCloudEnabled } from './supabase'
 import { activateAccount } from '@/store/store'
 import { syncAccountAfterSwitch } from './cloudSync'
+import { t } from './i18n'
 
 interface AuthState {
   /** Cloud désactivé (pas de VITE_SUPABASE_*) : mode 100 % local, pas de login requis. */
@@ -64,7 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [supabase])
 
   const signInWithGoogle = useCallback(async () => {
-    if (!supabase) throw new Error('Cloud non configuré (VITE_SUPABASE_URL manquante)')
+    if (!supabase) throw new Error(t('lib.cloudMisconfig'))
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {

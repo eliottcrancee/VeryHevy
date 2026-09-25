@@ -18,6 +18,7 @@ import type {
   WorkoutExercise,
   WorkoutSet,
 } from '@/types'
+import { t } from './i18n'
 
 export interface HevyImportResult {
   workouts: Workout[]
@@ -174,12 +175,12 @@ export function parseHevyCsv(
   defaultRestSeconds = 90,
 ): HevyImportResult {
   const rows = parseCsv(text)
-  if (rows.length < 2) throw new Error('CSV vide ou illisible')
+  if (rows.length < 2) throw new Error(t('lib.csvEmpty'))
   const header = rows[0].map((h) => h.trim().toLowerCase())
   const need = ['title', 'start_time', 'exercise_title', 'set_index', 'set_type']
   for (const col of need) {
     if (!header.includes(col)) {
-      throw new Error(`Colonne manquante : ${col}. Ce n'est pas un export Hevy (une ligne par série).`)
+      throw new Error(t('lib.csvColumn', { col }))
     }
   }
   const col = (name: string): number => header.indexOf(name)
@@ -215,7 +216,7 @@ export function parseHevyCsv(
   let order = 0
 
   for (const r of rows.slice(1)) {
-    const title = (r[cTitle] ?? '').trim() || 'Séance Hevy'
+    const title = (r[cTitle] ?? '').trim() || t('lib.hevyWorkout')
     const start = parseHevyDate(r[cStart] ?? '')
     if (!start) continue
     const key = `${title}|||${start}`
@@ -253,7 +254,7 @@ export function parseHevyCsv(
     })
   }
 
-  if (!groups.size) throw new Error('Aucune séance trouvée dans ce fichier')
+  if (!groups.size) throw new Error(t('lib.csvNoWorkouts'))
 
   const libByName = new Map<string, Pick<Exercise, 'id' | 'name' | 'altName'>>()
   for (const e of library) {

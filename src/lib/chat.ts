@@ -6,17 +6,18 @@
 import type { SocialProfile } from '@/types'
 import { getSupabase } from './supabase'
 import { fetchSocialProfiles } from './social'
+import { t } from './i18n'
 
 function sbOrThrow() {
   const sb = getSupabase()
-  if (!sb) throw new Error('Cloud non configuré')
+  if (!sb) throw new Error(t('session.errCloud'))
   return sb
 }
 
 async function myId(): Promise<string> {
   const sb = sbOrThrow()
   const { data: { session } } = await sb.auth.getSession()
-  if (!session?.user) throw new Error('Non connecté')
+  if (!session?.user) throw new Error(t('session.errNotLogged'))
   return session.user.id
 }
 
@@ -40,7 +41,7 @@ export async function sendRequest(sessionId: string, message = ''): Promise<void
     message: message.trim().slice(0, 280),
     status: 'pending',
   })
-  if (error && !error.message.includes('duplicate')) throw new Error(`Demande : ${error.message}`)
+  if (error && !error.message.includes('duplicate')) throw new Error(t('chat.errRequest', { msg: error.message }))
 }
 
 export async function myRequestStatus(sessionId: string): Promise<SessionRequest | null> {
@@ -52,7 +53,7 @@ export async function myRequestStatus(sessionId: string): Promise<SessionRequest
     .eq('session_id', sessionId)
     .eq('user_id', me)
     .maybeSingle()
-  if (error) throw new Error(`Demande : ${error.message}`)
+  if (error) throw new Error(t('chat.errRequest', { msg: error.message }))
   return (data as SessionRequest | null) ?? null
 }
 
@@ -60,7 +61,7 @@ export async function withdrawRequest(sessionId: string): Promise<void> {
   const sb = sbOrThrow()
   const me = await myId()
   const { error } = await sb.from('session_requests').delete().eq('session_id', sessionId).eq('user_id', me)
-  if (error) throw new Error(`Retrait : ${error.message}`)
+  if (error) throw new Error(t('chat.errWithdraw', { msg: error.message }))
 }
 
 export async function listRequests(sessionId: string): Promise<SessionRequest[]> {
@@ -70,7 +71,7 @@ export async function listRequests(sessionId: string): Promise<SessionRequest[]>
     .select('*')
     .eq('session_id', sessionId)
     .order('created_at', { ascending: true })
-  if (error) throw new Error(`Candidatures : ${error.message}`)
+  if (error) throw new Error(t('chat.errApplications', { msg: error.message }))
   const list = (data as SessionRequest[]) ?? []
   const authors = await fetchSocialProfiles([...new Set(list.map((r) => r.user_id))])
   return list.map((r) => ({ ...r, author: authors.get(r.user_id) ?? null }))
@@ -80,13 +81,13 @@ export async function listRequests(sessionId: string): Promise<SessionRequest[]>
 export async function acceptRequest(sessionId: string, userId: string): Promise<void> {
   const sb = sbOrThrow()
   const { error: jErr } = await sb.from('session_joins').insert({ session_id: sessionId, user_id: userId })
-  if (jErr && !jErr.message.includes('duplicate')) throw new Error(`Acceptation : ${jErr.message}`)
+  if (jErr && !jErr.message.includes('duplicate')) throw new Error(t('chat.errAccept', { msg: jErr.message }))
   const { error } = await sb
     .from('session_requests')
     .update({ status: 'accepted' })
     .eq('session_id', sessionId)
     .eq('user_id', userId)
-  if (error) throw new Error(`Acceptation : ${error.message}`)
+  if (error) throw new Error(t('chat.errAccept', { msg: error.message }))
 }
 
 export async function declineRequest(sessionId: string, userId: string): Promise<void> {
@@ -96,7 +97,7 @@ export async function declineRequest(sessionId: string, userId: string): Promise
     .update({ status: 'declined' })
     .eq('session_id', sessionId)
     .eq('user_id', userId)
-  if (error) throw new Error(`Refus : ${error.message}`)
+  if (error) throw new Error(t('chat.errDecline', { msg: error.message }))
 }
 
 /* ---------------------------- invitations ---------------------------- */
@@ -118,7 +119,7 @@ export async function sendInvite(sessionId: string, userId: string): Promise<voi
     user_id: userId,
     status: 'pending',
   })
-  if (error && !error.message.includes('duplicate')) throw new Error(`Invitation : ${error.message}`)
+  if (error && !error.message.includes('duplicate')) throw new Error(t('chat.errInvite', { msg: error.message }))
 }
 
 export interface MyInvite {
@@ -137,7 +138,7 @@ export async function listMyInvites(): Promise<MyInvite[]> {
     .eq('user_id', me)
     .eq('status', 'pending')
     .order('created_at', { ascending: false })
-  if (error) throw new Error(`Invitations : ${error.message}`)
+  if (error) throw new Error(t('chat.errInvite', { msg: error.message }))
   const invites = (data as SessionInvite[]) ?? []
   if (!invites.length) return []
   const rows = await Promise.all(invites.map((i) =>
@@ -161,7 +162,7 @@ export async function listSessionInvites(sessionId: string): Promise<SessionInvi
     .select('*')
     .eq('session_id', sessionId)
     .order('created_at', { ascending: true })
-  if (error) throw new Error(`Invités : ${error.message}`)
+  if (error) throw new Error(t('chat.errGuests', { msg: error.message }))
   const list = (data as SessionInvite[]) ?? []
   const authors = await fetchSocialProfiles([...new Set(list.map((r) => r.user_id))])
   return list.map((r) => ({ ...r, author: authors.get(r.user_id) ?? null }))
@@ -177,7 +178,7 @@ export async function myInviteStatus(sessionId: string): Promise<SessionInvite |
     .eq('session_id', sessionId)
     .eq('user_id', me)
     .maybeSingle()
-  if (error) throw new Error(`Invitation : ${error.message}`)
+  if (error) throw new Error(t('chat.errInvite', { msg: error.message }))
   return (data as SessionInvite | null) ?? null
 }
 
@@ -190,9 +191,9 @@ export async function acceptInvite(sessionId: string): Promise<void> {
     .update({ status: 'accepted' })
     .eq('session_id', sessionId)
     .eq('user_id', me)
-  if (uErr) throw new Error(`Acceptation : ${uErr.message}`)
+  if (uErr) throw new Error(t('chat.errAccept', { msg: uErr.message }))
   const { error: jErr } = await sb.from('session_joins').insert({ session_id: sessionId, user_id: me })
-  if (jErr && !jErr.message.includes('duplicate')) throw new Error(`Inscription : ${jErr.message}`)
+  if (jErr && !jErr.message.includes('duplicate')) throw new Error(t('chat.errJoin', { msg: jErr.message }))
 }
 
 /** Refuser une invitation (+ notifie l'hôte). */
@@ -204,21 +205,21 @@ export async function declineInvite(sessionId: string): Promise<void> {
     .update({ status: 'declined' })
     .eq('session_id', sessionId)
     .eq('user_id', me)
-  if (error) throw new Error(`Refus : ${error.message}`)
+  if (error) throw new Error(t('chat.errDecline', { msg: error.message }))
 }
 
 /** Retirer une invitation (hôte). */
 export async function cancelInvite(sessionId: string, userId: string): Promise<void> {
   const sb = sbOrThrow()
   const { error } = await sb.from('session_invites').delete().eq('session_id', sessionId).eq('user_id', userId)
-  if (error) throw new Error(`Retrait : ${error.message}`)
+  if (error) throw new Error(t('chat.errWithdraw', { msg: error.message }))
 }
 
 /** Exclure un membre d'une sortie (hôte). */
 export async function kickMember(sessionId: string, userId: string): Promise<void> {
   const sb = sbOrThrow()
   const { error } = await sb.from('session_joins').delete().eq('session_id', sessionId).eq('user_id', userId)
-  if (error) throw new Error(`Exclusion : ${error.message}`)
+  if (error) throw new Error(t('chat.errExclusion', { msg: error.message }))
 }
 
 export interface MyPendingRequest {
@@ -236,7 +237,7 @@ export async function listMyPendingRequests(): Promise<MyPendingRequest[]> {
     .eq('user_id', me)
     .eq('status', 'pending')
     .order('created_at', { ascending: false })
-  if (error) throw new Error(`Demandes : ${error.message}`)
+  if (error) throw new Error(t('chat.errDemands', { msg: error.message }))
   const reqs = (data as SessionRequest[]) ?? []
   if (!reqs.length) return []
   const { data: sessions } = await sb
@@ -266,7 +267,7 @@ export interface SessionMember {
 export async function listMembers(sessionId: string): Promise<SessionMember[]> {
   const sb = sbOrThrow()
   const { data, error } = await sb.from('session_joins').select('user_id').eq('session_id', sessionId)
-  if (error) throw new Error(`Membres : ${error.message}`)
+  if (error) throw new Error(t('chat.errMembers', { msg: error.message }))
   const ids = ((data as { user_id: string }[] ?? []).map((r) => r.user_id))
   if (!ids.length) return []
   const [profiles, reqs] = await Promise.all([
@@ -324,7 +325,7 @@ export async function listThreads(): Promise<Thread[]> {
     const { data, error } = await sb.from('messages').select('*')
       .or(`from_id.eq.${me},to_id.eq.${me}`)
       .order('created_at', { ascending: false }).range(offset, offset + 499)
-    if (error) throw new Error(`Messages : ${error.message}`)
+    if (error) throw new Error(t('chat.errMessages', { msg: error.message }))
     const page = (data as ChatMessage[]) ?? []
     all.push(...page)
     if (page.length < 500) break
@@ -348,7 +349,7 @@ export async function listThreads(): Promise<Thread[]> {
     const sid = msgs[0]?.session_id ?? null
     return {
       session_id: sid,
-      session_title: sid ? (titles.get(sid) ?? 'Séance supprimée') : 'Message direct',
+      session_title: sid ? (titles.get(sid) ?? t('chat.deletedSession')) : t('dm.direct'),
       other_id: other,
       other: profiles.get(other) ?? null,
       last: msgs[0],
@@ -367,7 +368,7 @@ export async function listMessages(otherId: string, limit = 200): Promise<ChatMe
     .or(`and(from_id.eq.${me},to_id.eq.${otherId}),and(from_id.eq.${otherId},to_id.eq.${me})`)
     .order('created_at', { ascending: false })
     .limit(limit)
-  if (error) throw new Error(`Discussion : ${error.message}`)
+  if (error) throw new Error(t('chat.errThread', { msg: error.message }))
   return ((data as ChatMessage[]) ?? []).reverse()
 }
 
@@ -377,7 +378,7 @@ export async function sendMessage(toId: string, text: string, sessionId?: string
   const sb = sbOrThrow()
   const me = await myId()
   const clean = text.trim().slice(0, 1000)
-  if (!clean) throw new Error('Message vide')
+  if (!clean) throw new Error(t('chat.errEmpty'))
   const attempt = async (sid: string | null) => {
     const { data, error } = await sb
       .from('messages')
@@ -398,10 +399,10 @@ export async function sendMessage(toId: string, text: string, sessionId?: string
         /* fallthrough : erreur d'origine ci-dessous */
       }
     }
-    throw new Error(`Envoi : ${msg || 'impossible'}`)
+    throw new Error(t('chat.errSend', { msg: msg || 'impossible' }))
   }
 }
 
-export function displayNameOf(p?: SocialProfile | null, fallback = 'Sportif'): string {
-  return p?.display_name?.trim() || (p?.username ? `@${p.username}` : fallback)
+export function displayNameOf(p?: SocialProfile | null, fallback?: string): string {
+  return p?.display_name?.trim() || (p?.username ? `@${p.username}` : (fallback ?? t('chat.defaultName')))
 }

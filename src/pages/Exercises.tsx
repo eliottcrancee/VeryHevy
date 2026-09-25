@@ -16,10 +16,12 @@ import { Button, Card, Chip, EmptyState, IconButton, Input, Segmented } from '@/
 import { ExerciseRow } from '@/components/ExercisePicker'
 import { ExerciseFormModal } from '@/components/ExerciseFormModal'
 import { normalize } from '@/lib/utils'
+import { t, tx, useLang } from '@/lib/i18n'
 
 type SortKey = 'nom' | 'recent' | 'favoris'
 
 export default function ExercisesPage() {
+  useLang()
   const exercises = useStore((s) => s.exercises)
 
   const [query, setQuery] = useState('')
@@ -78,8 +80,11 @@ export default function ExercisesPage() {
   return (
     <div>
       <PageHeader
-        title="Exercices"
-        subtitle={`${exercises.length} exercices · ${exercises.filter((e) => e.isCustom).length} personnalisés`}
+        title={t('exercise.title')}
+        subtitle={t('exercise.subtitle', {
+          t: exercises.length,
+          c: exercises.filter((e) => e.isCustom).length,
+        })}
       />
 
       <Page className="space-y-4">
@@ -89,12 +94,12 @@ export default function ExercisesPage() {
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Rechercher…"
+              placeholder={t('common.search')}
               className="pl-9"
             />
             {query && (
               <IconButton
-                label="Effacer"
+                label={t('common.clear')}
                 onClick={() => setQuery('')}
                 className="absolute top-1/2 right-1 h-8 w-8 -translate-y-1/2"
               >
@@ -113,7 +118,7 @@ export default function ExercisesPage() {
           <Button
             variant="secondary"
             className="h-11 shrink-0"
-            aria-label="Créer un exercice"
+            aria-label={t('exercise.createAria')}
             onClick={() => setCreateOpen(true)}
           >
             <Plus size={16} />
@@ -123,54 +128,54 @@ export default function ExercisesPage() {
         {showFilters && (
           <Card className="space-y-3 p-3.5">
             <div>
-              <p className="mb-2 text-[11px] font-bold tracking-wide text-muted uppercase">Catégorie</p>
+              <p className="mb-2 text-[11px] font-bold tracking-wide text-muted uppercase">{t('exercise.category')}</p>
               <div className="flex flex-wrap gap-1.5">
                 <Chip active={category === 'tous'} onClick={() => setCategory('tous')}>
-                  Toutes
+                  {t('exercise.allCat')}
                 </Chip>
                 {(Object.keys(CATEGORY_META) as ExerciseCategory[]).map((c) => (
                   <Chip key={c} active={category === c} onClick={() => setCategory(c)}>
-                    {CATEGORY_META[c].emoji} {CATEGORY_META[c].label}
+                    {CATEGORY_META[c].emoji} {tx('cat', c)}
                   </Chip>
                 ))}
               </div>
             </div>
             <div>
-              <p className="mb-2 text-[11px] font-bold tracking-wide text-muted uppercase">Muscle</p>
+              <p className="mb-2 text-[11px] font-bold tracking-wide text-muted uppercase">{t('exercise.muscle')}</p>
               <div className="flex flex-wrap gap-1.5">
                 <Chip active={muscle === 'tous'} onClick={() => setMuscle('tous')}>
-                  Tous
+                  {t('exercise.allM')}
                 </Chip>
                 {MUSCLE_GROUPS.map((m) => (
                   <Chip key={m} active={muscle === m} onClick={() => setMuscle(m)}>
-                    {m}
+                    {tx('muscle', m)}
                   </Chip>
                 ))}
               </div>
             </div>
             <div>
-              <p className="mb-2 text-[11px] font-bold tracking-wide text-muted uppercase">Matériel</p>
+              <p className="mb-2 text-[11px] font-bold tracking-wide text-muted uppercase">{t('exercise.equipment')}</p>
               <div className="flex flex-wrap gap-1.5">
                 <Chip active={equipment === 'tous'} onClick={() => setEquipment('tous')}>
-                  Tout
+                  {t('common.all')}
                 </Chip>
                 {equipmentOptions.map((eq) => (
                   <Chip key={eq} active={equipment === eq} onClick={() => setEquipment(eq)}>
-                    {eq}
+                    {tx('equip', eq)}
                   </Chip>
                 ))}
               </div>
             </div>
             <div className="flex flex-wrap gap-1.5 pt-1">
               <Chip active={onlyFavorites} onClick={() => setOnlyFavorites((v) => !v)}>
-                <Star size={12} fill={onlyFavorites ? 'currentColor' : 'none'} /> Favoris
+                <Star size={12} fill={onlyFavorites ? 'currentColor' : 'none'} /> {t('exercise.favorites')}
               </Chip>
               <Chip active={onlyCustom} onClick={() => setOnlyCustom((v) => !v)}>
-                Personnalisés
+                {t('exercise.custom')}
               </Chip>
               {hasPhotos && (
                 <Chip active={onlyPhotos} onClick={() => setOnlyPhotos((v) => !v)}>
-                  Avec photos
+                  {t('exercise.withPhotos')}
                 </Chip>
               )}
               {activeFilters > 0 && (
@@ -184,7 +189,7 @@ export default function ExercisesPage() {
                     setOnlyPhotos(false)
                   }}
                 >
-                  <X size={12} /> Réinitialiser
+                  <X size={12} /> {t('exercise.reset')}
                 </Chip>
               )}
             </div>
@@ -192,14 +197,14 @@ export default function ExercisesPage() {
         )}
 
         <div className="flex items-center justify-between gap-3">
-          <p className="text-xs font-semibold text-muted">{filtered.length} résultat{filtered.length > 1 ? 's' : ''}</p>
+          <p className="text-xs font-semibold text-muted">{t('exercise.results', { n: filtered.length })}</p>
           <Segmented
             value={sort}
             onChange={setSort}
             options={[
               { value: 'nom', label: 'A→Z' },
-              { value: 'favoris', label: 'Favoris' },
-              { value: 'recent', label: 'Récents' },
+              { value: 'favoris', label: t('exercise.favorites') },
+              { value: 'recent', label: t('exercise.sortRecent') },
             ]}
             className="w-56"
           />
@@ -209,11 +214,11 @@ export default function ExercisesPage() {
           <Card>
             <EmptyState
               icon={<Dumbbell size={26} />}
-              title="Aucun exercice"
-              message="Ajustez vos filtres ou créez un nouvel exercice."
+              title={t('exercise.none')}
+              message={t('exercise.noneHint')}
               action={
                 <Button variant="primary" onClick={() => setCreateOpen(true)}>
-                  <Plus size={16} /> Créer un exercice
+                  <Plus size={16} /> {t('exercise.createAria')}
                 </Button>
               }
             />
@@ -227,7 +232,7 @@ export default function ExercisesPage() {
             ))}
             {filtered.length > 400 && (
               <p className="py-3 text-center text-xs text-muted">
-                400 exercices affichés sur {filtered.length} — affinez la recherche.
+                {t('exercise.moreShown', { n: filtered.length })}
               </p>
             )}
           </div>

@@ -8,10 +8,11 @@
  * pas effaçable côté client (re-connexion Google recréerait un profil vide).
  */
 import { getSupabase } from './supabase'
+import { t } from './i18n'
 
 function sbOrThrow() {
   const sb = getSupabase()
-  if (!sb) throw new Error('Cloud non configuré')
+  if (!sb) throw new Error(t('lib.cloudOff'))
   return sb
 }
 
@@ -21,7 +22,7 @@ async function wipeTable(
   match: Record<string, string>,
 ): Promise<void> {
   const { error } = await sb.from(table).delete().match(match)
-  if (error) throw new Error(`${table} : ${error.message}`)
+  if (error) throw new Error(t('lib.wipeError', { table, msg: error.message }))
 }
 
 async function wipeStoragePrefix(
@@ -46,11 +47,11 @@ export async function deleteAccountEverywhere(): Promise<void> {
   const sb = sbOrThrow()
   const { data: { session } } = await sb.auth.getSession()
   const me = session?.user?.id
-  if (!me) throw new Error('Non connecté')
+  if (!me) throw new Error(t('lib.notConnected'))
 
   // 1. Messages (envoyés ou reçus) — policy "message delete participant".
   const { error: mErr } = await sb.from('messages').delete().or(`from_id.eq.${me},to_id.eq.${me}`)
-  if (mErr) throw new Error(`messages : ${mErr.message}`)
+  if (mErr) throw new Error(t('lib.wipeMessages', { msg: mErr.message }))
 
   // 2. Notifications reçues.
   await wipeTable(sb, 'notifications', { user_id: me })

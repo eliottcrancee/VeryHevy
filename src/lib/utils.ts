@@ -1,5 +1,11 @@
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
+import { currentLang, localeOf } from './i18n'
+
+/** Locale Intl selon la langue d'interface (dates, nombres). */
+export function intlLocale(): string {
+  return localeOf(currentLang())
+}
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -42,7 +48,7 @@ export function formatWeight(kg: number | undefined, unit: 'kg' | 'lb', withUnit
 /** Volume d'entraînement (kg × reps) formaté dans l'unité choisie. */
 export function formatVolume(kgVolume: number, unit: 'kg' | 'lb'): string {
   if (!Number.isFinite(kgVolume)) return '—'
-  return `${Math.round(kgToDisplay(kgVolume, unit)).toLocaleString('fr-FR')} ${unit}`
+  return `${Math.round(kgToDisplay(kgVolume, unit)).toLocaleString(intlLocale())} ${unit}`
 }
 
 /** kg (canonique, stocké en base) → valeur à afficher dans un champ de saisie. */
@@ -149,11 +155,11 @@ export function formatDate(iso: string, mode: 'short' | 'long' | 'day' = 'short'
       : mode === 'day'
         ? { weekday: 'long' }
         : { day: 'numeric', month: 'short', year: d.getFullYear() === now.getFullYear() ? undefined : 'numeric' }
-  return new Intl.DateTimeFormat('fr-FR', opts).format(d)
+  return new Intl.DateTimeFormat(intlLocale(), opts).format(d)
 }
 
 export function formatTime(iso: string) {
-  return new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit' }).format(
+  return new Intl.DateTimeFormat(intlLocale(), { hour: '2-digit', minute: '2-digit' }).format(
     new Date(iso),
   )
 }

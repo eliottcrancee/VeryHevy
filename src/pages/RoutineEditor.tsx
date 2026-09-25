@@ -39,6 +39,7 @@ import { ExercisePicker, ExerciseAvatar } from '@/components/ExercisePicker'
 import { CategoryBadge } from '@/components/ExerciseFormModal'
 import { useBottomBar } from '@/hooks/app'
 import { cn, displayToMeters, inputToKg, kgToInput, metersToDisplay } from '@/lib/utils'
+import { t, tx, useLang } from '@/lib/i18n'
 
 /* ------------------------------------------------------------------ */
 
@@ -60,6 +61,7 @@ function SortableRow({ id, children }: { id: string; children: (handle: React.HT
 export default function RoutineEditorPage() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
+  useLang()
   const routine = useStore((s) => s.routines.find((r) => r.id === id))
   const exercises = useStore((s) => s.exercises)
   const updateRoutine = useStore((s) => s.updateRoutine)
@@ -86,15 +88,15 @@ export default function RoutineEditorPage() {
   if (!routine) {
     return (
       <div>
-        <PageHeader title="Programme" back="/programmes" />
+        <PageHeader title={t('routine.programTitle')} back="/programmes" />
         <Page>
           <Card>
             <EmptyState
               icon={<Trash2 size={24} />}
-              title="Programme introuvable"
+              title={t('routine.notFound')}
               action={
                 <Button variant="primary" onClick={() => navigate('/programmes')}>
-                  Retour aux programmes
+                  {t('routine.backToList')}
                 </Button>
               }
             />
@@ -123,23 +125,23 @@ export default function RoutineEditorPage() {
     <div>
       <PageHeader
         back="/programmes"
-        title="Modifier le programme"
-        subtitle={`${routine.exercises.length} exercice${routine.exercises.length > 1 ? 's' : ''}`}
+        title={t('routine.editTitle')}
+        subtitle={t('routine.exNum', { n: routine.exercises.length })}
         actions={
           <>
-            <IconButton label="Dupliquer" onClick={() => navigate(`/programmes/${duplicateRoutine(routine.id)}`)}>
+            <IconButton label={t('routine.duplicate')} onClick={() => navigate(`/programmes/${duplicateRoutine(routine.id)}`)}>
               <Copy size={17} />
             </IconButton>
             <Menu
               align="right"
               trigger={({ toggle }) => (
-                <IconButton label="Options" onClick={toggle}>
+                <IconButton label={t('workout.optionsMenu')} onClick={toggle}>
                   <MoreVertical size={18} />
                 </IconButton>
               )}
               items={[
                 {
-                  label: 'Supprimer le programme',
+                  label: t('routine.deleteProgram'),
                   icon: <Trash2 size={15} />,
                   danger: true,
                   onClick: () => {
@@ -155,26 +157,26 @@ export default function RoutineEditorPage() {
 
       <Page className="max-w-3xl space-y-4">
         <Card className="space-y-4 p-4">
-          <Field label="Nom">
+          <Field label={t('routine.name')}>
             <Input value={routine.name} onChange={(e) => updateRoutine(routine.id, { name: e.target.value })} />
           </Field>
-          <Field label="Description">
+          <Field label={t('routine.description')}>
             <Textarea
               value={routine.description ?? ''}
               onChange={(e) => updateRoutine(routine.id, { description: e.target.value })}
               className="min-h-16"
-              placeholder="Objectif, fréquence, notes…"
+              placeholder={t('routine.descHint')}
             />
           </Field>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Dossier">
+            <Field label={t('routine.folder')}>
               <Input
                 value={routine.folder ?? ''}
                 onChange={(e) => updateRoutine(routine.id, { folder: e.target.value })}
-                placeholder="Ex. PPL, Cardio…"
+                placeholder={t('routine.folderEx')}
               />
             </Field>
-            <Field label="Couleur">
+            <Field label={t('routine.color')}>
               <input
                 type="color"
                 value={routine.color}
@@ -189,11 +191,11 @@ export default function RoutineEditorPage() {
           <Card>
             <EmptyState
               icon={<Plus size={24} />}
-              title="Programme vide"
-              message="Ajoute les exercices de ce programme."
+              title={t('routine.emptyProgram')}
+              message={t('routine.emptyProgramHint')}
               action={
                 <Button variant="primary" onClick={() => setPickerOpen(true)}>
-                  <Plus size={16} /> Ajouter des exercices
+                  <Plus size={16} /> {t('routine.addExercises')}
                 </Button>
               }
             />
@@ -218,38 +220,38 @@ export default function RoutineEditorPage() {
                             <button
                               {...handle}
                               className="-ml-1 flex h-8 w-6 cursor-grab items-center justify-center text-muted/50 touch-none active:cursor-grabbing"
-                              aria-label="Réordonner"
+                              aria-label={t('routine.reorder')}
                             >
                               <GripVertical size={16} />
                             </button>
                             {ex && <ExerciseAvatar exercise={ex} size={32} />}
                             <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-bold">{ex?.name ?? re.exerciseName ?? 'Exercice supprimé'}</p>
+                              <p className="truncate text-sm font-bold">{ex?.name ?? re.exerciseName ?? t('workout.deletedExercise')}</p>
                               {ex && <CategoryBadge category={ex.category} />}
                             </div>
                             <Menu
                               align="right"
                               trigger={({ toggle }) => (
-                                <IconButton label="Options" onClick={toggle}>
+                                <IconButton label={t('workout.optionsMenu')} onClick={toggle}>
                                   <MoreVertical size={16} />
                                 </IconButton>
                               )}
                               items={[
-                                { label: 'Remplacer', icon: <Replace size={14} />, onClick: () => setReplaceTarget(re.id) },
+                                { label: t('routine.replace'), icon: <Replace size={14} />, onClick: () => setReplaceTarget(re.id) },
                                 {
-                                  label: 'Monter',
+                                  label: t('routine.moveUp'),
                                   icon: null,
                                   hidden: index === 0,
                                   onClick: () => moveRoutineExercise(routine.id, re.id, index - 1),
                                 },
                                 {
-                                  label: 'Descendre',
+                                  label: t('routine.moveDown'),
                                   icon: null,
                                   hidden: index === routine.exercises.length - 1,
                                   onClick: () => moveRoutineExercise(routine.id, re.id, index + 1),
                                 },
                                 {
-                                  label: 'Supprimer',
+                                  label: t('common.delete'),
                                   icon: <Trash2 size={14} />,
                                   danger: true,
                                   onClick: () => removeRoutineExercise(routine.id, re.id),
@@ -269,8 +271,8 @@ export default function RoutineEditorPage() {
                                     updateSets(re, i, { type: next })
                                   }}
                                   style={{ color: SET_TYPE_META[set.type].color }}
-                                  title={`Type de série : ${SET_TYPE_META[set.type].label}`}
-                                  aria-label={`Type de série : ${SET_TYPE_META[set.type].label}`}
+                                  title={t('routine.setTypeLabel', { type: tx('set', set.type) })}
+                                  aria-label={t('routine.setTypeLabel', { type: tx('set', set.type) })}
                                   className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-[11px] font-extrabold transition-colors hover:bg-surface-3"
                                 >
                                   {SET_TYPE_META[set.type].short || i + 1}
@@ -285,7 +287,7 @@ export default function RoutineEditorPage() {
                                     decimals={settings.unit === 'kg' ? 2 : 1}
                                     placeholder={settings.unit}
                                     suffix={settings.unit}
-                                    ariaLabel={`Charge série ${i + 1}`}
+                                    ariaLabel={t('routine.loadAria', { n: i + 1 })}
                                   />
                                 )}
                                 {fields.includes('reps') && (
@@ -295,15 +297,15 @@ export default function RoutineEditorPage() {
                                     onChange={(v) => updateSets(re, i, { reps: v })}
                                     step={1}
                                     decimals={0}
-                                    placeholder="reps"
-                                    ariaLabel={`Reps série ${i + 1}`}
+                                    placeholder={t('routine.repsPh')}
+                                    ariaLabel={t('routine.repsAria', { n: i + 1 })}
                                   />
                                 )}
                                 {fields.includes('duration') && (
                                   <DurationField
                                     value={set.duration}
                                     onChange={(v) => updateSets(re, i, { duration: v })}
-                                    ariaLabel={`Durée série ${i + 1}`}
+                                    ariaLabel={t('routine.durationAria', { n: i + 1 })}
                                     className="min-w-0 flex-1 border-transparent bg-surface-2/60"
                                   />
                                 )}
@@ -316,12 +318,12 @@ export default function RoutineEditorPage() {
                                     decimals={2}
                                     placeholder={settings.distanceUnit}
                                     suffix={settings.distanceUnit}
-                                    ariaLabel={`Distance série ${i + 1}`}
+                                    ariaLabel={t('routine.distanceAria', { n: i + 1 })}
                                   />
                                 )}
 
                                 <IconButton
-                                  label="Supprimer la série"
+                                  label={t('routine.deleteSet')}
                                   className="h-8 w-8"
                                   onClick={() =>
                                     updateRoutineExercise(routine.id, re.id, {
@@ -354,10 +356,10 @@ export default function RoutineEditorPage() {
                                   })
                                 }
                               >
-                                <Plus size={13} /> Série
+                                <Plus size={13} /> {t('routine.addSet')}
                               </Button>
                               <div className="ml-auto flex items-center gap-2">
-                                <span className="text-[11px] text-muted">Repos</span>
+                                <span className="text-[11px] text-muted">{t('routine.rest')}</span>
                                 <NumberField
                                   className="h-8 w-24 border-transparent bg-surface-2/60"
                                   value={re.restSeconds}
@@ -366,7 +368,7 @@ export default function RoutineEditorPage() {
                                   min={0}
                                   decimals={0}
                                   suffix="s"
-                                  ariaLabel="Temps de repos"
+                                  ariaLabel={t('routine.restAria')}
                                 />
                               </div>
                             </div>
@@ -382,7 +384,7 @@ export default function RoutineEditorPage() {
         )}
 
         <Button block variant="outline" onClick={() => setPickerOpen(true)}>
-          <Plus size={16} /> Ajouter un exercice
+          <Plus size={16} /> {t('workout.addExercise')}
         </Button>
       </Page>
 
@@ -393,7 +395,7 @@ export default function RoutineEditorPage() {
       >
         <div className="mx-auto flex max-w-3xl gap-2">
           <Button variant="ghost" onClick={() => navigate('/programmes')}>
-            Fermer
+            {t('common.close')}
           </Button>
           <Button
             variant="primary"
@@ -401,14 +403,14 @@ export default function RoutineEditorPage() {
             className="flex-1"
             onClick={() => {
               if (!routine.exercises.length) {
-                notify('Ajoutez au moins un exercice', 'error')
+                notify(t('routine.needOneExercise'), 'error')
                 return
               }
               startWorkout({ templateId: routine.id, templateName: routine.name })
               navigate('/seance')
             }}
           >
-            <Play size={18} /> Démarrer ce programme
+            <Play size={18} /> {t('routine.startProgram')}
           </Button>
         </div>
       </div>
@@ -423,7 +425,7 @@ export default function RoutineEditorPage() {
       <ExercisePicker
         open={Boolean(replaceTarget)}
         onClose={() => setReplaceTarget(null)}
-        title="Remplacer par…"
+        title={t('workout.replaceWith')}
         onPick={(ids) => {
           if (replaceTarget && ids[0]) {
             const name = exercises.find((e) => e.id === ids[0])?.name

@@ -47,7 +47,6 @@ import {
 } from '@/components/ui'
 import {
   arcWorkouts,
-  RECORD_LABELS,
   detectNewRecords,
   estimate1RM,
   muscleBreakdown,
@@ -62,11 +61,23 @@ import { downloadJSON, formatDate, formatDistance, formatDuration, formatTime, f
 import { shareWorkout } from '@/lib/share'
 import { SharePostModal } from '@/components/SharePostModal'
 import { useAuth } from '@/lib/auth'
+import { t, tx, useLang } from '@/lib/i18n'
+
+/** Libellés de records traduisibles (clé i18n par type de record). */
+const RECORD_KEYS = {
+  weight: 'workout.recWeight',
+  e1rm: 'workout.recE1rm',
+  reps: 'workout.recReps',
+  volume: 'workout.recVolume',
+  duration: 'workout.recDuration',
+  distance: 'workout.recDistance',
+} as const
 
 export default function WorkoutReportPage() {
   const { id = '' } = useParams()
   const location = useLocation()
   const navigate = useNavigate()
+  useLang()
   const workout = useStore((s) => s.workouts.find((w) => w.id === id))
   const workouts = useStore((s) => s.workouts)
   const exercises = useStore((s) => s.exercises)
@@ -125,16 +136,16 @@ export default function WorkoutReportPage() {
   if (!workout) {
     return (
       <div>
-        <PageHeader title="Séance" back="/historique" />
+        <PageHeader title={t('workout.report')} back="/historique" />
         <Page>
           <Card>
             <EmptyState
               icon={<Dumbbell size={26} />}
-              title="Séance introuvable"
-              message="Elle a peut-être été supprimée."
+              title={t('workout.notFound')}
+              message={t('workout.deletedHint')}
               action={
                 <Button variant="primary" onClick={() => navigate('/historique')}>
-                  Retour à l’historique
+                  {t('workout.backHistory')}
                 </Button>
               }
             />
@@ -177,9 +188,9 @@ export default function WorkoutReportPage() {
           <>
             {!isActive && (
               <IconButton
-                label="Renommer"
+                label={t('workout.renameAction')}
                 onClick={() => {
-                  const name = window.prompt('Nom de la séance', workout.name)
+                  const name = window.prompt(t('workout.promptName'), workout.name)
                   if (name?.trim()) updateWorkout(workout.id, { name: name.trim() })
                 }}
               >
@@ -188,7 +199,7 @@ export default function WorkoutReportPage() {
             )}
             {!isActive && (
               <IconButton
-                label="Partager en image"
+                label={t('workout.shareImage')}
                 onClick={() =>
                   void shareWorkout({ workout, exercises, settings, previousWorkouts, notify })
                 }
@@ -197,20 +208,20 @@ export default function WorkoutReportPage() {
               </IconButton>
             )}
             {!isActive && cloudEnabled && (
-              <IconButton label="Publier dans le feed" onClick={() => setShareOpen(true)}>
+              <IconButton label={t('workout.publish')} onClick={() => setShareOpen(true)}>
                 <Megaphone size={17} />
               </IconButton>
             )}
             <Menu
               align="right"
               trigger={({ toggle }) => (
-                <IconButton label="Options" onClick={toggle}>
+                <IconButton label={t('workout.optionsMenu')} onClick={toggle}>
                   <ChevronRight size={18} className="rotate-90" />
                 </IconButton>
               )}
               items={[
                 {
-                  label: isActive ? 'Reprendre la séance' : 'Modifier la séance',
+                  label: isActive ? t('workout.resumeSession') : t('workout.editSession'),
                   icon: <Pencil size={15} />,
                   onClick: () => {
                     reopenWorkout(workout.id)
@@ -218,7 +229,7 @@ export default function WorkoutReportPage() {
                   },
                 },
                 {
-                  label: 'Réenregistrer cette séance',
+                  label: t('workout.redo'),
                   icon: <Play size={15} />,
                   onClick: () => {
                     if (workouts.some((w) => w.status === 'active')) {
@@ -235,7 +246,7 @@ export default function WorkoutReportPage() {
                   },
                 },
                 {
-                  label: 'Enregistrer comme programme',
+                  label: t('workout.saveAsProgram'),
                   icon: <Save size={15} />,
                   onClick: () => {
                     setRoutineName(workout.name)
@@ -243,12 +254,12 @@ export default function WorkoutReportPage() {
                   },
                 },
                 {
-                  label: 'Exporter en JSON',
+                  label: t('workout.exportJson'),
                   icon: <Download size={15} />,
                   onClick: () => downloadJSON(`veryhevy-seance-${workout.id}.json`, workout),
                 },
                 {
-                  label: 'Supprimer la séance',
+                  label: t('workout.deleteSession'),
                   icon: <Trash2 size={15} />,
                   danger: true,
                   onClick: () => setConfirmDelete(true),
@@ -270,8 +281,8 @@ export default function WorkoutReportPage() {
               <Play size={15} fill="currentColor" />
             </span>
             <span className="flex-1">
-              <span className="block text-sm font-bold">Séance en cours</span>
-              <span className="block text-[11px] text-muted">Appuyez pour continuer l’entraînement</span>
+              <span className="block text-sm font-bold">{t('workout.ongoing')}</span>
+              <span className="block text-[11px] text-muted">{t('workout.tapContinue')}</span>
             </span>
             <ChevronRight size={18} className="text-accent" />
           </button>
@@ -279,14 +290,14 @@ export default function WorkoutReportPage() {
 
         {/* Résumé */}
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <Stat label="Durée" value={formatDuration(duration, 'compact')} icon={<Clock size={12} />} sub={compare(duration, previousSame ? workoutDurationSeconds(previousSame) : undefined)} />
+          <Stat label={t('workout.duration')} value={formatDuration(duration, 'compact')} icon={<Clock size={12} />} sub={compare(duration, previousSame ? workoutDurationSeconds(previousSame) : undefined)} />
           <Stat
-            label="Volume"
+            label={t('stats.volume')}
             value={formatVolume(volume, settings.unit)}
             icon={<Weight size={12} />}
           />
-          <Stat label="Séries" value={sets} sub={compare(sets, previousSame ? workoutSets(previousSame) : undefined)} icon={<Flame size={12} />} />
-          <Stat label="Reps" value={reps} icon={<Dumbbell size={12} />} />
+          <Stat label={t('stats.sets')} value={sets} sub={compare(sets, previousSame ? workoutSets(previousSame) : undefined)} icon={<Flame size={12} />} />
+          <Stat label={t('workout.reps')} value={reps} icon={<Dumbbell size={12} />} />
         </div>
 
         {previousSame && (
@@ -295,16 +306,18 @@ export default function WorkoutReportPage() {
               <Calendar size={16} />
             </span>
             <div className="min-w-0 flex-1 text-sm">
-              <p className="font-semibold">Comparé à la séance du {formatDate(previousSame.startedAt)}</p>
+              <p className="font-semibold">{t('workout.compared', { date: formatDate(previousSame.startedAt) })}</p>
               <p className="text-xs text-muted">
-                Volume {Math.round(kgToDisplay(workoutVolume(previousSame), settings.unit)).toLocaleString('fr-FR')}{' '}
-                {settings.unit} →{' '}
-                {Math.round(kgToDisplay(volume, settings.unit)).toLocaleString('fr-FR')} {settings.unit}{' '}
+                {t('workout.volumeCompare', {
+                  a: Math.round(kgToDisplay(workoutVolume(previousSame), settings.unit)).toLocaleString('fr-FR'),
+                  b: Math.round(kgToDisplay(volume, settings.unit)).toLocaleString('fr-FR'),
+                  u: settings.unit,
+                })}{' '}
                 {compare(volume, workoutVolume(previousSame))}
               </p>
             </div>
             <Link to={`/historique/${previousSame.id}`} className="text-xs font-semibold text-accent">
-              Voir
+              {t('workout.view')}
             </Link>
           </Card>
         )}
@@ -312,13 +325,13 @@ export default function WorkoutReportPage() {
         {/* Records */}
         {records.length > 0 && (
           <Card className="border-warning/40 bg-warning/5 p-4">
-            <SectionTitle>🏆 Nouveaux records</SectionTitle>
+            <SectionTitle>{t('workout.newRecords')}</SectionTitle>
             <div className="space-y-1.5">
               {records.map((r, i) => (
                 <div key={i} className="flex items-center gap-2 text-sm">
                   <Trophy size={14} className="shrink-0 text-warning" />
                   <span className="min-w-0 flex-1 truncate font-semibold">{r.exercise.name}</span>
-                  <span className="text-xs text-muted">{RECORD_LABELS[r.record.kind]}</span>
+                  <span className="text-xs text-muted">{t(RECORD_KEYS[r.record.kind])}</span>
                   <span className="tabular font-bold text-warning">
                     {r.record.kind === 'weight' || r.record.kind === 'e1rm'
                       ? formatWeight(r.record.value, settings.unit)
@@ -339,7 +352,7 @@ export default function WorkoutReportPage() {
         {/* Répartition musculaire */}
         {chartData.length > 0 && (
           <Card className="p-4">
-            <SectionTitle>Répartition des séries par muscle</SectionTitle>
+            <SectionTitle>{t('workout.muscleSplit')}</SectionTitle>
             <div className="h-44">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData} margin={{ top: 4, right: 4, left: -8, bottom: 0 }}>
@@ -352,6 +365,7 @@ export default function WorkoutReportPage() {
                     angle={-30}
                     textAnchor="end"
                     height={50}
+                    tickFormatter={(v: string) => tx('muscle', v)}
                   />
                   <YAxis
                     tick={{ fontSize: 10, fill: 'var(--muted)' }}
@@ -366,12 +380,15 @@ export default function WorkoutReportPage() {
                     content={
                       <ChartTooltipContent
                         format={(p, datum) =>
-                          `${p.value} séries · ${formatVolume(Number(datum.volume ?? 0), settings.unit)}`
+                          t('workout.muscleTip', {
+                            sets: p.value,
+                            vol: formatVolume(Number(datum.volume ?? 0), settings.unit),
+                          })
                         }
                       />
                     }
                   />
-                  <Bar dataKey="sets" name="Séries" radius={[6, 6, 2, 2]} maxBarSize={40} minPointSize={2}>
+                  <Bar dataKey="sets" name={t('stats.chartSets')} radius={[6, 6, 2, 2]} maxBarSize={40} minPointSize={2}>
                     {chartData.map((_, i) => (
                       <Cell key={i} fill="var(--accent)" fillOpacity={Math.max(0.45, 1 - i * 0.08)} />
                     ))}
@@ -384,7 +401,7 @@ export default function WorkoutReportPage() {
 
         {/* Détail des exercices */}
         <div>
-          <SectionTitle>{workout.exercises.length} exercices</SectionTitle>
+          <SectionTitle>{t('history.exCount', { n: workout.exercises.length })}</SectionTitle>
           <div className="space-y-3">
             {workout.exercises.map((we) => {
               const ex = exerciseMap.get(we.exerciseId)
@@ -401,13 +418,13 @@ export default function WorkoutReportPage() {
                             {ex.name}
                           </Link>
                         ) : (
-                          <span className="truncate font-bold" title="Exercice supprimé de la bibliothèque">
-                            {we.exerciseName ?? 'Exercice supprimé'}
+                          <span className="truncate font-bold" title={t('workout.deletedExerciseTitle')}>
+                            {we.exerciseName ?? t('workout.deletedExercise')}
                           </span>
                         )}
                         {ex && (
                           <span className="shrink-0 rounded-md bg-surface-2 px-1.5 py-0.5 text-[10px] font-bold text-muted">
-                            {CATEGORY_META[ex.category].emoji} {ex.primaryMuscles[0]}
+                            {CATEGORY_META[ex.category].emoji} {tx('muscle', ex.primaryMuscles[0])}
                           </span>
                         )}
                       </div>
@@ -444,9 +461,9 @@ export default function WorkoutReportPage() {
                             {s.rpe !== undefined && <span className="text-muted">RPE {s.rpe}</span>}
                           </span>
                           {s.completed ? (
-                            <span className="shrink-0 text-[11px] font-semibold text-success">validée</span>
+                            <span className="shrink-0 text-[11px] font-semibold text-success">{t('workout.validatedSet')}</span>
                           ) : (
-                            <span className="shrink-0 text-[11px] text-muted">ignorée</span>
+                            <span className="shrink-0 text-[11px] text-muted">{t('workout.ignoredSet')}</span>
                           )}
                         </div>
                       )
@@ -467,9 +484,9 @@ export default function WorkoutReportPage() {
         {/* Notes & note globale */}
         <Card className="p-4">
           <div className="flex items-center justify-between">
-            <SectionTitle className="mb-0">Notes de séance</SectionTitle>
+            <SectionTitle className="mb-0">{t('workout.sessionNotes')}</SectionTitle>
             <Button size="sm" variant="ghost" onClick={() => setEditNotes((v) => !v)}>
-              {editNotes ? 'Fermer' : 'Modifier'}
+              {editNotes ? t('common.close') : t('workout.edit')}
             </Button>
           </div>
           {editNotes ? (
@@ -478,20 +495,20 @@ export default function WorkoutReportPage() {
               autoFocus
               value={workout.notes ?? ''}
               onChange={(e) => updateWorkout(workout.id, { notes: e.target.value })}
-              placeholder="Sensations, énergie, douleurs…"
+              placeholder={t('workout.notesHint2')}
             />
           ) : (
             <p className={`mt-2 text-sm ${workout.notes ? '' : 'text-muted italic'}`}>
-              {workout.notes || 'Aucune note pour cette séance.'}
+              {workout.notes || t('workout.noNotes')}
             </p>
           )}
           {workout.bodyweightKg !== undefined && (
             <p className="mt-3 text-xs text-muted">
-              Poids de corps : {formatWeight(workout.bodyweightKg, settings.unit)}
+              {t('workout.bodyweightIs', { w: formatWeight(workout.bodyweightKg, settings.unit) })}
             </p>
           )}
           <div className="mt-4 flex items-center justify-between border-t border-line pt-3">
-            <span className="text-xs font-semibold text-muted">Note de la séance</span>
+            <span className="text-xs font-semibold text-muted">{t('workout.rateSession')}</span>
             <Rating value={workout.rating} onChange={(v) => updateWorkout(workout.id, { rating: v || undefined })} />
           </div>
         </Card>
@@ -504,10 +521,10 @@ export default function WorkoutReportPage() {
                 navigate('/seance')
               }}
             >
-              <Pencil size={16} /> Modifier
+              <Pencil size={16} /> {t('workout.edit')}
             </Button>
             <Button variant="primary" onClick={() => setSaveRoutineOpen(true)}>
-              <Copy size={16} /> Enregistrer comme programme
+              <Copy size={16} /> {t('workout.saveAsProgram')}
             </Button>
           </div>
         )}
@@ -516,9 +533,9 @@ export default function WorkoutReportPage() {
 
       <ConfirmDialog
         open={confirmDelete}
-        title="Supprimer cette séance ?"
-        message="Cette action est définitive et retirera la séance de l’historique et des statistiques."
-        confirmLabel="Supprimer"
+        title={t('workout.deleteTitle')}
+        message={t('workout.deleteMessage')}
+        confirmLabel={t('common.delete')}
         danger
         onCancel={() => setConfirmDelete(false)}
         onConfirm={() => {
@@ -528,12 +545,12 @@ export default function WorkoutReportPage() {
         }}
       />
 
-      <Modal open={saveRoutineOpen} onClose={() => setSaveRoutineOpen(false)} title="Enregistrer comme programme" size="sm">
-        <p className="mb-3 text-sm text-muted">Reprend les exercices, l’ordre et les séries (sans les charges).</p>
+      <Modal open={saveRoutineOpen} onClose={() => setSaveRoutineOpen(false)} title={t('workout.saveAsProgram')} size="sm">
+        <p className="mb-3 text-sm text-muted">{t('workout.saveProgramHint2')}</p>
         <Input value={routineName} onChange={(e) => setRoutineName(e.target.value)} autoFocus />
         <div className="mt-4 flex gap-2">
           <Button block onClick={() => setSaveRoutineOpen(false)}>
-            Annuler
+            {t('common.cancel')}
           </Button>
           <Button
             block
@@ -543,7 +560,7 @@ export default function WorkoutReportPage() {
               setSaveRoutineOpen(false)
             }}
           >
-            Enregistrer
+            {t('common.save')}
           </Button>
         </div>
       </Modal>

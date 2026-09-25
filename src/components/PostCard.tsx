@@ -18,6 +18,7 @@ import { workoutDurationSeconds, workoutSets, workoutVolume } from '@/lib/calc'
 import { formatDate, formatDuration, formatVolume } from '@/lib/utils'
 import { Button, Card, Field, Input, Modal, Select, Textarea } from '@/components/ui'
 import { ReportDialog } from '@/components/ReportDialog'
+import { t, useLang } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import { uid } from '@/lib/utils'
 
@@ -68,33 +69,34 @@ function WorkoutDetail({
   onStart: () => void
   onOpen?: () => void
 }) {
+  useLang()
   return (
     <div className="rounded-xl bg-surface-2 p-2.5">
       <div className="space-y-1.5">
         <p className="text-[13px] font-extrabold">{name}</p>
         <p className="text-[11px] text-muted">
-          {sets} séries · {formatVolume(volume, 'kg')} · {formatDuration(seconds, 'compact')}
+          {t('post.setsCount', { count: sets })} · {formatVolume(volume, 'kg')} · {formatDuration(seconds, 'compact')}
         </p>
         <ul className="space-y-0.5">
           {exercises.slice(0, 6).map((e, i) => (
             <li key={i} className="text-xs text-muted">
-              {e.name} · {e.count} série(s)
+              {e.name} · {t('post.setCount', { count: e.count })}
             </li>
           ))}
         </ul>
         {exercises.length > 6 && (
-          <p className="text-[11px] text-muted">+{exercises.length - 6} exercice(s)</p>
+          <p className="text-[11px] text-muted">{t('post.moreExercises', { count: exercises.length - 6 })}</p>
         )}
         <div className="flex flex-wrap gap-2 pt-1">
           <Button size="sm" variant="primary" disabled={busy} onClick={onSave}>
-            <BookmarkPlus size={14} /> Enregistrer comme programme
+            <BookmarkPlus size={14} /> {t('post.saveAsProgram')}
           </Button>
           <Button size="sm" variant="ghost" disabled={busy} onClick={onStart}>
-            <Play size={14} /> Démarrer maintenant
+            <Play size={14} /> {t('post.startNow')}
           </Button>
           {onOpen && (
             <Button size="sm" variant="ghost" onClick={onOpen}>
-              Ouvrir
+              {t('post.open')}
             </Button>
           )}
         </div>
@@ -105,6 +107,7 @@ function WorkoutDetail({
 
 export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => void }) {
   const { user } = useAuth()
+  useLang()
   const navigate = useNavigate()
   const notify = useStore((s) => s.notify)
   const localWorkouts = useStore((s) => s.workouts)
@@ -139,7 +142,7 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
     } catch (err) {
       setLiked(prev)
       setLikes((n) => n + (prev ? 1 : -1))
-      notify(err instanceof Error ? err.message : 'Like impossible', 'error')
+      notify(err instanceof Error ? err.message : t('post.likeFailed'), 'error')
     }
   }
 
@@ -151,7 +154,7 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
       try {
         setComments(await listComments(post.id))
       } catch (err) {
-        notify(err instanceof Error ? err.message : 'Commentaires illisibles', 'error')
+        notify(err instanceof Error ? err.message : t('post.commentsFailed'), 'error')
       } finally {
         setLoadingComments(false)
       }
@@ -167,7 +170,7 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
       setDraft('')
       onChanged?.()
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Envoi impossible', 'error')
+      notify(err instanceof Error ? err.message : t('post.sendFailed'), 'error')
     } finally {
       setSending(false)
     }
@@ -178,18 +181,18 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
       await deleteComment(id)
       setComments((list) => (list ?? []).filter((c) => c.id !== id))
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Suppression impossible', 'error')
+      notify(err instanceof Error ? err.message : t('post.deleteFailed'), 'error')
     }
   }
 
   const removePost = async () => {
-    if (!window.confirm('Supprimer ce post ?')) return
+    if (!window.confirm(t('post.deleteConfirm'))) return
     try {
       await deletePost(post.id)
-      notify('Post supprimé', 'info')
+      notify(t('post.deleted'), 'info')
       onChanged?.()
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Suppression impossible', 'error')
+      notify(err instanceof Error ? err.message : t('post.deleteFailed'), 'error')
     }
   }
 
@@ -198,9 +201,9 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
     try {
       await updatePost(post.id, caption, visibility)
       setEditOpen(false)
-      notify('Publication modifiée', 'success')
+      notify(t('post.updated'), 'success')
       onChanged?.()
-    } catch (err) { notify(err instanceof Error ? err.message : 'Modification impossible', 'error') }
+    } catch (err) { notify(err instanceof Error ? err.message : t('post.updateFailed'), 'error') }
     finally { setBusy(false) }
   }
 
@@ -215,7 +218,7 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
       try {
         setRemoteWorkout(await getPostWorkout(post))
       } catch (err) {
-        notify(err instanceof Error ? err.message : 'Séance illisible', 'error')
+        notify(err instanceof Error ? err.message : t('post.workoutFailed'), 'error')
       } finally {
         setLoadingWorkout(false)
       }
@@ -230,7 +233,7 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
     if (busy) return
     const st = useStore.getState()
     if (start && st.workouts.some((w) => w.status === 'active')) {
-      notify('Termine ta séance en cours avant d’en démarrer une autre', 'error')
+      notify(t('post.finishCurrentFirst'), 'error')
       return
     }
     setBusy(true)
@@ -256,7 +259,7 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
       } else {
         st.createRoutine({
           name: source.name,
-          description: 'Enregistré depuis une publication',
+          description: t('post.savedFromPost'),
           exercises: exercises.map((e) => ({
             id: uid('re'), exerciseId: e.exerciseId, exerciseName: e.exerciseName,
             restSeconds: st.settings.defaultRestSeconds,
@@ -265,10 +268,10 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
               duration: s.duration ?? undefined })),
           })),
         })
-        notify('Programme enregistré dans Programmes', 'success')
+        notify(t('post.programSaved'), 'success')
       }
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Copie impossible', 'error')
+      notify(err instanceof Error ? err.message : t('post.copyFailed'), 'error')
     } finally {
       setBusy(false)
     }
@@ -286,14 +289,14 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
     let w: Workout | null | undefined = localWorkout
     if (!w && post.workout_id) w = await getPostWorkout(post)
     if (!w) {
-      notify('Séance introuvable', 'error')
+      notify(t('post.workoutMissing'), 'error')
       return
     }
     await cloneSource({
       name: w.name,
       exercises: w.exercises.map((we) => ({
         exerciseId: we.exerciseId,
-        name: we.exerciseName ?? 'Exercice',
+        name: we.exerciseName ?? t('lib.exerciseFallback'),
         sets: we.sets,
       })),
     }, start)
@@ -319,13 +322,13 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
             <p className="truncate text-sm font-extrabold">{authorName}</p>
           )}
           <p className="text-[11px] text-muted">
-            {formatDate(post.created_at)} · {post.visibility === 'public' ? 'Public' : post.visibility === 'followers' ? 'Abonnés' : 'Privé'}
+            {formatDate(post.created_at)} · {post.visibility === 'public' ? t('post.visPublic') : post.visibility === 'followers' ? t('post.visFollowers') : t('post.visPrivate')}
           </p>
         </div>
         {mine ? <div className="flex">
-          <button type="button" onClick={() => setEditOpen(true)} aria-label="Modifier la publication" className="rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-accent"><Pencil size={16} /></button>
-          <button type="button" onClick={() => void removePost()} aria-label="Supprimer la publication" className="rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-danger"><Trash2 size={16} /></button>
-        </div> : <button type="button" onClick={() => setReportOpen(true)} aria-label="Signaler la publication" className="rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-danger"><Flag size={16} /></button>}
+          <button type="button" onClick={() => setEditOpen(true)} aria-label={t('post.editAria')} className="rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-accent"><Pencil size={16} /></button>
+          <button type="button" onClick={() => void removePost()} aria-label={t('post.deleteAria')} className="rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-danger"><Trash2 size={16} /></button>
+        </div> : <button type="button" onClick={() => setReportOpen(true)} aria-label={t('post.reportAria')} className="rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-danger"><Flag size={16} /></button>}
       </div>
 
       {post.photo_url && (
@@ -354,7 +357,7 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
             sets={workoutSets(localWorkout)}
             volume={workoutVolume(localWorkout)}
             seconds={workoutDurationSeconds(localWorkout)}
-            exercises={localWorkout.exercises.map((we) => ({ name: we.exerciseName ?? 'Exercice', count: we.sets.length }))}
+            exercises={localWorkout.exercises.map((we) => ({ name: we.exerciseName ?? t('lib.exerciseFallback'), count: we.sets.length }))}
             busy={busy}
             onSave={() => void clone(false)}
             onStart={() => void clone(true)}
@@ -369,25 +372,25 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
                 onClick={() => void expandWorkout()}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-surface-2 px-2.5 py-1.5 text-xs font-bold text-muted hover:text-ink"
               >
-                <Dumbbell size={13} /> Voir la séance
+                <Dumbbell size={13} /> {t('post.viewWorkout')}
               </button>
             ) : (
               <div className="rounded-xl bg-surface-2 p-2.5">
                 {loadingWorkout ? (
-                  <p className="text-xs text-muted">Chargement…</p>
+                  <p className="text-xs text-muted">{t('common.loading')}</p>
                 ) : workout ? (
                   <WorkoutDetail
                     name={workout.name}
                     sets={workoutSets(workout)}
                     volume={workoutVolume(workout)}
                     seconds={workoutDurationSeconds(workout)}
-                    exercises={workout.exercises.map((we) => ({ name: we.exerciseName ?? 'Exercice', count: we.sets.length }))}
+                    exercises={workout.exercises.map((we) => ({ name: we.exerciseName ?? t('lib.exerciseFallback'), count: we.sets.length }))}
                     busy={busy}
                     onSave={() => void clone(false)}
                     onStart={() => void clone(true)}
                   />
                 ) : (
-                  <p className="text-xs text-muted">Séance non partagée en détail.</p>
+                  <p className="text-xs text-muted">{t('post.workoutNotShared')}</p>
                 )}
               </div>
             )}
@@ -417,7 +420,7 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
         {showComments && (
           <div className="space-y-2">
             {loadingComments ? (
-              <p className="text-xs text-muted">Chargement…</p>
+              <p className="text-xs text-muted">{t('common.loading')}</p>
             ) : (
               <div className="space-y-1.5">
                 {(comments ?? []).map((c) => (
@@ -435,7 +438,7 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
                   </div>
                 ))}
                 {(comments ?? []).length === 0 && (
-                  <p className="text-xs text-muted">Aucun commentaire. Sois le premier 💬</p>
+                  <p className="text-xs text-muted">{t('post.noComments')}</p>
                 )}
               </div>
             )}
@@ -444,7 +447,7 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') void send() }}
-                placeholder="Ajouter un commentaire…"
+                placeholder={t('post.addComment')}
                 maxLength={280}
               />
               <Button variant="primary" size="sm" disabled={sending || !draft.trim()} onClick={() => void send()}>
@@ -455,13 +458,13 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
         )}
       </div>
       <ReportDialog open={reportOpen} targetType="post" targetId={post.id} onClose={() => setReportOpen(false)} />
-      <Modal open={editOpen} onClose={() => setEditOpen(false)} title="Modifier la publication">
+      <Modal open={editOpen} onClose={() => setEditOpen(false)} title={t('post.editTitle')}>
         <div className="space-y-3">
-          <Field label="Texte"><Textarea value={caption} onChange={(e) => setCaption(e.target.value)} maxLength={500} rows={4} /></Field>
-          <Field label="Visibilité"><Select value={visibility} onChange={(e) => setVisibility(e.target.value as PostVisibility)}>
-            <option value="public">Public</option><option value="followers">Abonnés</option><option value="private">Moi uniquement</option>
+          <Field label={t('post.textLabel')}><Textarea value={caption} onChange={(e) => setCaption(e.target.value)} maxLength={500} rows={4} /></Field>
+          <Field label={t('post.visibilityField')}><Select value={visibility} onChange={(e) => setVisibility(e.target.value as PostVisibility)}>
+            <option value="public">{t('post.visPublic')}</option><option value="followers">{t('post.visFollowers')}</option><option value="private">{t('post.visOnlyMe')}</option>
           </Select></Field>
-          <Button block variant="primary" disabled={busy} onClick={() => void savePost()}>Enregistrer</Button>
+          <Button block variant="primary" disabled={busy} onClick={() => void savePost()}>{t('common.save')}</Button>
         </div>
       </Modal>
     </Card>

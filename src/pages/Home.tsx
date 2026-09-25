@@ -11,6 +11,7 @@ import { cancelFollowRequest } from '@/lib/notifications'
 import { countUnread } from '@/lib/notifications'
 import { followStatus, isBlockedByMe, requestFollow, searchProfiles } from '@/lib/social'
 import { Page, PageHeader } from '@/components/PageHeader'
+import { t, useLang } from '@/lib/i18n'
 import { Button, Card, EmptyState, Input } from '@/components/ui'
 import { IconButton } from '@/components/ui'
 import { PostCard } from '@/components/PostCard'
@@ -24,6 +25,7 @@ const PAGE_SIZE = 20
  */
 export default function HomePage() {
   const navigate = useNavigate()
+  useLang()
   const { cloudEnabled, user } = useAuth()
   const userId = user?.id
   const notify = useStore((s) => s.notify)
@@ -64,7 +66,7 @@ export default function HomePage() {
       setHasMore(page.length === PAGE_SIZE)
       if (!append) setDiscover(first?.discover ?? [])
     } catch (err) {
-      setFeedError(err instanceof Error ? err.message : 'Feed illisible')
+      setFeedError(err instanceof Error ? err.message : t('home.feedFailed'))
     } finally {
       setLoading(false)
       setLoadingMore(false)
@@ -174,7 +176,7 @@ export default function HomePage() {
       const entries = await Promise.all(list.map(async (p) => [p.id, await followStatus(p.id)] as const))
       setStatuses(Object.fromEntries(entries))
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Recherche impossible', 'error')
+      notify(err instanceof Error ? err.message : t('home.searchFailed'), 'error')
     } finally {
       setSearching(false)
     }
@@ -186,25 +188,25 @@ export default function HomePage() {
     setFollowBusy(p.id)
     try {
       if (await isBlockedByMe(p.id)) {
-        notify(`@${p.username} est bloqué — ouvre son profil pour le débloquer`, 'info')
+        notify(t('home.blockedHint', { who: `@${p.username}` }), 'info')
         if (p.username) navigate(`/profil/${p.username}`)
         return
       }
       if (st === 'requested') {
         await cancelFollowRequest(p.id)
         setStatuses((s) => ({ ...s, [p.id]: 'none' }))
-        notify('Demande annulée', 'info')
+        notify(t('home.requestCancelled'), 'info')
       } else {
         const next = await requestFollow(p.id)
         setStatuses((s) => ({ ...s, [p.id]: next }))
         notify(
-          next === 'requested' ? `Demande envoyée à @${p.username} 🔒` : `Tu suis @${p.username} 🎉`,
+          next === 'requested' ? t('home.requestSent', { who: `@${p.username}` }) : t('home.nowFollowing', { who: `@${p.username}` }),
           'success',
         )
         refresh()
       }
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Suivi impossible', 'error')
+      notify(err instanceof Error ? err.message : t('home.followFailed'), 'error')
     } finally {
       setFollowBusy(null)
     }
@@ -218,14 +220,14 @@ export default function HomePage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') void search() }}
-            aria-label="Rechercher un sportif par pseudo"
-            placeholder="Rechercher un pseudo…"
+            aria-label={t('home.searchAria')}
+            placeholder={t('home.searchPlaceholder')}
             autoComplete="off"
           />
           {query.length > 0 && (
             <button
               type="button"
-              aria-label="Effacer"
+              aria-label={t('common.clear')}
               onClick={() => { setQuery(''); setResults(null) }}
               className="absolute top-1/2 right-2 -translate-y-1/2 rounded-full p-1 text-muted hover:text-ink"
             >
@@ -233,13 +235,13 @@ export default function HomePage() {
             </button>
           )}
         </div>
-        <Button aria-label="Lancer la recherche" variant="primary" disabled={searching || query.trim().length < 2} onClick={() => void search()}>
+        <Button aria-label={t('home.searchGoAria')} variant="primary" disabled={searching || query.trim().length < 2} onClick={() => void search()}>
           <Search size={16} />
         </Button>
       </div>
-      {searching && <p className="text-xs text-muted">Recherche…</p>}
+      {searching && <p className="text-xs text-muted">{t('home.searching')}</p>}
       {results !== null && !searching && results.length === 0 && query.trim().length >= 2 && (
-        <p className="text-sm text-muted">Aucun pseudo ne ressemble à « {query.trim()} ».</p>
+        <p className="text-sm text-muted">{t('home.noResults', { query: query.trim() })}</p>
       )}
       {results !== null && results.length > 0 && (
         <div className="space-y-1.5">
@@ -256,7 +258,7 @@ export default function HomePage() {
                   <span className="block truncate text-sm font-bold">
                     @{p.username}
                     {p.visibility === 'private' && st !== 'following' && (
-                      <span className="ml-1" title="Compte privé">🔒</span>
+                      <span className="ml-1" title={t('home.privateAccount')}>🔒</span>
                     )}
                   </span>
                   {p.display_name && <span className="block truncate text-xs text-muted">{p.display_name}</span>}
@@ -266,9 +268,9 @@ export default function HomePage() {
                     type="button"
                     onClick={() => p.username && navigate(`/profil/${p.username}`)}
                     className="flex shrink-0 items-center gap-1 rounded-full bg-success/15 px-2.5 py-1 text-[11px] font-bold text-success"
-                    title="Voir le profil"
+                    title={t('home.viewProfile')}
                   >
-                    <Check size={12} /> Suivi
+                    <Check size={12} /> {t('home.followingBadge')}
                   </button>
                 ) : (
                   <Button
@@ -277,13 +279,13 @@ export default function HomePage() {
                     disabled={followBusy === p.id}
                     onClick={() => void actOn(p)}
                   >
-                    <UserPlus size={14} /> {st === 'requested' ? 'Demandé' : p.visibility === 'private' ? 'Demander à suivre 🔒' : 'Suivre'}
+                    <UserPlus size={14} /> {st === 'requested' ? t('home.requested') : p.visibility === 'private' ? t('home.askFollowPrivate') : t('home.follow')}
                   </Button>
                 )}
               </div>
             )
           })}
-          <p className="text-[11px] text-muted">🔒 = compte privé : ta demande devra être acceptée.</p>
+          <p className="text-[11px] text-muted">{t('home.privateHint')}</p>
         </div>
       )}
     </Card>
@@ -292,16 +294,16 @@ export default function HomePage() {
   if (!cloudEnabled) {
     return (
       <div>
-        <PageHeader title="Accueil" subtitle="Le feed arrive avec le cloud" />
+        <PageHeader title={t('nav.home')} subtitle={t('home.cloudSubtitle')} />
         <Page className="max-w-3xl space-y-4 pb-10">
           <Card>
             <EmptyState
               icon={<CloudOff size={24} />}
-              title="Le feed nécessite le cloud"
-              message="Connecte-toi avec Google pour suivre des sportifs et voir leurs séances ici."
+              title={t('home.cloudTitle')}
+              message={t('home.cloudMessage')}
               action={
                 <Button variant="primary" onClick={startEmpty}>
-                  <Plus size={16} /> Démarrer une séance
+                  <Plus size={16} /> {t('home.startWorkout')}
                 </Button>
               }
             />
@@ -314,11 +316,11 @@ export default function HomePage() {
   return (
     <div>
       <PageHeader
-        title="Accueil"
-        subtitle="Tire vers le bas pour actualiser"
+        title={t('nav.home')}
+        subtitle={t('home.pullSubtitle')}
         actions={
           <>
-            <IconButton label="Notifications" onClick={() => navigate('/notifications')}>
+            <IconButton label={t('home.notifLabel')} onClick={() => navigate('/notifications')}>
               <span className="relative inline-flex">
                 <Bell size={20} />
                 {unread > 0 && (
@@ -328,7 +330,7 @@ export default function HomePage() {
                 )}
               </span>
             </IconButton>
-            <IconButton label="Démarrer une séance vide" onClick={startEmpty}>
+            <IconButton label={t('home.startEmptyAria')} onClick={startEmpty}>
               <Plus size={22} />
             </IconButton>
           </>
@@ -338,10 +340,10 @@ export default function HomePage() {
         <Card className="flex items-center gap-3 border-accent-line bg-accent-soft p-4">
           <span className="rounded-xl bg-accent/15 p-2 text-accent"><Plus size={22} /></span>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-extrabold">{activeId ? 'Séance en cours' : 'Prêt pour ta prochaine séance ?'}</p>
-            <p className="text-xs text-muted">{workouts.filter((w) => w.status === 'completed').length} séance(s) terminée(s) dans ton carnet</p>
+            <p className="text-sm font-extrabold">{activeId ? t('home.activeTitle') : t('home.readyTitle')}</p>
+            <p className="text-xs text-muted">{t('home.doneCount', { count: workouts.filter((w) => w.status === 'completed').length })}</p>
           </div>
-          <Button size="sm" variant="primary" onClick={startEmpty}>{activeId ? 'Reprendre' : 'Démarrer'}</Button>
+          <Button size="sm" variant="primary" onClick={startEmpty}>{activeId ? t('home.resume') : t('home.start')}</Button>
         </Card>
         {searchBlock}
         <div
@@ -351,20 +353,20 @@ export default function HomePage() {
           )}
         >
           <span className={cn('inline-block h-4 w-4 rounded-full border-2 border-accent border-t-transparent', (refreshing || pull >= 64) && 'animate-spin')} />
-          {refreshing ? 'Actualisation…' : pull >= 64 ? 'Relâche pour actualiser' : 'Tire pour actualiser'}
+          {refreshing ? t('home.refreshing') : pull >= 64 ? t('home.releaseToRefresh') : t('home.pullToRefresh')}
         </div>
         {feedError ? (
           <Card className="p-4">
-            <EmptyState title="Impossible de charger le feed" message={feedError}
-              action={<Button variant="primary" onClick={refresh}>Réessayer</Button>} />
+            <EmptyState title={t('home.feedErrorTitle')} message={feedError}
+              action={<Button variant="primary" onClick={refresh}>{t('common.retry')}</Button>} />
           </Card>
         ) : loading ? (
-          <p className="py-8 text-center text-sm text-muted">Chargement du feed…</p>
+          <p className="py-8 text-center text-sm text-muted">{t('home.loadingFeed')}</p>
         ) : posts.length === 0 ? (
           <Card className="space-y-3 p-4">
             <EmptyState
-              title="Ton feed est vide"
-              message="Suis des sportifs pour retrouver leurs séances ici. Tu peux aussi découvrir les publications publiques ci-dessous."
+              title={t('home.emptyTitle')}
+              message={t('home.emptyMessage')}
             />
           </Card>
         ) : (
@@ -374,14 +376,14 @@ export default function HomePage() {
             ))}
             {hasMore && (
               <Button block disabled={loadingMore} onClick={() => void load(posts.length, true)}>
-                {loadingMore ? 'Chargement…' : 'Charger plus'}
+                {loadingMore ? t('common.loading') : t('home.loadMore')}
               </Button>
             )}
           </>
         )}
         {!feedError && !loading && posts.length === 0 && discover.length > 0 && (
           <section className="space-y-3">
-            <h2 className="text-sm font-extrabold">À découvrir</h2>
+            <h2 className="text-sm font-extrabold">{t('home.discover')}</h2>
             {discover.map((p) => <PostCard key={p.id} post={p} onChanged={refresh} />)}
           </section>
         )}

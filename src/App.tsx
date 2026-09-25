@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/auth'
 import { useHydrated } from '@/store/store'
 import { loadMyProfile } from '@/lib/pagePreload'
 import { useThemeEffect } from '@/hooks/app'
+import { applyLangAttr, t, useLang } from '@/lib/i18n'
 import HomePage from '@/pages/Home'
 import ExplorerPage from '@/pages/Explorer'
 import WelcomePage from '@/pages/Welcome'
@@ -26,6 +27,7 @@ import NotificationsPage from '@/pages/Notifications'
 /** Garde : si le cloud est configuré, les pages privées exigent un compte Google. */
 function RequireAuth() {
   const { cloudEnabled, user, loading } = useAuth()
+  useLang()
   if (!cloudEnabled) return <Outlet />
   if (loading) {
     return (
@@ -33,7 +35,7 @@ function RequireAuth() {
         <span className="flex h-16 w-16 animate-pulse items-center justify-center rounded-2xl bg-accent-soft text-accent">
           <Logo size={38} />
         </span>
-        <p className="text-sm font-semibold text-muted">Vérification du compte…</p>
+        <p className="text-sm font-semibold text-muted">{t('app.checkingAccount')}</p>
       </div>
     )
   }
@@ -47,6 +49,7 @@ function RequireAuth() {
  */
 function RequireUsername() {
   const { cloudEnabled, user, loading } = useAuth()
+  useLang()
   const userId = user?.id
   const [checking, setChecking] = useState(true)
   const [hasUsername, setHasUsername] = useState(true)
@@ -71,7 +74,7 @@ function RequireUsername() {
         <span className="flex h-16 w-16 animate-pulse items-center justify-center rounded-2xl bg-accent-soft text-accent">
           <Logo size={38} />
         </span>
-        <p className="text-sm font-semibold text-muted">Chargement du profil…</p>
+        <p className="text-sm font-semibold text-muted">{t('app.loadingProfile')}</p>
       </div>
     )
   }
@@ -81,6 +84,10 @@ function RequireUsername() {
 
 export default function App() {
   useThemeEffect()
+  const lang = useLang()
+  useEffect(() => {
+    applyLangAttr(lang)
+  }, [lang])
   const hydrated = useHydrated()
 
   if (!hydrated) {
@@ -89,7 +96,7 @@ export default function App() {
         <span className="flex h-16 w-16 animate-pulse items-center justify-center rounded-2xl bg-accent-soft text-accent">
           <Logo size={38} />
         </span>
-        <p className="text-sm font-semibold text-muted">Chargement du carnet…</p>
+        <p className="text-sm font-semibold text-muted">{t('app.loadingJournal')}</p>
       </div>
     )
   }

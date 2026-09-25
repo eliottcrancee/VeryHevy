@@ -17,6 +17,7 @@ import { SET_TYPE_META } from '@/types'
 import { Button, CheckBadge, DurationField, IconButton, Menu, Modal, NumberField, Textarea } from '@/components/ui'
 import { CategoryBadge } from '@/components/ExerciseFormModal'
 import { ExerciseAvatar } from '@/components/ExercisePicker'
+import { t, useLang } from '@/lib/i18n'
 import { useStore, trackingFieldsOf } from '@/store/store'
 import { estimate1RM, isSetValidatable, lastPerformance, lastPerformanceInTemplate, setVolume } from '@/lib/calc'
 import { cn, displayToMeters, formatVolume, formatWeight, inputToKg, kgToInput, metersToDisplay } from '@/lib/utils'
@@ -198,6 +199,7 @@ const SetFieldInput = memo(function SetFieldInput({
 })
 
 export function SetRow({ workoutId, we, set, index, exercise, unit, distanceUnit, showRpe, onReplace }: SetRowProps) {
+  useLang()
   const removeSet = useStore((s) => s.removeSet)
   const duplicateSet = useStore((s) => s.duplicateWorkoutSet)
   const toggleSetCompleted = useStore((s) => s.toggleSetCompleted)
@@ -227,7 +229,7 @@ export function SetRow({ workoutId, we, set, index, exercise, unit, distanceUnit
         align="left"
         trigger={({ toggle }) => (
           <IconButton
-            label="Options de la série"
+            label={t('logger.setOptions')}
             onClick={toggle}
             className="h-8 w-8 shrink-0 opacity-50 group-hover:opacity-100"
           >
@@ -236,9 +238,9 @@ export function SetRow({ workoutId, we, set, index, exercise, unit, distanceUnit
         )}
         items={[
           { label: `Type : ${meta.label} (changer)`, onClick: cycleType },
-          { label: 'Dupliquer la série', icon: <Copy size={14} />, onClick: () => duplicateSet(workoutId, we.id, set.id) },
-          { label: 'Remplacer l’exercice', icon: <Replace size={14} />, onClick: onReplace },
-          { label: 'Supprimer la série', icon: <Trash2 size={14} />, danger: true, onClick: () => removeSet(workoutId, we.id, set.id) },
+          { label: t('logger.duplicateSet'), icon: <Copy size={14} />, onClick: () => duplicateSet(workoutId, we.id, set.id) },
+          { label: t('logger.replaceExercise'), icon: <Replace size={14} />, onClick: onReplace },
+          { label: t('logger.removeSet'), icon: <Trash2 size={14} />, danger: true, onClick: () => removeSet(workoutId, we.id, set.id) },
         ]}
       />
 
@@ -288,7 +290,7 @@ export function SetRow({ workoutId, we, set, index, exercise, unit, distanceUnit
           size={32}
           title={
             set.completed
-              ? 'Série validée — toucher pour décocher'
+              ? t('logger.setCheckedHint')
               : isSetValidatable(set)
                 ? `Série ${index + 1} — toucher pour valider`
                 : `Série ${index + 1} — renseigne reps, durée ou distance pour valider`
@@ -328,6 +330,7 @@ export function WorkoutExerciseCard({
   isSuperset,
   linkAction,
 }: CardProps) {
+  useLang()
   const settings = useStore((s) => s.settings)
   const addSet = useStore((s) => s.addSet)
   const updateWorkoutExercise = useStore((s) => s.updateWorkoutExercise)
@@ -366,7 +369,7 @@ export function WorkoutExerciseCard({
         <button
           {...dragHandleProps}
           className="mt-1 -ml-1 flex h-8 w-6 shrink-0 cursor-grab items-center justify-center rounded text-muted/50 touch-none hover:text-muted active:cursor-grabbing"
-          aria-label="Réordonner"
+          aria-label={t('logger.reorder')}
         >
           <GripVertical size={16} />
         </button>
@@ -400,27 +403,27 @@ export function WorkoutExerciseCard({
         <Menu
           align="right"
           trigger={({ toggle }) => (
-            <IconButton label="Options de l’exercice" onClick={toggle}>
+            <IconButton label={t('logger.setOptions')} onClick={toggle}>
               <MoreVertical size={17} />
             </IconButton>
           )}
           items={[
-            { label: 'Remplacer l’exercice', icon: <Replace size={14} />, onClick: onReplace },
-            { label: 'Déplacer vers le haut', icon: <ArrowUp size={14} />, onClick: () => onMoveUp?.(), hidden: !onMoveUp },
-            { label: 'Déplacer vers le bas', icon: <ArrowDown size={14} />, onClick: () => onMoveDown?.(), hidden: !onMoveDown },
+            { label: t('logger.replaceExercise'), icon: <Replace size={14} />, onClick: onReplace },
+            { label: t('logger.moveUp'), icon: <ArrowUp size={14} />, onClick: () => onMoveUp?.(), hidden: !onMoveUp },
+            { label: t('logger.moveDown'), icon: <ArrowDown size={14} />, onClick: () => onMoveDown?.(), hidden: !onMoveDown },
             {
-              label: isSuperset ? 'Retirer du superset' : 'Créer un superset',
+              label: isSuperset ? t('logger.supersetRemove') : t('logger.supersetAdd'),
               icon: isSuperset ? <Link2Off size={14} /> : <Link2 size={14} />,
               onClick: () => onSuperset?.(),
               hidden: !onSuperset,
             },
             {
-              label: we.notes ? 'Modifier la note' : 'Ajouter une note',
+              label: we.notes ? t('logger.noteEdit') : t('logger.noteAdd'),
               icon: <StickyNote size={14} />,
               onClick: () => setShowNotes(true),
             },
             {
-              label: 'Supprimer l’exercice',
+              label: t('logger.removeExercise'),
               icon: <Trash2 size={14} />,
               danger: true,
               onClick: () => removeWorkoutExercise(workout.id, we.id),
@@ -466,7 +469,7 @@ export function WorkoutExerciseCard({
           <Textarea
             autoFocus={!we.notes}
             value={we.notes ?? ''}
-            placeholder="Note sur cet exercice (sensation, réglage machine…)"
+            placeholder={t('logger.notePlaceholder')}
             className="min-h-16 text-[13px]"
             onChange={(e) => updateWorkoutExercise(workout.id, we.id, { notes: e.target.value })}
             onBlur={() => {
@@ -488,7 +491,7 @@ export function WorkoutExerciseCard({
           onClick={() => completeAllSets(workout.id, we.id)}
           className={cn(allDone ? 'text-warning' : 'text-success')}
         >
-          {allDone ? 'Tout décocher' : 'Tout valider'}
+          {allDone ? t('logger.uncheckAll') : t('logger.checkAll')}
         </Button>
         <div className="ml-auto flex items-center gap-1.5">
           <button
@@ -498,7 +501,7 @@ export function WorkoutExerciseCard({
               setRestEditOpen(true)
             }}
             className="tabular rounded-lg bg-surface-2 px-2 py-1 text-[11px] font-semibold text-muted transition-colors hover:text-ink"
-            title="Modifier le temps de repos"
+            title={t('logger.restEdit')}
           >
             ⏱ {we.restSeconds}s
           </button>
@@ -506,8 +509,8 @@ export function WorkoutExerciseCard({
             type="button"
             onClick={() => startRest(we.restSeconds, { label: exercise?.name, exerciseId: exercise?.id })}
             className="tabular flex h-7 min-w-7 items-center justify-center rounded-lg bg-surface-2 px-2 text-[11px] font-semibold text-accent transition-colors hover:brightness-110"
-            title="Lancer le chrono de repos"
-            aria-label="Lancer le chrono de repos"
+            title={t('logger.restStart')}
+            aria-label={t('logger.restStart')}
           >
             ▶
           </button>
@@ -536,7 +539,7 @@ export function WorkoutExerciseCard({
           max={600}
           decimals={0}
           suffix="s"
-          ariaLabel="Temps de repos en secondes"
+          ariaLabel={t('logger.restAria')}
         />
         <div className="mt-3 flex flex-wrap gap-1.5">
           {[30, 60, 90, 120, 180].map((s) => (

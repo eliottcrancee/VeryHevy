@@ -15,6 +15,7 @@ import {
 } from 'react'
 import { createPortal } from 'react-dom'
 import { Check, Minus, Plus, Star, X } from 'lucide-react'
+import { t, useLang } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 /* ------------------------------------------------------------------
@@ -346,7 +347,7 @@ export const NumberField = memo(function NumberField({
           tabIndex={-1}
           onClick={() => bump(-1)}
           className={btnCls}
-          aria-label="Diminuer"
+          aria-label={t('ui.minus')}
         >
           <Minus size={compact ? 12 : 14} />
         </button>
@@ -392,7 +393,7 @@ export const NumberField = memo(function NumberField({
           tabIndex={-1}
           onClick={() => bump(1)}
           className={btnCls}
-          aria-label="Augmenter"
+          aria-label={t('ui.plus')}
         >
           <Plus size={compact ? 12 : 14} />
         </button>
@@ -483,7 +484,7 @@ export const DurationField = memo(function DurationField({ value, onChange, clas
         'flex h-9 min-w-0 items-center justify-center rounded-xl border border-line bg-surface-2/70 px-1 transition-colors focus-within:border-accent',
         className,
       )}
-      title="Durée : tapez les chiffres en continu (ex. 130 = 1:30, 13045 = 1:30:45)"
+      title={t('ui.durationHint')}
     >
       <input
         aria-label={ariaLabel}
@@ -535,6 +536,8 @@ export function Checkbox({
   label: ReactNode
   className?: string
 }) {
+  useLang()
+  useLang()
   const id = useId()
   return (
     <div className={cn('flex items-center gap-2.5', className)}>
@@ -653,7 +656,7 @@ export function Modal({ open, onClose, title, children, footer, size = 'md', cla
         {title && (
           <div className="flex shrink-0 items-center justify-between gap-4 border-b border-line px-5 py-4">
             <h3 className="truncate text-base font-bold">{title}</h3>
-            <IconButton label="Fermer" onClick={onClose} className="-mr-2">
+            <IconButton label={t('ui.close')} onClick={onClose} className="-mr-2">
               <X size={18} />
             </IconButton>
           </div>

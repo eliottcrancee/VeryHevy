@@ -27,14 +27,26 @@ import { ChartTooltipContent, chartLineCursor, chartTooltipWrapper } from '@/com
 import { Button, Card, EmptyState, IconButton, SectionTitle, Stat, Tabs } from '@/components/ui'
 import { ExerciseFormModal } from '@/components/ExerciseFormModal'
 import { CATEGORY_META, TRACKING_TYPES } from '@/types'
-import { arcWorkouts, getExerciseProgress, getExerciseSessions, getPersonalRecords, RECORD_LABELS } from '@/lib/calc'
+import { arcWorkouts, getExerciseProgress, getExerciseSessions, getPersonalRecords } from '@/lib/calc'
 import { cn, formatDate, formatDistance, formatDuration, formatVolume, formatWeight, kgToDisplay, tintBg, tintText } from '@/lib/utils'
+import { t, tx, useLang } from '@/lib/i18n'
 
 type Tab = 'progression' | 'historique' | 'infos'
+
+/** Libellés de records traduisibles (clé i18n par type de record). */
+const RECORD_KEYS = {
+  weight: 'workout.recWeight',
+  e1rm: 'workout.recE1rm',
+  reps: 'workout.recReps',
+  volume: 'workout.recVolume',
+  duration: 'workout.recDuration',
+  distance: 'workout.recDistance',
+} as const
 
 export default function ExerciseDetailPage() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
+  useLang()
   const exercise = useStore((s) => s.exercises.find((e) => e.id === id))
   const workouts = useStore((s) => s.workouts)
   const settings = useStore((s) => s.settings)
@@ -80,22 +92,22 @@ export default function ExerciseDetailPage() {
       tips: exercise.tips,
       isFavorite: false,
     })
-    notify('Copie personnalisée créée — à toi de la modifier', 'success')
+    notify(t('exercise.copyCreated'), 'success')
     navigate(`/exercices/${copy.id}`)
   }
 
   if (!exercise) {
     return (
       <div>
-        <PageHeader title="Exercice" back="/exercices" />
+        <PageHeader title={t('exercise.detailTitle')} back="/exercices" />
         <Page>
           <Card>
             <EmptyState
               icon={<Dumbbell size={26} />}
-              title="Exercice introuvable"
+              title={t('exercise.notFound')}
               action={
                 <Button variant="primary" onClick={() => navigate('/exercices')}>
-                  Retour à la bibliothèque
+                  {t('exercise.backLibrary')}
                 </Button>
               }
             />
@@ -110,41 +122,42 @@ export default function ExerciseDetailPage() {
   
   const hasDistance = TRACKING_TYPES[exercise.tracking].fields.includes('distance')
 
+  const mainKey = hasWeight ? t('exercise.chartMax') : hasDistance ? t('exercise.chartDist') : t('exercise.chartDur')
+  const e1rmKey = t('exercise.chartE1rm')
   const chartData = progress.map((p) => ({
     label: p.label,
-    [hasWeight ? 'Charge max' : hasDistance ? 'Distance' : 'Durée']: hasWeight
+    [mainKey]: hasWeight
       ? Math.round(kgToDisplay(p.maxWeight, settings.unit))
       : hasDistance
         ? Math.round((p.distance ?? 0) / (settings.distanceUnit === 'km' ? 1000 : 1609.344) * 100) / 100
         : p.duration ?? 0,
-    '1RM estimé': Math.round(kgToDisplay(p.e1rm, settings.unit)),
-    Volume: Math.round(kgToDisplay(p.volume, settings.unit)),
-    Reps: p.reps,
+    [e1rmKey]: Math.round(kgToDisplay(p.e1rm, settings.unit)),
+    [t('exercise.chartVol')]: Math.round(kgToDisplay(p.volume, settings.unit)),
+    [t('exercise.chartReps')]: p.reps,
   }))
-  const mainKey = hasWeight ? 'Charge max' : hasDistance ? 'Distance' : 'Durée'
-  const showE1rm = hasWeight && chartData.some((d) => (d as Record<string, number>)['1RM estimé'] > 0)
+  const showE1rm = hasWeight && chartData.some((d) => (d as Record<string, number>)[e1rmKey] > 0)
 
   return (
     <div>
       <PageHeader
         back="/exercices"
         title={exercise.name}
-        subtitle={exercise.altName && exercise.altName !== exercise.name ? exercise.altName : meta.label}
+        subtitle={exercise.altName && exercise.altName !== exercise.name ? exercise.altName : tx('cat', exercise.category)}
         actions={
           <>
             <IconButton
-              label="Favori"
+              label={t('exercise.favAria')}
               onClick={() => toggleFavorite(exercise.id)}
               className={cn(exercise.isFavorite && 'text-warning')}
             >
               <Star size={18} fill={exercise.isFavorite ? 'currentColor' : 'none'} />
             </IconButton>
             {exercise.isCustom ? (
-              <IconButton label="Modifier" onClick={() => setEditOpen(true)}>
+              <IconButton label={t('workout.edit')} onClick={() => setEditOpen(true)}>
                 <Pencil size={17} />
               </IconButton>
             ) : (
-              <IconButton label="Dupliquer pour personnaliser" onClick={duplicateAsCustom}>
+              <IconButton label={t('exercise.duplicateAria')} onClick={duplicateAsCustom}>
                 <Copy size={17} />
               </IconButton>
             )}
@@ -168,14 +181,14 @@ export default function ExerciseDetailPage() {
               {exercise.images.length > 1 && (
                 <>
                   <IconButton
-                    label="Image précédente"
+                    label={t('exercise.prevImage')}
                     className="absolute top-1/2 left-2 -translate-y-1/2 bg-surface/80"
                     onClick={() => setImageIndex((i) => (i - 1 + exercise.images.length) % exercise.images.length)}
                   >
                     <ChevronLeft size={18} />
                   </IconButton>
                   <IconButton
-                    label="Image suivante"
+                    label={t('exercise.nextImage')}
                     className="absolute top-1/2 right-2 -translate-y-1/2 bg-surface/80"
                     onClick={() => setImageIndex((i) => (i + 1) % exercise.images.length)}
                   >
@@ -187,7 +200,7 @@ export default function ExerciseDetailPage() {
                         key={i}
                         type="button"
                         onClick={() => setImageIndex(i)}
-                        aria-label={`Image ${i + 1} sur ${exercise.images.length}`}
+                        aria-label={t('exercise.imageN', { i: i + 1, n: exercise.images.length })}
                         className="flex h-7 w-7 items-center justify-center"
                       >
                         <span
@@ -211,29 +224,29 @@ export default function ExerciseDetailPage() {
             className="rounded-lg px-2 py-1 text-[11px] font-bold"
             style={{ color: tintText(meta.color), background: tintBg(meta.color, 15) }}
           >
-            {meta.emoji} {meta.label}
+            {meta.emoji} {tx('cat', exercise.category)}
           </span>
           <span className="rounded-lg bg-surface-2 px-2 py-1 text-[11px] font-medium text-muted">
-            {exercise.equipment}
+            {tx('equip', exercise.equipment)}
           </span>
           <span className="rounded-lg bg-surface-2 px-2 py-1 text-[11px] font-medium text-muted">
-            {exercise.level}
+            {tx('level', exercise.level)}
           </span>
           <span className="rounded-lg bg-surface-2 px-2 py-1 text-[11px] font-medium text-muted">
-            {TRACKING_TYPES[exercise.tracking].label}
+            {tx('track', exercise.tracking)}
           </span>
           {exercise.isCustom ? (
             <span className="rounded-lg bg-accent-soft px-2 py-1 text-[11px] font-bold text-accent">
-              personnalisé
+              {t('exercise.customBadge')}
             </span>
           ) : (
             <button
               type="button"
               onClick={duplicateAsCustom}
               className="rounded-lg bg-surface-2 px-2 py-1 text-[11px] font-bold text-muted transition-colors hover:text-accent"
-              title="Créer une copie modifiable"
+              title={t('exercise.readonlyTitle')}
             >
-              base VeryHevy · lecture seule — dupliquer pour modifier
+              {t('exercise.baseReadonly')}
             </button>
           )}
         </div>
@@ -252,11 +265,11 @@ export default function ExerciseDetailPage() {
             block
             onClick={() => {
               addExerciseToWorkout(activeWorkout.id, exercise.id)
-              notify(`${exercise.name} ajouté à la séance`, 'success')
+              notify(t('exercise.addedToWorkout', { name: exercise.name }), 'success')
               navigate('/seance')
             }}
           >
-            <Plus size={18} /> Ajouter à la séance en cours
+            <Plus size={18} /> {t('exercise.addToWorkout')}
           </Button>
         ) : (
           <Button
@@ -267,19 +280,19 @@ export default function ExerciseDetailPage() {
               navigate('/seance')
             }}
           >
-            <Play size={18} /> Démarrer une séance avec cet exercice
+            <Play size={18} /> {t('exercise.startWith')}
           </Button>
         )}
 
         {/* Records */}
         {records.length > 0 && (
           <div>
-            <SectionTitle>Records personnels</SectionTitle>
+            <SectionTitle>{t('exercise.prTitle')}</SectionTitle>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {records.map((r) => (
                 <Stat
                   key={r.kind}
-                  label={RECORD_LABELS[r.kind]}
+                  label={t(RECORD_KEYS[r.kind])}
                   icon={<Trophy size={11} />}
                   value={
                     r.kind === 'weight' || r.kind === 'e1rm'
@@ -292,7 +305,7 @@ export default function ExerciseDetailPage() {
                             ? formatVolume(r.value, settings.unit)
                             : Math.round(r.value).toLocaleString('fr-FR')
                   }
-                  sub={`le ${formatDate(r.workout.startedAt)}`}
+                  sub={t('exercise.sinceOn', { date: formatDate(r.workout.startedAt) })}
                 />
               ))}
             </div>
@@ -304,9 +317,9 @@ export default function ExerciseDetailPage() {
           value={tab}
           onChange={setTab}
           tabs={[
-            { value: 'progression', label: 'Progression' },
-            { value: 'historique', label: `Historique (${sessions.length})` },
-            { value: 'infos', label: 'Fiche' },
+            { value: 'progression', label: t('exercise.progress') },
+            { value: 'historique', label: t('exercise.historyTab', { n: sessions.length }) },
+            { value: 'infos', label: t('exercise.card') },
           ]}
         />
 
@@ -315,12 +328,12 @@ export default function ExerciseDetailPage() {
             {progress.length < 2 ? (
               <EmptyState
                 icon={<Play size={22} />}
-                title="Pas encore de données"
-                message="Enregistrez au moins deux séances avec cet exercice pour voir la progression."
+                title={t('exercise.noData')}
+                message={t('exercise.noDataHint')}
               />
             ) : (
               <>
-                <SectionTitle>Évolution</SectionTitle>
+                <SectionTitle>{t('exercise.evolution')}</SectionTitle>
                 <div className="h-60">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={chartData} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
@@ -346,9 +359,13 @@ export default function ExerciseDetailPage() {
                         content={
                           <ChartTooltipContent
                             format={(p) =>
-                              p.dataKey === '1RM estimé'
-                                ? `1RM ~${p.value} ${settings.unit}`
-                                : `${p.dataKey} : ${p.value}${hasWeight || p.dataKey === '1RM estimé' ? ` ${settings.unit}` : ''}`
+                              p.dataKey === e1rmKey
+                                ? t('exercise.tipE1rm', { v: p.value, u: settings.unit })
+                                : t('exercise.tipVal', {
+                                    k: String(p.dataKey),
+                                    v: p.value,
+                                    u: hasWeight || p.dataKey === e1rmKey ? ` ${settings.unit}` : '',
+                                  })
                             }
                           />
                         }
@@ -364,7 +381,7 @@ export default function ExerciseDetailPage() {
                       {showE1rm && (
                         <Line
                           type="monotone"
-                          dataKey="1RM estimé"
+                          dataKey={e1rmKey}
                           stroke="var(--warning)"
                           strokeWidth={2}
                           strokeDasharray="4 3"
@@ -377,16 +394,16 @@ export default function ExerciseDetailPage() {
                 </div>
                 <div className="mt-4 grid grid-cols-3 gap-2 border-t border-line pt-4">
                   <Stat
-                    label="Meilleure séance"
+                    label={t('exercise.bestSession')}
                     value={
                       hasWeight
                         ? formatWeight(Math.max(...progress.map((p) => p.maxWeight)), settings.unit)
-                        : `${Math.max(...progress.map((p) => p.sets))} séries`
+                        : t('stats.setsCount', { n: Math.max(...progress.map((p) => p.sets)) })
                     }
                   />
-                  <Stat label="Séances" value={progress.length} />
+                  <Stat label={t('stats.sessions')} value={progress.length} />
                   <Stat
-                    label="Volume cumulé"
+                    label={t('exercise.volTotal')}
                     value={`${Math.round(
                       kgToDisplay(
                         progress.reduce((n, p) => n + p.volume, 0),
@@ -405,7 +422,7 @@ export default function ExerciseDetailPage() {
           <div className="space-y-2">
             {!sessions.length ? (
               <Card>
-                <EmptyState icon={<Dumbbell size={24} />} title="Aucune séance enregistrée" />
+                <EmptyState icon={<Dumbbell size={24} />} title={t('exercise.noSessions')} />
               </Card>
             ) : (
               sessions.map(({ workout, sets }) => (
@@ -435,8 +452,7 @@ export default function ExerciseDetailPage() {
                   </div>
                   {sets.length > 0 && (
                     <p className="mt-2 text-[11px] text-muted">
-                      Total :{' '}
-                      {sets.reduce((n, s) => n + (s.reps ?? 0), 0)} reps
+                      {t('exercise.totalLine', { r: sets.reduce((n, s) => n + (s.reps ?? 0), 0) })}
                       {hasWeight &&
                         ` · ${formatVolume(
                           sets.reduce((n, s) => n + (s.weight ?? 0) * (s.reps ?? 0), 0),
@@ -453,29 +469,29 @@ export default function ExerciseDetailPage() {
         {tab === 'infos' && (
           <Card className="space-y-4 p-4">
             <div>
-              <p className="mb-2 text-xs font-bold tracking-widest text-muted uppercase">Muscles sollicités</p>
+              <p className="mb-2 text-xs font-bold tracking-widest text-muted uppercase">{t('exercise.musclesUsed')}</p>
               <div className="flex flex-wrap gap-1.5">
                 {exercise.primaryMuscles.map((m) => (
                   <span
                     key={m}
                     className="rounded-lg bg-accent-soft px-2 py-1 text-[12px] font-bold text-accent"
                   >
-                    {m}
+                    {tx('muscle', m)}
                   </span>
                 ))}
                 {exercise.secondaryMuscles.map((m) => (
                   <span key={m} className="rounded-lg bg-surface-2 px-2 py-1 text-[12px] text-muted">
-                    {m}
+                    {tx('muscle', m)}
                   </span>
                 ))}
                 {!exercise.primaryMuscles.length && !exercise.secondaryMuscles.length && (
-                  <span className="text-sm text-muted">Non renseigné</span>
+                  <span className="text-sm text-muted">{t('exercise.notSpecified')}</span>
                 )}
               </div>
             </div>
 
             <div className="border-t border-line pt-4">
-              <p className="mb-2 text-xs font-bold tracking-widest text-muted uppercase">Exécution</p>
+              <p className="mb-2 text-xs font-bold tracking-widest text-muted uppercase">{t('exercise.execution')}</p>
               {exercise.instructions.length ? (
                 <ol className="space-y-2">
                   {exercise.instructions.map((step, i) => (
@@ -489,13 +505,13 @@ export default function ExerciseDetailPage() {
                 </ol>
               ) : (
                 <p className="text-sm text-muted">
-                  Pas d’instructions pour cet exercice.{' '}
+                  {t('exercise.noInstructions')}{' '}
                   <button
                     type="button"
                     className="font-semibold text-accent"
                     onClick={() => (exercise.isCustom ? setEditOpen(true) : duplicateAsCustom())}
                   >
-                    {exercise.isCustom ? 'En ajouter' : 'Dupliquer pour en ajouter'}
+                    {exercise.isCustom ? t('exercise.addSome') : t('exercise.dupeToAdd')}
                   </button>
                 </p>
               )}
@@ -503,14 +519,21 @@ export default function ExerciseDetailPage() {
 
             {exercise.source && (
               <p className="border-t border-line pt-3 text-[11px] text-muted">
-                Source : {exercise.source === 'free-exercise-db' ? 'free-exercise-db (domaine public)' : exercise.source === 'custom' ? 'créé par vous' : 'base VeryHevy'}
+                {t('exercise.source', {
+                  s:
+                    exercise.source === 'free-exercise-db'
+                      ? t('exercise.srcFedb')
+                      : exercise.source === 'custom'
+                        ? t('exercise.srcCustom')
+                        : t('exercise.srcBase'),
+                })}
               </p>
             )}
           </Card>
         )}
 
         <Button block variant="ghost" onClick={() => navigate('/exercices')}>
-          <ArrowLeft size={16} /> Retour à la bibliothèque
+          <ArrowLeft size={16} /> {t('exercise.backLibrary')}
         </Button>
       </Page>
 

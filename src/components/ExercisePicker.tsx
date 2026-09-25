@@ -6,6 +6,7 @@ import { Button, Chip, IconButton, Input, Modal } from '@/components/ui'
 import { useStore } from '@/store/store'
 import { cn, normalize } from '@/lib/utils'
 import { CategoryBadge, ExerciseFormModal } from '@/components/ExerciseFormModal'
+import { t, tx, useLang } from '@/lib/i18n'
 
 export function ExerciseAvatar({ exercise, size = 40 }: { exercise: Exercise; size?: number }) {
   const [failed, setFailed] = useState(false)
@@ -46,6 +47,7 @@ export function ExerciseRow({
   trailing?: React.ReactNode
   showFavorite?: boolean
 }) {
+  useLang()
   const toggleFavorite = useStore((s) => s.toggleFavorite)
   // Toute la ligne est la cible de sélection (pas seulement le nom) : sur
   // mobile, taper à côté du texte doit aussi sélectionner l'exercice.
@@ -78,22 +80,23 @@ export function ExerciseRow({
             <span className="truncate text-sm font-semibold">{exercise.name}</span>
             {exercise.isCustom && (
               <span className="shrink-0 rounded bg-surface-3 px-1 py-0.5 text-[9px] font-bold text-muted uppercase">
-                perso
+                {t('exercise.perso')}
               </span>
             )}
           </span>
           <span className="mt-0.5 flex items-center gap-1.5 truncate text-[11px] text-muted">
             <span className="truncate">
-              {exercise.primaryMuscles.slice(0, 2).join(', ') || exercise.category}
+              {exercise.primaryMuscles.slice(0, 2).map((m) => tx('muscle', m)).join(', ') ||
+                tx('cat', exercise.category)}
             </span>
             <span>·</span>
-            <span className="truncate">{exercise.equipment}</span>
+            <span className="truncate">{tx('equip', exercise.equipment)}</span>
           </span>
         </span>
       </div>
       {showFavorite && (
         <IconButton
-          label={exercise.isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+          label={exercise.isFavorite ? t('exercise.removeFav') : t('exercise.addFav')}
           onClick={(e) => {
             // Ne déclenche pas la sélection / navigation de la ligne.
             e.stopPropagation()
@@ -121,6 +124,7 @@ interface Props {
 }
 
 export function ExercisePicker({ open, onClose, onPick, multiple, title, initialSelected = [] }: Props) {
+  useLang()
   const exercises = useStore((s) => s.exercises)
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState<ExerciseCategory | 'tous'>('tous')
@@ -176,13 +180,13 @@ export function ExercisePicker({ open, onClose, onPick, multiple, title, initial
       <Modal
         open={open}
         onClose={onClose}
-        title={title ?? 'Choisir un exercice'}
+        title={title ?? t('exercise.pickTitle')}
         size="lg"
         footer={
           multiple ? (
             <div className="flex items-center gap-2">
               <Button className="flex-1" onClick={onClose}>
-                Annuler
+                {t('common.cancel')}
               </Button>
               <Button
                 variant="primary"
@@ -193,7 +197,7 @@ export function ExercisePicker({ open, onClose, onPick, multiple, title, initial
                   onClose()
                 }}
               >
-                Ajouter {selected.length > 0 && `(${selected.length})`}
+                {selected.length > 0 ? t('exercise.addCount', { n: selected.length }) : t('exercise.add')}
               </Button>
             </div>
           ) : undefined
@@ -206,13 +210,13 @@ export function ExercisePicker({ open, onClose, onPick, multiple, title, initial
               <Input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Rechercher un exercice, un muscle…"
+                placeholder={t('exercise.searchEx')}
                 className="pl-9"
                 autoFocus
               />
               {query && (
                 <IconButton
-                  label="Effacer"
+                  label={t('common.clear')}
                   onClick={() => setQuery('')}
                   className="absolute top-1/2 right-1 h-8 w-8 -translate-y-1/2"
                 >
@@ -224,7 +228,7 @@ export function ExercisePicker({ open, onClose, onPick, multiple, title, initial
               variant="secondary"
               onClick={() => setShowCreate(true)}
               className="h-11 w-11 shrink-0 px-0"
-              aria-label="Créer un exercice"
+              aria-label={t('exercise.createAria')}
             >
               <Plus size={18} />
             </Button>
@@ -232,25 +236,25 @@ export function ExercisePicker({ open, onClose, onPick, multiple, title, initial
 
           <div className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
             <Chip active={onlyFavorites} onClick={() => setOnlyFavorites((v) => !v)}>
-              <Star size={12} fill={onlyFavorites ? 'currentColor' : 'none'} /> Favoris
+              <Star size={12} fill={onlyFavorites ? 'currentColor' : 'none'} /> {t('exercise.favorites')}
             </Chip>
             <Chip active={category === 'tous'} onClick={() => setCategory('tous')}>
-              Tous
+              {t('exercise.allShort')}
             </Chip>
             {(Object.keys(CATEGORY_META) as ExerciseCategory[]).map((c) => (
               <Chip key={c} active={category === c} onClick={() => setCategory(c)}>
-                {CATEGORY_META[c].emoji} {CATEGORY_META[c].label}
+                {CATEGORY_META[c].emoji} {tx('cat', c)}
               </Chip>
             ))}
           </div>
 
           <div className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
             <Chip active={muscle === 'tous'} onClick={() => setMuscle('tous')}>
-              Tous les muscles
+              {t('exercise.allMuscles')}
             </Chip>
             {usedMuscles.map((m) => (
               <Chip key={m} active={muscle === m} onClick={() => setMuscle(m)}>
-                {m}
+                {tx('muscle', m)}
               </Chip>
             ))}
           </div>
@@ -284,10 +288,10 @@ export function ExercisePicker({ open, onClose, onPick, multiple, title, initial
             {!results.length && (
               <div className="py-10 text-center text-sm text-muted">
                 <Dumbbell className="mx-auto mb-2 opacity-40" />
-                Aucun exercice trouvé.
+                {t('exercise.noneFound')}
                 <div className="mt-3">
                   <Button variant="primary" size="sm" onClick={() => setShowCreate(true)}>
-                    <Plus size={14} /> Créer « {query} »
+                    <Plus size={14} /> {t('exercise.createName', { name: query })}
                   </Button>
                 </div>
               </div>

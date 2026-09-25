@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { ImagePlus } from 'lucide-react'
 import { Field, Button, Modal, Select, Textarea } from '@/components/ui'
 import { useStore } from '@/store/store'
+import { t, useLang } from '@/lib/i18n'
 import type { PostVisibility } from '@/types'
 import { buildWorkoutSnapshot, createPost } from '@/lib/posts'
 
@@ -22,6 +23,7 @@ export function SharePostModal({
 }) {
   const settings = useStore((s) => s.settings)
   const notify = useStore((s) => s.notify)
+  useLang()
   const [caption, setCaption] = useState('')
   const [visibility, setVisibility] = useState<PostVisibility>(settings.defaultPostVisibility)
   const [file, setFile] = useState<File | null>(null)
@@ -62,26 +64,26 @@ export function SharePostModal({
         visibility,
         photoFile: file,
       })
-      notify('Publié dans le feed 🎉', 'success')
+      notify(t('post.published'), 'success')
       onClose()
       onPublished?.()
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Publication impossible', 'error')
+      notify(err instanceof Error ? err.message : t('post.publishFailed'), 'error')
     } finally {
       setPublishing(false)
     }
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Publier dans le feed">
+    <Modal open={open} onClose={onClose} title={t('post.shareTitle')}>
       <div className="space-y-3">
-        <Field label="Photo (optionnelle)" hint="JPG/PNG, max 8 Mo — compressée automatiquement">
+        <Field label={t('post.photoLabel')} hint={t('post.photoHint')}>
           <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-line p-3 transition-colors hover:bg-surface-2">
             <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent">
               <ImagePlus size={20} />
             </span>
             <span className="min-w-0 flex-1 text-sm text-muted">
-              {file ? file.name : 'Choisir une photo de séance…'}
+              {file ? file.name : t('post.choosePhoto')}
             </span>
             <input
               type="file"
@@ -94,26 +96,26 @@ export function SharePostModal({
         {preview && (
           <img src={preview} alt="" className="max-h-64 w-full rounded-xl object-cover" />
         )}
-        <Field label="Légende" hint="500 caractères max">
+        <Field label={t('post.captionLabel')} hint={t('post.captionHint')}>
           <Textarea
             value={caption}
             onChange={(e) => setCaption(e.target.value)}
             rows={3}
             maxLength={500}
-            placeholder="Bonne séance ! +5kg au DC 💪"
+            placeholder={t('post.captionPlaceholder')}
           />
         </Field>
-        <Field label="Qui peut voir ?">
+        <Field label={t('post.visibilityLabel')}>
           <Select value={visibility} onChange={(e) => setVisibility(e.target.value as PostVisibility)}>
-            <option value="followers">Abonnés (recommandé)</option>
-            <option value="public">Public</option>
-            <option value="private">Privé (moi uniquement)</option>
+            <option value="followers">{t('post.visFollowersRecommended')}</option>
+            <option value="public">{t('post.visPublic')}</option>
+            <option value="private">{t('post.visPrivateOnlyMe')}</option>
           </Select>
         </Field>
         <div className="flex gap-2">
-          <Button variant="ghost" block onClick={onClose}>Annuler</Button>
+          <Button variant="ghost" block onClick={onClose}>{t('common.cancel')}</Button>
           <Button variant="primary" block disabled={publishing} onClick={() => void publish()}>
-            {publishing ? 'Publication…' : 'Publier'}
+            {publishing ? t('post.publishing') : t('post.publish')}
           </Button>
         </div>
       </div>

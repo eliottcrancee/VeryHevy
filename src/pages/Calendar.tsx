@@ -5,7 +5,8 @@ import { useStore } from '@/store/store'
 import { Page, PageHeader } from '@/components/PageHeader'
 import { Button, Card, EmptyState, IconButton, SectionTitle } from '@/components/ui'
 import { workoutDurationSeconds, workoutSets, workoutVolume } from '@/lib/calc'
-import { addDays, cn, formatDate, formatDuration, formatVolume, pluralize, startOfWeek, toDateKey, WEEKDAY_LABELS } from '@/lib/utils'
+import { addDays, cn, formatDate, formatDuration, formatVolume, startOfWeek, toDateKey } from '@/lib/utils'
+import { localeOf, t, useLang } from '@/lib/i18n'
 
 export default function CalendarPage({ bare }: { bare?: boolean }) {
   const navigate = useNavigate()
@@ -13,8 +14,9 @@ export default function CalendarPage({ bare }: { bare?: boolean }) {
   const settings = useStore((s) => s.settings)
   const [cursor, setCursor] = useState(() => new Date())
   const [selected, setSelected] = useState<string | null>(null)
+  const loc = localeOf(useLang())
 
-  const monthLabel = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' }).format(cursor)
+  const monthLabel = new Intl.DateTimeFormat(loc, { month: 'long', year: 'numeric' }).format(cursor)
 
   const days = useMemo(() => {
     const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1)
@@ -41,14 +43,14 @@ export default function CalendarPage({ bare }: { bare?: boolean }) {
       <Card className="p-3">
         <div className="mb-3 flex items-center justify-between">
             <IconButton
-              label="Mois précédent"
+              label={t('workout.prevMonth')}
               onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))}
             >
               <ChevronLeft size={18} />
             </IconButton>
             <p className="text-sm font-bold capitalize">{monthLabel}</p>
             <IconButton
-              label="Mois suivant"
+              label={t('workout.nextMonth')}
               onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))}
             >
               <ChevronRight size={18} />
@@ -56,8 +58,8 @@ export default function CalendarPage({ bare }: { bare?: boolean }) {
           </div>
 
           <div className="grid grid-cols-7 gap-1">
-            {/* WEEKDAY_LABELS commence au lundi : on décale selon le 1er jour choisi. */}
-            {Array.from({ length: 7 }, (_, i) => WEEKDAY_LABELS[(i + settings.firstDayOfWeek + 6) % 7]).map((label) => (
+            {/* Les jours partent du lundi (workout.weekday.0) : on décale selon le 1er jour choisi. */}
+            {Array.from({ length: 7 }, (_, i) => t(`workout.weekday.${(i + settings.firstDayOfWeek + 6) % 7}`)).map((label) => (
               <div key={label} className="pb-1 text-center text-[10px] font-bold tracking-wide text-muted uppercase">
                 {label}
               </div>
@@ -107,8 +109,8 @@ export default function CalendarPage({ bare }: { bare?: boolean }) {
               <Card>
                 <EmptyState
                   icon={<Dumbbell size={22} />}
-                  title="Jour de repos"
-                  message="Aucune séance enregistrée ce jour-là."
+                  title={t('workout.restDay')}
+                  message={t('workout.noWorkout')}
                   action={
                     <Button
                       variant="primary"
@@ -118,7 +120,7 @@ export default function CalendarPage({ bare }: { bare?: boolean }) {
                         navigate('/seance')
                       }}
                     >
-                      <Plus size={14} /> Démarrer une séance
+                      <Plus size={14} /> {t('workout.startWorkout')}
                     </Button>
                   }
                 />
@@ -133,7 +135,7 @@ export default function CalendarPage({ bare }: { bare?: boolean }) {
                   >
                     <p className="font-bold">{w.name}</p>
                     <p className="mt-1 text-[11px] text-muted">
-                      {w.exercises.length} exercices · {workoutSets(w)} séries ·{' '}
+                      {t('history.exCount', { n: w.exercises.length })} · {t('history.setCount', { n: workoutSets(w) })} ·{' '}
                       {formatVolume(workoutVolume(w), settings.unit)} ·{' '}
                       {formatDuration(workoutDurationSeconds(w), 'compact')}
                     </p>
@@ -144,7 +146,7 @@ export default function CalendarPage({ bare }: { bare?: boolean }) {
           </div>
         ) : (
           <Card className="p-4 text-center text-sm text-muted">
-            Touchez un jour pour voir le détail des séances.
+            {t('workout.tapDay')}
           </Card>
         )}
     </>
@@ -154,7 +156,7 @@ export default function CalendarPage({ bare }: { bare?: boolean }) {
 
   return (
     <div>
-      <PageHeader title="Calendrier" subtitle={`${pluralize(byDay.size, 'jour')} d’entraînement`} />
+      <PageHeader title={t('workout.calendar')} subtitle={t('workout.calendarSub', { count: byDay.size })} />
 
       <Page className="max-w-3xl space-y-4">
         {body}
