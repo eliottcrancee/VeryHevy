@@ -46,7 +46,7 @@ begin
   delete from public.follow_requests where requester = req and target = auth.uid();
   select username into rname from public.profiles where id = auth.uid();
   insert into public.notifications (user_id, type, payload)
-  values (req, 'follow_accepted', jsonb_build_object('username', coalesce(rname, '')));
+  values (req, 'follow_accepted', jsonb_build_object('from_username', coalesce(rname, '')));
 end; $$;
 grant execute on function public.accept_follow_request(uuid) to authenticated;
 

@@ -80,7 +80,7 @@ export default function ExerciseDetailPage() {
       tips: exercise.tips,
       isFavorite: false,
     })
-    notify('Copie personnalisée créée — à vous de la modifier', 'success')
+    notify('Copie personnalisée créée — à toi de la modifier', 'success')
     navigate(`/exercices/${copy.id}`)
   }
 

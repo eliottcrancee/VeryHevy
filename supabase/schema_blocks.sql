@@ -1,6 +1,9 @@
 -- VeryHevy — blocage à sens unique + retirer un abonné.
 -- À exécuter après schema_follow_requests.sql. Idempotent.
 --
+-- NOTE : les policies "sessions readable" / "posts readable" de ce fichier
+-- datent d'avant session_types (visibilités public/private + invited[]).
+-- L'état final est fixé par schema_session_types.sql (étape 9).
 -- Règles : quand B bloque X —
 --   • X ne voit plus B : profil, recherche, listes follows, posts, sessions ;
 --   • X ne peut plus suivre B (ni lui envoyer de demande) ;

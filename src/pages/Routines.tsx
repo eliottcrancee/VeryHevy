@@ -46,7 +46,7 @@ export default function RoutinesPage() {
 
   const launch = (id: string) => {
     if (active) {
-      notify('Une séance est déjà en cours. Terminez-la pour lancer ce programme.', 'error')
+      notify('Une séance est déjà en cours. Termine-la pour lancer ce programme.', 'error')
       return
     }
     startWorkout({ templateId: id })

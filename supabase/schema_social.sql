@@ -1,6 +1,9 @@
 -- VeryHevy — social : follow + posts + carte (après supabase/schema.sql).
 -- Idempotent : ré-exécutable sans casser.
 --
+-- NOTE : visibilités sessions ('public'/'private' + invited[]) et policies
+-- d'origine : voir schema_session_types.sql (étape 9) pour le modèle actuel
+-- (invite / open / public + session_invites).
 -- Pseudo choisi à l'inscription (onboarding /bienvenue),
 -- visibilité post par défaut 'followers', sessions publiques par défaut
 -- (visibles carte) ou privées sur invitation.

@@ -170,7 +170,7 @@ export default function HistoryPage() {
                           ) : null}
                           <span className="mt-auto flex items-center">
                             <IconButton
-                              label={`Partager la séance « ${w.name} »`}
+                              label={`Partager en image « ${w.name} »`}
                               className="h-8 w-8"
                               onClick={(e) => {
                                 e.preventDefault()

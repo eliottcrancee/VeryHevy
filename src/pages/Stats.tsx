@@ -156,13 +156,13 @@ export default function StatsPage() {
   if (!all.length) {
     return (
       <div>
-        <PageHeader title="Statistiques" />
+        <PageHeader title="Stats" />
         <Page>
           <Card>
             <EmptyState
               icon={<Activity size={26} />}
               title="Pas encore de statistiques"
-              message="Terminez une première séance pour découvrir vos courbes de progression."
+              message="Termine une première séance pour découvrir tes courbes de progression."
             />
           </Card>
         </Page>
@@ -172,7 +172,7 @@ export default function StatsPage() {
 
   return (
     <div>
-      <PageHeader title="Statistiques" subtitle={`${filtered.length} séances sur la période`} />
+      <PageHeader title="Stats" subtitle={`${filtered.length} séances sur la période`} />
       <Page className="space-y-5">
         <div className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1">
           {(

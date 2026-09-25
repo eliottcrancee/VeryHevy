@@ -19,7 +19,7 @@ import { cn } from '@/lib/utils'
 const PAGE_SIZE = 20
 
 /**
- * Étape C : Accueil = feed seul (décision validée).
+ * Accueil = feed seul.
  * Le démarrage de séance se fait via le + (séance vide) ou Programmes.
  */
 export default function HomePage() {
@@ -179,7 +179,8 @@ export default function HomePage() {
     setFollowBusy(p.id)
     try {
       if (await isBlockedByMe(p.id)) {
-        notify(`@${p.username} est bloqué — débloque-le depuis son profil`, 'info')
+        notify(`@${p.username} est bloqué — ouvre son profil pour le débloquer`, 'info')
+        if (p.username) navigate(`/profil/${p.username}`)
         return
       }
       if (st === 'requested') {
@@ -253,9 +254,14 @@ export default function HomePage() {
                   {p.display_name && <span className="block truncate text-xs text-muted">{p.display_name}</span>}
                 </button>
                 {st === 'following' ? (
-                  <span className="flex shrink-0 items-center gap-1 rounded-full bg-success/15 px-2.5 py-1 text-[11px] font-bold text-success">
+                  <button
+                    type="button"
+                    onClick={() => p.username && navigate(`/profil/${p.username}`)}
+                    className="flex shrink-0 items-center gap-1 rounded-full bg-success/15 px-2.5 py-1 text-[11px] font-bold text-success"
+                    title="Voir le profil"
+                  >
                     <Check size={12} /> Suivi
-                  </span>
+                  </button>
                 ) : (
                   <Button
                     size="sm"
@@ -263,7 +269,7 @@ export default function HomePage() {
                     disabled={followBusy === p.id}
                     onClick={() => void actOn(p)}
                   >
-                    <UserPlus size={14} /> {st === 'requested' ? 'Demandé' : 'Suivre'}
+                    <UserPlus size={14} /> {st === 'requested' ? 'Demandé' : p.visibility === 'private' ? 'Demander à suivre 🔒' : 'Suivre'}
                   </Button>
                 )}
               </div>
@@ -337,7 +343,7 @@ export default function HomePage() {
           <Card className="space-y-3 p-4">
             <EmptyState
               title="Ton feed est vide"
-              message="Recherche un pseudo ci-dessus pour suivre des sportifs, puis publie ta première séance depuis son rapport."
+              message="Recherche un pseudo ci-dessus pour suivre des sportifs, puis publie ton premier post depuis un rapport de séance."
             />
           </Card>
         ) : (

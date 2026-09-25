@@ -24,6 +24,7 @@ import { useAuth } from '@/lib/auth'
 import { isCloudEnabled } from '@/lib/supabase'
 import { Page, PageHeader } from '@/components/PageHeader'
 import { Logo } from '@/components/Logo'
+import { ProfileAvatar } from '@/components/ProfileAvatar'
 import {
   Button,
   Card,
@@ -85,8 +86,9 @@ export default function SettingsPage() {
     setBusy(true)
     try {
       await unblockUser(id)
+      const name = blocks.find((p) => p.id === id)?.username
       setBlocks((prev) => prev.filter((p) => p.id !== id))
-      notify('Profil débloqué', 'success')
+      notify(name ? `Compte @${name} débloqué` : 'Compte débloqué', 'success')
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Déblocage impossible', 'error')
     } finally {
@@ -401,8 +403,8 @@ export default function SettingsPage() {
             </span>
           </SectionTitle>
           <p className="text-sm text-muted">
-            Changement de salle, reprise après une pause ? Commencez un nouvel
-            arc : seules les séances postérieures à cette date comptent pour vos
+            Changement de salle, reprise après une pause ? Commence un nouvel
+            arc : seules les séances postérieures à cette date comptent pour tes
             records (fiches exercices, statistiques et rapports).
           </p>
           <div className="flex flex-wrap items-center gap-2">
@@ -432,7 +434,7 @@ export default function SettingsPage() {
         <Card className="space-y-3 p-4">
           <SectionTitle className="mb-0">
             <span className="inline-flex items-center gap-1.5">
-              <Database size={13} /> Bibliothèque d’exercices
+              <Database size={13} /> Exercices
             </span>
           </SectionTitle>
           <p className="text-sm text-muted">
@@ -442,11 +444,11 @@ export default function SettingsPage() {
           <div className="flex flex-wrap gap-2">
             <Link to="/exercices">
               <Button size="sm" variant="primary">
-                <Database size={14} /> Gérer la bibliothèque
+                <Database size={14} /> Voir les exercices
               </Button>
             </Link>
             <Button size="sm" disabled={busy} onClick={exportExercises}>
-              <Download size={14} /> Exporter la bibliothèque
+              <Download size={14} /> Exporter les exercices
             </Button>
           </div>
         </Card>
@@ -491,7 +493,7 @@ export default function SettingsPage() {
             </span>
           </SectionTitle>
           <p className="text-sm text-muted">
-            Vos données sont liées à votre compte Google et synchronisées automatiquement
+            Tes données sont liées à ton compte Google et synchronisées automatiquement
             après chaque modification, toutes les 5 minutes et au retour d’internet.
           </p>
           <p className="text-xs text-muted">
@@ -530,6 +532,7 @@ export default function SettingsPage() {
               <div className="space-y-1.5">
                 {blocks.map((p) => (
                   <div key={p.id} className="flex items-center gap-3 rounded-xl bg-surface-2 p-2">
+                    <ProfileAvatar url={p.avatar_url} name={p.display_name ?? p.username ?? '?'} size={36} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-bold">@{p.username ?? '?'}</span>
                       {p.display_name && <span className="block truncate text-xs text-muted">{p.display_name}</span>}
@@ -577,7 +580,7 @@ export default function SettingsPage() {
               {pluralize(pendingRestore.routines, 'programme')} et {pendingRestore.exercises} exercice(s).
               <br />
               La restauration <strong>fusionne</strong> : vos données actuelles sont conservées, le
-              contenu de la sauvegarde est ajouté ou mis à jour. Vos réglages de synchronisation
+              contenu de la sauvegarde est ajouté ou mis à jour. Tes réglages de synchronisation
               restent inchangés.
             </>
           )
@@ -593,7 +596,7 @@ export default function SettingsPage() {
       <ConfirmDialog
         open={confirmDeleteCloud}
         title="Supprimer les données cloud ?"
-        message="Vos séances, programmes et exercices stockés en ligne seront effacés. La copie locale de CET appareil est conservée."
+        message="Tes séances, programmes et exercices stockés en ligne seront effacés. La copie locale de CET appareil est conservée."
         confirmLabel="Tout supprimer en ligne"
         danger
         onCancel={() => setConfirmDeleteCloud(false)}

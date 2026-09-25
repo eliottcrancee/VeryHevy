@@ -109,7 +109,7 @@ function StartScreen() {
           <p className="text-xs font-bold tracking-widest text-accent uppercase">Prêt à transpirer ?</p>
           <h2 className="mt-1 text-2xl font-extrabold">Démarrer une séance</h2>
           <p className="mt-1 text-sm text-muted">
-            Séance vide, depuis un programme, ou en piochant dans votre bibliothèque.
+            Séance vide, depuis un programme, ou en piochant dans ta bibliothèque.
           </p>
         </div>
         <div className="space-y-2 p-4">

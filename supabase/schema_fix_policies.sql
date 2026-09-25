@@ -1,6 +1,9 @@
 -- VeryHevy — FIX récursion infinie RLS sessions/joins/requests/messages.
 -- À exécuter APRÈS schema_chat.sql. Idempotent.
 --
+-- ⚠️ OBSOLÈTE après l'étape 9 (schema_session_types.sql) : ce fichier
+-- recrée "sessions readable" avec l'ancien modèle ('public' + invited[]).
+-- NE PAS le ré-exécuter après session_types — ça casserait la carte.
 -- Cause : « sessions readable » lisait session_joins, dont la policy
 -- (« joins readable ») relisait sessions (et session_joins elle-même)
 -- → « infinite recursion detected in policy for relation sessions ».

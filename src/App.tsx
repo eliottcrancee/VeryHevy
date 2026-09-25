@@ -42,7 +42,7 @@ function RequireAuth() {
 }
 
 /**
- * Onboarding V2 : pseudo obligatoire. Si connecté + cloud + pas de username
+ * Onboarding : pseudo obligatoire. Si connecté + cloud + pas de username
  * → /bienvenue. En mode local (cloud désactivé), on laisse passer.
  */
 function RequireUsername() {
@@ -100,14 +100,14 @@ export default function App() {
         <Route path="bienvenue" element={<WelcomePage />} />
         <Route element={<RequireUsername />}>
           <Route element={<AppShell />}>
-            {/* 4 onglets V2 */}
+            {/* 4 onglets principaux */}
             <Route index element={<HomePage />} />
             <Route path="explorer" element={<ExplorerPage />} />
             <Route path="programmes" element={<RoutinesPage />} />
             <Route path="profil" element={<ProfilePage />} />
             <Route path="profil/:username" element={<ProfilePage />} />
             <Route path="notifications" element={<NotificationsPage />} />
-            {/* Routes techniques (cachées de la nav, seront rattachées au Profil en Étape B) */}
+            {/* Routes techniques (cachées de la nav) */}
             <Route path="seance" element={<ActiveWorkoutPage />} />
             <Route path="programmes/:id" element={<RoutineEditorPage />} />
             <Route path="exercices" element={<ExercisesPage />} />

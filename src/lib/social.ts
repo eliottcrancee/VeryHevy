@@ -1,6 +1,5 @@
 /**
- * VeryHevy V2 — social minimal (Étape A).
- * Profils + follows type Instagram. Posts/sessions arrivent en C/D.
+ * Social : profils + follows + demandes + blocage.
  */
 import type { SocialProfile } from '@/types'
 import { normalizeUsername } from '@/types'

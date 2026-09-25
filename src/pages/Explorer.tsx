@@ -517,7 +517,7 @@ export default function ExplorerPage() {
               <>
                 <div className="space-y-2">
                   <p className="text-xs font-extrabold tracking-wide text-muted uppercase">
-                    Tes abonnements ({recoFriends.length})
+                    Sorties de tes abonnements ({recoFriends.length})
                   </p>
                   {recoFriends.length === 0 ? (
                     <p className="text-xs text-muted">
@@ -551,7 +551,7 @@ export default function ExplorerPage() {
                 </div>
                 <div className="space-y-2">
                   <p className="text-xs font-extrabold tracking-wide text-muted uppercase">
-                    À proximité ({recoNear.length}){!userPos ? ' — par date' : ''}
+                    {userPos ? `À proximité (${recoNear.length})` : `Autres sorties (${recoNear.length}) — par date`}
                   </p>
                   {!userPos && recoNear.length > 0 && (
                     <p className="text-[11px] text-muted">Active ta position (📍 en haut) pour trier par proximité.</p>
@@ -663,7 +663,7 @@ export default function ExplorerPage() {
                     <SessionRow
                       s={s}
                       me={user?.id}
-                      friend={followIds.has(s.host)}
+                      friend={s.visibility !== 'open' && followIds.has(s.host)}
                       selected={s.id === selectedId}
                       onSelect={() => {
                         setSelectedId(s.id === selectedId ? null : s.id)
@@ -720,7 +720,7 @@ function SessionRow({ s, me, friend, selected, onSelect, distanceKm }: {
       )}
     >
       <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface-2 text-lg">
-        {s.visibility === 'invite' ? '🔒' : s.visibility === 'open' ? '✨' : '💪'}
+        {s.visibility === 'invite' ? '📩' : s.visibility === 'open' ? '✨' : '💪'}
       </span>
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-1.5">
@@ -815,7 +815,7 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
     setReqBusy(true)
     try {
       if (myReq?.status === 'declined') await withdrawRequest(s.id)
-      await sendRequest(s.id, reqMsg, s.host)
+      await sendRequest(s.id, reqMsg, s.host, s.title)
       setMyReq(await myRequestStatus(s.id))
       setReqMsg('')
       notify(s.visibility === 'open' ? 'Candidature envoyée — l’hôte va te répondre 💬' : 'Demande envoyée — l’hôte va te répondre 💬', 'success')
@@ -867,7 +867,7 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
         notify(`Match avec ${displayNameOf(r.author)} 🤝 Discutez !`, 'success')
       } else {
         await declineRequest(s.id, r.user_id)
-        notify('Candidature refusée', 'info')
+        notify(s.visibility === 'open' ? 'Candidature refusée' : 'Demande refusée', 'info')
       }
       setRequests(await listRequests(s.id))
       onChanged()
@@ -908,7 +908,7 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
             <p className="mt-0.5 text-xs text-muted">🗺️ {s.address_text}</p>
           )}
           <p className="mt-0.5 text-xs text-muted">
-            {s.visibility === 'invite' ? '🔒 Privée (sur invitation)' : s.visibility === 'open' ? '✨ Sur proposition (rencontre)' : '🌍 Publique (validation requise)'} · Niveau : {s.level} ·{' '}
+            {s.visibility === 'invite' ? '📩 Entre amis (sur invitation)' : s.visibility === 'open' ? '✨ Sur proposition (rencontre)' : '🌍 Publique (validation requise)'} · Niveau : {s.level} ·{' '}
             {s.spots_taken}/{s.spots_total} · Par {hostNode}
           </p>
           {/* Participants : cachés aux non-membres (sauf profils publics). */}
@@ -1012,9 +1012,11 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
           </div>
         ) : myReq?.status === 'declined' ? (
           <div className="w-full space-y-2">
-            <p className="text-xs text-muted">Demande déclinée — tu peux retenter avec un mot :</p>
+            <p className="text-xs text-muted">{s.visibility === 'open' ? 'Candidature déclinée — tu peux retenter avec un mot :' : 'Demande déclinée — tu peux retenter avec un mot :'}</p>
             <ProposeBox msg={reqMsg} setMsg={setReqMsg} busy={reqBusy} onSend={() => void propose()} action={s.visibility === 'open' ? 'Se proposer 🙋' : 'Demander à rejoindre 🙋'} />
           </div>
+        ) : full ? (
+          <p className="w-full rounded-xl bg-surface-2 px-3 py-2 text-xs font-bold text-muted">Complet — plus de place.</p>
         ) : s.visibility === 'open' ? (
           <div className="w-full space-y-2">
             <ProposeBox msg={reqMsg} setMsg={setReqMsg} busy={reqBusy} onSend={() => void propose()} action="Se proposer 🙋" />
@@ -1055,8 +1057,8 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
         </div>
       )}
 
-      {/* Invités (hôte, session privée). */}
-      {mine && s.visibility === 'invite' && (
+      {/* Invités (hôte, sortie entre amis, à venir uniquement). */}
+      {mine && !past && s.visibility === 'invite' && (
         <div className="space-y-2 rounded-xl bg-surface-2 p-2.5">
           <p className="text-[11px] font-extrabold tracking-wide text-muted uppercase">
             Invités ({pendingInvites.length} en attente)
@@ -1177,7 +1179,7 @@ function MySessionsView({ sessions, followIds, busyId, onChanged, onChat, act }:
       <SessionRow
         s={s}
         me={me}
-        friend={followIds.has(s.host)}
+        friend={s.visibility !== 'open' && followIds.has(s.host)}
         selected={s.id === selectedId}
         onSelect={() => setSelectedId(s.id === selectedId ? null : s.id)}
       />
@@ -1225,7 +1227,7 @@ function MySessionsView({ sessions, followIds, busyId, onChanged, onChat, act }:
       {(invitedOnes.length > 0 || requested.length > 0) && (
         <div className="space-y-3">
           {section('📩 Invitations reçues', invitedOnes, '')}
-          {section('⏳ Demandes en attente', requested, '')}
+          {section('⏳ En attente (candidatures + demandes)', requested, '')}
         </div>
       )}
       {section('🤝 Où je suis inscrit', joined, 'Aucune inscription pour l’instant.')}
@@ -1302,9 +1304,11 @@ function MessagesView({ initial, onConsumeInitial, onBack }: {
             onClick={() => setActive({ sessionId: t.session_id, title: t.session_title, otherId: t.other_id, other: t.other })}
             className="flex w-full items-center gap-3 rounded-xl border border-line bg-surface p-3 text-left transition-colors hover:bg-surface-2"
           >
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent-soft font-extrabold text-accent">
-              {(t.other?.username ?? t.other?.display_name ?? '?').slice(0, 1).toUpperCase()}
-            </span>
+            <ProfileAvatar
+              url={t.other?.avatar_url}
+              name={t.other?.display_name ?? t.other?.username ?? '?'}
+              size={40}
+            />
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-extrabold">{displayNameOf(t.other)}</span>
               <span className="block truncate text-[11px] text-muted">
@@ -1392,7 +1396,7 @@ function NewMessageModal({ open, onClose, onPick }: {
             ))}
           </div>
         )}
-        <p className="text-[11px] text-muted">Messages possibles avec tes abonnés et abonnements.</p>
+        <p className="text-[11px] text-muted">Messages possibles avec tes abonnés et abonnements, ou quelqu'un avec qui tu as déjà échangé.</p>
       </div>
     </Modal>
   )
@@ -1450,7 +1454,7 @@ function ConversationView({ t, onBack }: { t: ActiveThread; onBack: () => void }
       <div className="flex-1 space-y-2 overflow-y-auto p-3">
         {msgs.length === 0 && (
           <p className="py-6 text-center text-xs text-muted">
-            Match 🤝 Dis bonjour et organisez votre séance !
+            {t.sessionId ? 'Match 🤝 Dis bonjour et organisez votre séance !' : 'Écris à ton ami 💬'}
           </p>
         )}
         {msgs.map((m) => {
@@ -1532,7 +1536,7 @@ function InviteBox({ session, onDone }: { session: SportSession; onDone: () => v
 
   return (
     <div className="space-y-2 rounded-xl bg-surface-2 p-3">
-      <p className="text-xs font-extrabold">Inviter (session privée — direct, sans validation)</p>
+      <p className="text-xs font-extrabold">Inviter des amis (direct, sans validation)</p>
       <div className="flex max-h-40 flex-col gap-1 overflow-y-auto">
         {candidates.map((c) => (
           <label key={c.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-surface">
@@ -1610,10 +1614,10 @@ function CreateSessionModal({ open, picked, onClose, onCreated }: {
       }
       notify(
         visibility === 'invite'
-          ? `Session privée créée 🔒 ${invited.length} invitation(s) envoyée(s)`
+          ? `Sortie entre amis créée 📩 ${invited.length} invitation(s) envoyée(s)`
           : visibility === 'open'
             ? 'Proposition publiée — ton identité reste anonyme ✨'
-            : 'Session publiée sur la carte 🎉',
+            : 'Sortie publiée sur la carte 🎉',
         'success',
       )
       onCreated(s)
@@ -1655,7 +1659,7 @@ function CreateSessionModal({ open, picked, onClose, onCreated }: {
           <Field label="Heure"><Input type="time" value={hour} onChange={(e) => setHour(e.target.value)} /></Field>
           <Field label="Places">
             <Select value={spots} onChange={(e) => setSpots(e.target.value)}>
-              {['2', '3', '4', '5', '6'].map((n) => <option key={n} value={n}>{n}</option>)}
+              {['2', '3', '4', '5', '6', '7', '8'].map((n) => <option key={n} value={n}>{n}</option>)}
             </Select>
           </Field>
         </div>
@@ -1668,9 +1672,9 @@ function CreateSessionModal({ open, picked, onClose, onCreated }: {
               <option value="confirmé">Confirmé</option>
             </Select>
           </Field>
-          <Field label="Type de séance">
+          <Field label="Qui peut rejoindre ?">
             <Select value={visibility} onChange={(e) => setVisibility(e.target.value as SessionVisibility)}>
-              <option value="invite">🔒 Privée (invités seuls)</option>
+              <option value="invite">📩 Entre amis (invitation)</option>
               <option value="open">✨ Sur proposition (anonyme)</option>
               <option value="public">🌍 Publique (validation requise)</option>
             </Select>

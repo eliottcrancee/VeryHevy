@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BellRing, Check, UserPlus, X } from 'lucide-react'
+import { BellRing, Check, Dumbbell, HeartHandshake, MessageCircle, UserPlus, X } from 'lucide-react'
 import { useStore } from '@/store/store'
 import type { AppNotification, FollowRequest } from '@/types'
 import {
@@ -26,19 +26,36 @@ function fmtWhen(iso: string): string {
   return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
 }
 
-/** Libellé + destination d'une notification générique. */
+/** Icône par type de notification. */
+function notifIcon(type: string) {
+  switch (type) {
+    case 'follow_accepted':
+    case 'new_follower':
+      return <Check size={16} />
+    case 'session_request':
+    case 'session_invite':
+      return <Dumbbell size={16} />
+    case 'session_accepted':
+      return <HeartHandshake size={16} />
+    case 'session_invite_declined':
+      return <MessageCircle size={16} />
+    default:
+      return <UserPlus size={16} />
+  }
+}
 function describe(n: AppNotification): { text: string; to: string | null } {
   const p = n.payload as Record<string, string | undefined>
-  const who = p.from_username ? `@${p.from_username}` : 'Un sportif'
+  const who = p.from_username ? `@${p.from_username}` : p.username ? `@${p.username}` : 'Un sportif'
+  const whoLink = p.from_username ? `/profil/${p.from_username}` : p.username ? `/profil/${p.username}` : null
   switch (n.type) {
     case 'follow_request':
-      return { text: `${who} veut te suivre`, to: null }
+      return { text: `${who} veut te suivre`, to: whoLink }
     case 'follow_accepted':
-      return { text: `${who} a accepté ta demande 🎉`, to: p.username ? `/profil/${p.username}` : null }
+      return { text: `${who} a accepté ta demande 🎉`, to: whoLink }
     case 'new_follower':
-      return { text: `${who} te suit`, to: p.from_username ? `/profil/${p.from_username}` : null }
+      return { text: `${who} te suit`, to: whoLink }
     case 'session_request':
-      return { text: `${who} veut rejoindre ta séance`, to: '/explorer' }
+      return { text: `${who} veut rejoindre ${p.session_title ? `« ${p.session_title} »` : 'ta sortie'}`, to: '/explorer' }
     case 'session_invite':
       return { text: `${who} t'invite à « ${p.session_title ?? 'une séance'} » 🎉`, to: '/explorer' }
     case 'session_invite_declined':
@@ -97,7 +114,7 @@ export default function NotificationsPage() {
     try {
       if (ok) {
         await acceptFollowRequest(r.requester)
-        notify(`Tu suis @${r.profile?.username ?? '?'} 🎉`, 'success')
+        notify(`Demande acceptée — @${r.profile?.username ?? '?'} te suit 🤝`, 'success')
       } else {
         await declineFollowRequest(r.requester)
         notify('Demande refusée', 'info')
@@ -156,7 +173,7 @@ export default function NotificationsPage() {
             {incoming.length > 0 && (
               <section className="space-y-2">
                 <p className="text-xs font-extrabold tracking-wide text-muted uppercase">
-                  Demandes d'amis ({incoming.length})
+                  Demandes d'abonnement ({incoming.length})
                 </p>
                 {incoming.map((r) => (
                   <Card key={r.requester} className="border-accent-line bg-accent-soft p-3">
@@ -237,7 +254,7 @@ export default function NotificationsPage() {
                   <EmptyState
                     icon={<BellRing size={24} />}
                     title="Aucune notification"
-                    message="Demandes d'amis, candidatures et matchs apparaîtront ici."
+                    message="Demandes d'abonnement, invitations et matchs apparaîtront ici."
                   />
                 </Card>
               ) : (
@@ -253,7 +270,7 @@ export default function NotificationsPage() {
                       } ${to ? 'active:scale-[0.99]' : ''}`}
                     >
                       <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${n.read_at ? 'bg-surface-2 text-muted' : 'bg-accent text-accent-contrast'}`}>
-                        <UserPlus size={16} />
+                        {notifIcon(n.type)}
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-semibold">{text}</span>

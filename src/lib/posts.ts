@@ -1,7 +1,6 @@
 /**
- * VeryHevy V2 — posts & feed (Étape C).
- * Photo optionnelle (Storage post-photos), likes, commentaires,
- * lecture workout auteur pour « Cloner sans démarrer ».
+ * Posts & feed : photo optionnelle (Storage post-photos), likes,
+ * commentaires, snapshot workout pour « Cloner sans démarrer ».
  */
 import type { Post, PostComment, PostVisibility, SocialProfile, Workout, WorkoutSnapshot } from '@/types'
 import { getSupabase } from './supabase'
@@ -168,7 +167,7 @@ export async function listUserPosts(userId: string, limit = 20, offset = 0): Pro
   }))
 }
 
-/** Mes posts (onglet Séances du Profil, Étape C+). */
+/** Mes posts (onglet Posts du Profil). */
 export async function listMyPosts(limit = 20, offset = 0): Promise<Post[]> {
   const sb = sbOrThrow()
   const me = await myId()
@@ -258,6 +257,5 @@ export async function getPostWorkout(post: Pick<Post, 'user_id' | 'workout_id'>)
 }
 
 export function displayAuthor(a?: SocialProfile | null, fallback = 'Sportif'): string {
-  if (a?.username) return `@${a.username}`
-  return a?.display_name?.trim() || fallback
+  return a?.display_name?.trim() || (a?.username ? `@${a.username}` : fallback)
 }

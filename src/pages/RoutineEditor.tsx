@@ -190,7 +190,7 @@ export default function RoutineEditorPage() {
             <EmptyState
               icon={<Plus size={24} />}
               title="Programme vide"
-              message="Ajoutez les exercices de cette séance."
+              message="Ajoute les exercices de ce programme."
               action={
                 <Button variant="primary" onClick={() => setPickerOpen(true)}>
                   <Plus size={16} /> Ajouter des exercices

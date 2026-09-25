@@ -188,7 +188,7 @@ export default function WorkoutReportPage() {
             )}
             {!isActive && (
               <IconButton
-                label="Partager la séance"
+                label="Partager en image"
                 onClick={() =>
                   void shareWorkout({ workout, exercises, settings, previousWorkouts, notify })
                 }
@@ -507,7 +507,7 @@ export default function WorkoutReportPage() {
               <Pencil size={16} /> Modifier
             </Button>
             <Button variant="primary" onClick={() => setSaveRoutineOpen(true)}>
-              <Copy size={16} /> Vers un programme
+              <Copy size={16} /> Enregistrer comme programme
             </Button>
           </div>
         )}

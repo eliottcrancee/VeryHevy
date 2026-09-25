@@ -1,7 +1,7 @@
 /**
- * Match + chat : candidatures sur sessions privées, acceptation,
- * discussion 1-1 hôte ↔ membre. Anonymat : inscrits visibles
- * par les membres uniquement (+ profils publics via RPC).
+ * Match + chat : candidatures/demandes sur sessions open/public,
+ * invitations sur sessions invite, discussion 1-1. Anonymat : inscrits
+ * visibles par les membres uniquement (+ profils publics via RPC).
  */
 import type { SocialProfile } from '@/types'
 import { getSupabase } from './supabase'
@@ -31,7 +31,7 @@ export interface SessionRequest {
 
 /* ---------------------------- candidatures ---------------------------- */
 
-export async function sendRequest(sessionId: string, message = '', hostId?: string): Promise<void> {
+export async function sendRequest(sessionId: string, message = '', hostId?: string, sessionTitle?: string): Promise<void> {
   const sb = sbOrThrow()
   const me = await myId()
   const { error } = await sb.from('session_requests').insert({
@@ -40,11 +40,11 @@ export async function sendRequest(sessionId: string, message = '', hostId?: stri
     message: message.trim().slice(0, 280),
     status: 'pending',
   })
-  if (error && !error.message.includes('duplicate')) throw new Error(`Candidature : ${error.message}`)
+  if (error && !error.message.includes('duplicate')) throw new Error(`Demande : ${error.message}`)
   if (hostId) {
     const { myUsername, sendNotification } = await import('./notifications')
     const mine = await myUsername()
-    await sendNotification(hostId, 'session_request', { session_id: sessionId, from_id: me, from_username: mine })
+    await sendNotification(hostId, 'session_request', { session_id: sessionId, session_title: sessionTitle ?? '', from_id: me, from_username: mine })
   }
 }
 
@@ -57,7 +57,7 @@ export async function myRequestStatus(sessionId: string): Promise<SessionRequest
     .eq('session_id', sessionId)
     .eq('user_id', me)
     .maybeSingle()
-  if (error) throw new Error(`Candidature : ${error.message}`)
+  if (error) throw new Error(`Demande : ${error.message}`)
   return (data as SessionRequest | null) ?? null
 }
 
@@ -112,7 +112,7 @@ export async function declineRequest(sessionId: string, userId: string): Promise
 }
 
 /* ---------------------------- invitations ---------------------------- */
-/* Sessions privées : l'hôte invite → notif → accept (direct, entre amis) */
+/* Sessions invite (📩 Entre amis) : l'hôte invite → notif → accept (direct). */
 
 export interface SessionInvite {
   session_id: string
@@ -425,6 +425,5 @@ export async function sendMessage(toId: string, text: string, sessionId?: string
 }
 
 export function displayNameOf(p?: SocialProfile | null, fallback = 'Sportif'): string {
-  if (p?.username) return `@${p.username}`
-  return p?.display_name?.trim() || fallback
+  return p?.display_name?.trim() || (p?.username ? `@${p.username}` : fallback)
 }

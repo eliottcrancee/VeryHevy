@@ -1,6 +1,10 @@
 -- VeryHevy — match + chat (après schema_social.sql).
 -- Idempotent : ré-exécutable sans casser.
 --
+-- NOTE : l'entête d'origine décrivait l'ancien modèle (public=direct,
+-- private=candidature). Modèle actuel : voir schema_session_types.sql
+-- (invite / open / public) + schema_dm.sql. Ce fichier reste valide
+-- (tables + chat) mais ne plus s'y fier pour les visibilités.
 -- Modèle : sessions PUBLIQUES = inscription directe ; sessions PRIVÉES =
 -- candidature (request) → l'hôte accepte → match → chat privé 1-1.
 -- Anonymat : la liste des inscrits n'est lisible que par l'hôte et les

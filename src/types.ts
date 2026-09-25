@@ -316,7 +316,7 @@ export interface AppData {
 }
 
 /* ------------------------------------------------------------------
-   VeryHevy V2 — social (follow + posts + carte)
+   Social (follow + posts + carte)
 ------------------------------------------------------------------ */
 
 export type PostVisibility = 'public' | 'followers' | 'private'

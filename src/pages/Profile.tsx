@@ -20,6 +20,7 @@ import {
   isUsernameAvailable,
   listFollowers,
   listFollowing,
+  listMyFollowIds,
   removeFollower,
   requestFollow,
   unblockUser,
@@ -206,10 +207,11 @@ export default function ProfilePage() {
       } else {
         const next = await requestFollow(publicProfile.id)
         setFollowing(next)
+        const who = publicProfile.username ? `@${publicProfile.username}` : (publicProfile.display_name ?? 'ce profil')
         notify(
           next === 'requested'
-            ? `Demande envoyée à @${publicProfile.username} 🔒`
-            : `Tu suis @${publicProfile.username} 🎉`,
+            ? `Demande envoyée à ${who} 🔒`
+            : `Tu suis ${who} 🎉`,
           'success',
         )
       }
@@ -225,6 +227,7 @@ export default function ProfilePage() {
   /* ------------------------- vue profil public ------------------------- */
   if (isPublicView) {
     const p = publicProfile
+    const pname = p?.username ? `@${p.username}` : (p?.display_name ?? 'ce profil')
 
     const doBlock = async () => {
       if (!p) return
@@ -233,7 +236,7 @@ export default function ProfilePage() {
         await blockUser(p.id)
         setBlockedByMe(true)
         setFollowing('none')
-        notify(`@${p.username} bloqué : il ne te voit plus`, 'success')
+        notify(`${pname} bloqué : il ne te voit plus`, 'success')
       } catch (err) {
         notify(err instanceof Error ? err.message : 'Blocage impossible', 'error')
       } finally {
@@ -248,7 +251,7 @@ export default function ProfilePage() {
       try {
         await unblockUser(p.id)
         setBlockedByMe(false)
-        notify(`@${p.username} débloqué`, 'success')
+        notify(`Compte ${pname} débloqué`, 'success')
       } catch (err) {
         notify(err instanceof Error ? err.message : 'Déblocage impossible', 'error')
       } finally {
@@ -286,17 +289,17 @@ export default function ProfilePage() {
                     <button
                       type="button"
                       className="underline decoration-dotted underline-offset-2"
-                      onClick={() => setFollowList({ tab: 'followers', userId: p.id, title: `Abonnés de @${p.username}` })}
+                      onClick={() => setFollowList({ tab: 'followers', userId: p.id, title: `Abonnés de ${pname}` })}
                     >
-                      abonné{p.followers_count > 1 ? 's' : ''}
+                      abonné{p.followers_count !== 1 ? 's' : ''}
                     </button>
                     {' · '}{p.following_count}{' '}
                     <button
                       type="button"
                       className="underline decoration-dotted underline-offset-2"
-                      onClick={() => setFollowList({ tab: 'following', userId: p.id, title: `Abonnements de @${p.username}` })}
+                      onClick={() => setFollowList({ tab: 'following', userId: p.id, title: `Abonnements de ${pname}` })}
                     >
-                      abonnement{p.following_count > 1 ? 's' : ''}
+                      abonnement{p.following_count !== 1 ? 's' : ''}
                     </button>
                   </p>
                 </div>
@@ -338,15 +341,15 @@ export default function ProfilePage() {
               )}
               <PublicMiniStats posts={userPosts} />
               {loadingUserPosts ? (
-                <p className="py-4 text-center text-sm text-muted">Chargement des séances…</p>
+                <p className="py-4 text-center text-sm text-muted">Chargement des posts…</p>
               ) : userPosts.length === 0 ? (
                 <Card>
                   <EmptyState
-                    title="Aucune séance visible"
+                    title="Aucun post visible"
                     message={
                       following === 'following' || user?.id === p.id
-                        ? `@${p.username} n'a pas encore publié de séance.`
-                        : `Suis @${p.username} pour voir ses séances réservées aux abonnés.`
+                        ? `@${p.username} n'a pas encore publié de post.`
+                        : `Suis @${p.username} pour voir ses posts réservés aux abonnés.`
                     }
                   />
                 </Card>
@@ -373,7 +376,7 @@ export default function ProfilePage() {
         />
         <ConfirmDialog
           open={confirmBlock}
-          title={`Bloquer @${publicProfile?.username} ?`}
+          title={`Bloquer ${pname} ?`}
           message={
             <>
               Ce profil ne te verra plus : ni ton profil, ni tes posts, ni tes séances,
@@ -433,7 +436,7 @@ export default function ProfilePage() {
                     className="underline decoration-dotted underline-offset-2"
                     onClick={() => user && setFollowList({ tab: 'followers', userId: user.id, title: 'Mes abonnés' })}
                   >
-                    abonné{myProfile.followers_count > 1 ? 's' : ''}
+                    abonné{myProfile.followers_count !== 1 ? 's' : ''}
                   </button>
                   {' · '}{myProfile.following_count}{' '}
                   <button
@@ -441,7 +444,7 @@ export default function ProfilePage() {
                     className="underline decoration-dotted underline-offset-2"
                     onClick={() => user && setFollowList({ tab: 'following', userId: user.id, title: 'Mes abonnements' })}
                   >
-                    abonnement{myProfile.following_count > 1 ? 's' : ''}
+                    abonnement{myProfile.following_count !== 1 ? 's' : ''}
                   </button>
                 </>
               )}
@@ -453,7 +456,7 @@ export default function ProfilePage() {
           value={tab}
           onChange={setTab}
           tabs={[
-            { value: 'posts', label: 'Séances', icon: <LayoutGrid size={14} /> },
+            { value: 'posts', label: 'Posts', icon: <LayoutGrid size={14} /> },
             { value: 'historique', label: 'Historique', icon: <History size={14} /> },
             { value: 'stats', label: 'Stats', icon: <BarChart3 size={14} /> },
           ]}
@@ -523,7 +526,7 @@ function PublicMiniStats({ posts }: { posts: Post[] }) {
   const volume = snaps.reduce((n, s) => n + s.volume, 0)
   const seconds = snaps.reduce((n, s) => n + s.seconds, 0)
   const cells: { value: string; label: string }[] = [
-    { value: String(posts.length), label: 'Séances' },
+    { value: String(posts.length), label: 'Publications' },
     { value: String(sets), label: 'Séries' },
     { value: formatVolume(volume, 'kg'), label: 'Volume' },
     { value: formatDuration(seconds, 'compact'), label: 'Temps' },
@@ -538,7 +541,7 @@ function PublicMiniStats({ posts }: { posts: Post[] }) {
           </div>
         ))}
       </div>
-      <p className="mt-1 text-center text-[10px] text-muted">D'après ses {posts.length} post(s) visible(s)</p>
+      <p className="mt-1 text-center text-[10px] text-muted">D'après {posts.length === 1 ? 'sa publication visible' : `ses ${posts.length} publications visibles`}</p>
     </div>
   )
 }export interface FollowListInfo {
@@ -553,6 +556,7 @@ function FollowListModal({ info, onClose }: { info: FollowListInfo | null; onClo
   const notify = useStore((s) => s.notify)
   const [tab, setTab] = useState<'followers' | 'following'>(info?.tab ?? 'followers')
   const [lists, setLists] = useState<Partial<Record<'followers' | 'following', SocialProfile[]>>>({})
+  const [myFollows, setMyFollows] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
 
@@ -560,6 +564,7 @@ function FollowListModal({ info, onClose }: { info: FollowListInfo | null; onClo
     if (info) {
       setTab(info.tab)
       setLists({})
+      listMyFollowIds().then(setMyFollows).catch(() => {})
     }
   }, [info])
 
@@ -589,8 +594,9 @@ function FollowListModal({ info, onClose }: { info: FollowListInfo | null; onClo
     setBusyId(id)
     try {
       await unfollowUser(id)
+      setMyFollows((prev) => { const next = new Set(prev); next.delete(id); return next })
       setLists((prev) => ({ ...prev, following: (prev.following ?? []).filter((p) => p.id !== id) }))
-      notify('Abonnement retiré', 'info')
+      notify('Abonnement retiré : tu ne le suis plus', 'info')
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Action impossible', 'error')
     } finally {
@@ -617,8 +623,8 @@ function FollowListModal({ info, onClose }: { info: FollowListInfo | null; onClo
         value={tab}
         onChange={setTab}
         tabs={[
-          { value: 'followers', label: 'Abonnés' },
-          { value: 'following', label: 'Abonnements' },
+          { value: 'followers', label: `Abonnés (${lists.followers?.length ?? '…'})` },
+          { value: 'following', label: `Abonnements (${lists.following?.length ?? '…'})` },
         ]}
       />
       <div className="mt-3 space-y-1.5">
@@ -634,13 +640,18 @@ function FollowListModal({ info, onClose }: { info: FollowListInfo | null; onClo
               <button type="button" onClick={() => go(p)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
                 <ProfileAvatar url={p.avatar_url} name={p.display_name ?? p.username ?? '?'} size={40} />
                 <span className="min-w-0">
-                  <span className="block truncate text-sm font-bold">@{p.username ?? '?'}</span>
+                  <span className="block truncate text-sm font-bold">
+                    @{p.username ?? '?'}
+                    {p.visibility === 'private' && p.id !== user?.id && !myFollows.has(p.id) && (
+                      <span className="ml-1" title="Compte privé">🔒</span>
+                    )}
+                  </span>
                   {p.display_name && <span className="block truncate text-xs text-muted">{p.display_name}</span>}
                 </span>
               </button>
               {mine && tab === 'following' && (
                 <Button size="sm" variant="ghost" disabled={busyId === p.id} onClick={() => void remove(p.id)}>
-                  <UserMinus size={14} /> Retirer
+                  <UserMinus size={14} /> Ne plus suivre
                 </Button>
               )}
               {mine && tab === 'followers' && (
@@ -818,7 +829,7 @@ function EditProfileModal({
           <Select value={postVis} onChange={(e) => setPostVis(e.target.value as PostVisibility)}>
             <option value="followers">Abonnés (recommandé)</option>
             <option value="public">Public</option>
-            <option value="private">Privé</option>
+            <option value="private">Privé (moi uniquement)</option>
           </Select>
         </Field>
         <div className="flex gap-2">

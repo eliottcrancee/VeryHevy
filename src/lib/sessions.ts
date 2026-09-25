@@ -111,15 +111,6 @@ export async function createSession(input: {
   return data as SportSession
 }
 
-export async function joinSession(session: SportSession): Promise<void> {
-  const sb = sbOrThrow()
-  const me = await myId()
-  if (session.host === me) return
-  if (session.spots_taken >= session.spots_total) throw new Error('Session complète')
-  const { error } = await sb.from('session_joins').insert({ session_id: session.id, user_id: me })
-  if (error && !error.message.includes('duplicate')) throw new Error(`Inscription : ${error.message}`)
-}
-
 export async function leaveSession(sessionId: string): Promise<void> {
   const sb = sbOrThrow()
   const me = await myId()

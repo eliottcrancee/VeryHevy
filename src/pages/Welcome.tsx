@@ -8,7 +8,7 @@ import { isValidUsername, normalizeUsername } from '@/types'
 import { claimUsername, isUsernameAvailable } from '@/lib/social'
 
 /**
- * Onboarding V2 : choix du pseudo unique au premier login.
+ * Onboarding : choix du pseudo unique au premier login.
  * Route publique (hors AppShell) : /bienvenue.
  */
 export default function WelcomePage() {
@@ -59,7 +59,7 @@ export default function WelcomePage() {
       <Page className="max-w-md space-y-4 pb-10">
         <Card className="space-y-4 p-4">
           <p className="text-sm text-muted">
-            C'est ce pseudo que verront tes follows sur le feed et la carte.
+            C'est ce pseudo que verront tes abonnés sur le feed et la carte.
             Tu pourras changer ta bio et ta ville plus tard dans ton profil.
           </p>
           <Field label="Pseudo" hint="Ex. lea.lift — 3 à 20 caractères">
