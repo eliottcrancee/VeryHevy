@@ -156,8 +156,11 @@ export function syncCloudNow(): Promise<CloudSyncSummary> {
         const stamp = table === 'deleted_items' ? 'deleted_at' : 'updated_at'
         const columns = table === 'deleted_items' ? 'kind,item_id,deleted_at' : 'data'
         for (let offset = 0; ; offset += 500) {
-          const { data, error } = await supabase.from(table).select(columns)
-            .eq('user_id', user.id).gt(stamp, since)
+          // Premier sync (since vide) = pull complet : un `gt('', ...)` ferait
+          // échouer Postgres ("invalid input syntax for timestamp with time zone").
+          let query = supabase.from(table).select(columns).eq('user_id', user.id)
+          if (since) query = query.gt(stamp, since)
+          const { data, error } = await query
             .order(stamp, { ascending: true }).range(offset, offset + 499)
           if (error) throw new Error(`Pull ${table} : ${error.message}`)
           const page = (data ?? []) as unknown as Record<string, unknown>[]
