@@ -16,7 +16,7 @@ import {
   Trophy,
   Upload,
 } from 'lucide-react'
-import type { AppData, SocialProfile } from '@/types'
+import type { AppData, Exercise, SocialProfile, Workout } from '@/types'
 import { useStore } from '@/store/store'
 import { deleteCloudData, isCloudSyncPaused, resumeCloudSync } from '@/lib/cloudSync'
 import { deleteAccountEverywhere } from '@/lib/account'
@@ -38,6 +38,7 @@ import {
   Select,
 } from '@/components/ui'
 import { parseExternalExercises } from '@/lib/importers'
+import { parseHevyCsv } from '@/lib/hevy'
 import { cn, downloadJSON, formatDate, fromDateKey, notificationPermission, pluralize, toDateKey } from '@/lib/utils'
 
 const ACCENTS = [
@@ -74,6 +75,8 @@ export default function SettingsPage() {
     data: Partial<AppData>
   } | null>(null)
   const [busy, setBusy] = useState(false)
+  const [hevyPreview, setHevyPreview] = useState<{ workouts: Workout[]; newExercises: Exercise[]; skipped: number } | null>(null)
+  const [hevyBusy, setHevyBusy] = useState(false)
   const [confirmDeleteCloud, setConfirmDeleteCloud] = useState(false)
   const [cloudPaused, setCloudPaused] = useState(() => user ? isCloudSyncPaused(user.id) : false)
   const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(false)
@@ -103,6 +106,36 @@ export default function SettingsPage() {
     notificationPermission(),
   )
   const fileRef = useRef<HTMLInputElement>(null)
+  const hevyFileRef = useRef<HTMLInputElement>(null)
+
+  const handleHevyFile = async (f: File) => {
+    setHevyBusy(true)
+    try {
+      const text = await f.text()
+      const parsed = parseHevyCsv(text, exercises, settings.defaultRestSeconds)
+      const seen = new Set(workouts.map((w) => `${w.name}|||${w.startedAt}`))
+      const fresh = parsed.workouts.filter((w) => !seen.has(`${w.name}|||${w.startedAt}`))
+      const usedIds = new Set(fresh.flatMap((w) => w.exercises.map((e) => e.exerciseId)))
+      const freshExos = parsed.newExercises.filter((e) => usedIds.has(e.id))
+      if (!fresh.length) throw new Error('Rien de nouveau : ces séances sont déjà importées')
+      setHevyPreview({ workouts: fresh, newExercises: freshExos, skipped: parsed.workouts.length - fresh.length })
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Fichier illisible', 'error')
+    } finally {
+      setHevyBusy(false)
+    }
+  }
+
+  const confirmHevyImport = () => {
+    if (!hevyPreview) return
+    importData({ workouts: hevyPreview.workouts, exercises: hevyPreview.newExercises })
+    const sets = hevyPreview.workouts.reduce((n, w) => n + w.exercises.reduce((m, e) => m + e.sets.length, 0), 0)
+    notify(
+      `${pluralize(hevyPreview.workouts.length, 'séance')} + ${sets} séries importées depuis Hevy 🎉`,
+      'success',
+    )
+    setHevyPreview(null)
+  }
 
   const lastSync = settings.lastSyncAt
     ? new Date(settings.lastSyncAt).toLocaleString('fr-FR')
@@ -494,6 +527,20 @@ export default function SettingsPage() {
             <Button size="sm" onClick={() => fileRef.current?.click()} disabled={busy}>
               <Upload size={14} /> Restaurer une sauvegarde
             </Button>
+            <Button size="sm" onClick={() => hevyFileRef.current?.click()} disabled={hevyBusy}>
+              <Download size={14} /> Importer depuis Hevy (CSV)
+            </Button>
+            <input
+              ref={hevyFileRef}
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0]
+                if (f) void handleHevyFile(f)
+                e.target.value = ''
+              }}
+            />
             <input
               ref={fileRef}
               type="file"
@@ -660,6 +707,33 @@ export default function SettingsPage() {
         danger
         onCancel={() => setConfirmDeleteAccount(false)}
         onConfirm={() => void wipeAccount()}
+      />
+
+      <ConfirmDialog
+        open={hevyPreview !== null}
+        title="Importer depuis Hevy ?"
+        message={
+          hevyPreview && (
+            <>
+              {pluralize(hevyPreview.workouts.length, 'séance')} du{' '}
+              {new Date(hevyPreview.workouts[0].startedAt).toLocaleDateString('fr-FR')}{' '}
+              au {new Date(hevyPreview.workouts[hevyPreview.workouts.length - 1].startedAt).toLocaleDateString('fr-FR')}.
+              <br />
+              {hevyPreview.newExercises.length > 0
+                ? `${hevyPreview.newExercises.length} nouvel(s) exercice(s) créé(s) : ${hevyPreview.newExercises.slice(0, 8).map((e) => e.name).join(', ')}${hevyPreview.newExercises.length > 8 ? '…' : ''}. Les autres sont rattachés à ta bibliothèque.`
+                : 'Tous les exercices existent déjà dans ta bibliothèque.'}
+              {hevyPreview.skipped > 0 && (
+                <>
+                  <br />
+                  {hevyPreview.skipped} doublon(s) ignoré(s).
+                </>
+              )}
+            </>
+          )
+        }
+        confirmLabel="Importer"
+        onCancel={() => setHevyPreview(null)}
+        onConfirm={confirmHevyImport}
       />
 
       <ConfirmDialog
