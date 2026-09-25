@@ -30,6 +30,7 @@ import {
 import { cancelFollowRequest } from '@/lib/notifications'
 import { listMyPosts, listUserPosts } from '@/lib/posts'
 import { PostCard } from '@/components/PostCard'
+import { ProfileAvatar } from '@/components/ProfileAvatar'
 import type { Post, PostVisibility, SocialProfile } from '@/types'
 import { normalizeUsername } from '@/types'
 import { formatDuration, formatVolume } from '@/lib/utils'
@@ -59,7 +60,7 @@ function Avatar({ url, name, size = 64 }: { url?: string | null; name: string; s
       <img
         src={url}
         alt=""
-        className="rounded-2xl object-cover"
+        className="rounded-full object-cover"
         style={{ width: size, height: size }}
         referrerPolicy="no-referrer"
       />
@@ -67,7 +68,7 @@ function Avatar({ url, name, size = 64 }: { url?: string | null; name: string; s
   }
   return (
     <span
-      className="flex items-center justify-center rounded-2xl bg-accent-soft font-extrabold text-accent"
+      className="flex items-center justify-center rounded-full bg-accent-soft font-extrabold text-accent"
       style={{ width: size, height: size, fontSize: size * 0.4 }}
     >
       {(name || '?').slice(0, 1).toUpperCase()}
@@ -629,7 +630,7 @@ function FollowListModal({ info, onClose }: { info: FollowListInfo | null; onClo
           rows.map((p) => (
             <div key={p.id} className="flex items-center gap-3 rounded-xl bg-surface-2 p-2">
               <button type="button" onClick={() => go(p)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
-                <Avatar url={p.avatar_url} name={p.display_name ?? p.username ?? '?'} size={40} />
+                <ProfileAvatar url={p.avatar_url} name={p.display_name ?? p.username ?? '?'} size={40} />
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-bold">@{p.username ?? '?'}</span>
                   {p.display_name && <span className="block truncate text-xs text-muted">{p.display_name}</span>}

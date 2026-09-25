@@ -24,7 +24,7 @@ function Avatar({ url, name, size = 40 }: { url?: string | null; name: string; s
       <img
         src={url}
         alt=""
-        className="shrink-0 rounded-xl object-cover"
+        className="shrink-0 rounded-full object-cover"
         style={{ width: size, height: size }}
         referrerPolicy="no-referrer"
       />
@@ -32,7 +32,7 @@ function Avatar({ url, name, size = 40 }: { url?: string | null; name: string; s
   }
   return (
     <span
-      className="flex shrink-0 items-center justify-center rounded-xl bg-accent-soft font-extrabold text-accent"
+      className="flex shrink-0 items-center justify-center rounded-full bg-accent-soft font-extrabold text-accent"
       style={{ width: size, height: size, fontSize: size * 0.38 }}
     >
       {(name || '?').slice(0, 1).toUpperCase()}

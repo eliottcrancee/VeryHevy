@@ -14,6 +14,7 @@ import {
   markOneRead,
 } from '@/lib/notifications'
 import { Page, PageHeader } from '@/components/PageHeader'
+import { ProfileAvatar, profileNameOf } from '@/components/ProfileAvatar'
 import { Button, Card, EmptyState } from '@/components/ui'
 
 function fmtWhen(iso: string): string {
@@ -23,17 +24,6 @@ function fmtWhen(iso: string): string {
   if (diff < 3_600_000) return `il y a ${Math.floor(diff / 60_000)} min`
   if (diff < 86_400_000) return `il y a ${Math.floor(diff / 3_600_000)} h`
   return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
-}
-
-function Avatar({ url, name }: { url?: string | null; name: string }) {
-  if (url) {
-    return <img src={url} alt="" className="h-11 w-11 shrink-0 rounded-xl object-cover" referrerPolicy="no-referrer" />
-  }
-  return (
-    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-lg font-extrabold text-accent">
-      {(name || '?').slice(0, 1).toUpperCase()}
-    </span>
-  )
 }
 
 /** Libellé + destination d'une notification générique. */
@@ -171,11 +161,20 @@ export default function NotificationsPage() {
                 {incoming.map((r) => (
                   <Card key={r.requester} className="border-accent-line bg-accent-soft p-3">
                     <div className="flex items-center gap-3">
-                      <Avatar url={r.profile?.avatar_url} name={r.profile?.display_name ?? r.profile?.username ?? '?'} />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-extrabold">@{r.profile?.username ?? '?'}</p>
-                        <p className="text-[11px] text-muted">veut te suivre · {fmtWhen(r.created_at)}</p>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => r.profile?.username && navigate(`/profil/${r.profile.username}`)}
+                        className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                      >
+                        <ProfileAvatar url={r.profile?.avatar_url} name={profileNameOf(r.profile)} size={44} />
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-extrabold">@{r.profile?.username ?? '?'}</span>
+                          {r.profile?.display_name && (
+                            <span className="block truncate text-xs text-muted">{r.profile.display_name}</span>
+                          )}
+                          <span className="block text-[11px] text-muted">veut te suivre · {fmtWhen(r.created_at)}</span>
+                        </span>
+                      </button>
                     </div>
                     <div className="mt-2.5 flex gap-2">
                       <Button
@@ -209,11 +208,20 @@ export default function NotificationsPage() {
                 </p>
                 {outgoing.map((r) => (
                   <Card key={r.target} className="flex items-center gap-3 p-3">
-                    <Avatar url={r.profile?.avatar_url} name={r.profile?.display_name ?? r.profile?.username ?? '?'} />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-bold">@{r.profile?.username ?? '?'}</p>
-                      <p className="text-[11px] text-muted">en attente · {fmtWhen(r.created_at)}</p>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => r.profile?.username && navigate(`/profil/${r.profile.username}`)}
+                      className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                    >
+                      <ProfileAvatar url={r.profile?.avatar_url} name={profileNameOf(r.profile)} size={44} />
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-bold">@{r.profile?.username ?? '?'}</span>
+                        {r.profile?.display_name && (
+                          <span className="block truncate text-xs text-muted">{r.profile.display_name}</span>
+                        )}
+                        <span className="block text-[11px] text-muted">en attente · {fmtWhen(r.created_at)}</span>
+                      </span>
+                    </button>
                     <Button size="sm" variant="ghost" disabled={busy === r.target} onClick={() => void cancel(r)}>
                       Annuler
                     </Button>

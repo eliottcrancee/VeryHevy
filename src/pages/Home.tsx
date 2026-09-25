@@ -13,6 +13,7 @@ import { Page, PageHeader } from '@/components/PageHeader'
 import { Button, Card, EmptyState, Input } from '@/components/ui'
 import { IconButton } from '@/components/ui'
 import { PostCard } from '@/components/PostCard'
+import { ProfileAvatar, profileNameOf } from '@/components/ProfileAvatar'
 import { cn } from '@/lib/utils'
 
 const PAGE_SIZE = 20
@@ -236,7 +237,8 @@ export default function HomePage() {
           {results.map((p) => {
             const st = statuses[p.id] ?? 'none'
             return (
-              <div key={p.id} className="flex items-center gap-3 rounded-xl bg-surface-2 p-2">
+              <div key={p.id} className="flex items-center gap-2.5 rounded-xl bg-surface-2 p-2">
+                <ProfileAvatar url={p.avatar_url} name={profileNameOf(p)} size={36} />
                 <button
                   type="button"
                   className="min-w-0 flex-1 text-left"
@@ -248,7 +250,7 @@ export default function HomePage() {
                       <span className="ml-1" title="Compte privé">🔒</span>
                     )}
                   </span>
-                  {p.bio && <span className="block truncate text-xs text-muted">{p.bio}</span>}
+                  {p.display_name && <span className="block truncate text-xs text-muted">{p.display_name}</span>}
                 </button>
                 {st === 'following' ? (
                   <span className="flex shrink-0 items-center gap-1 rounded-full bg-success/15 px-2.5 py-1 text-[11px] font-bold text-success">

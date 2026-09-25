@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -60,6 +61,7 @@ import {
   type Thread,
 } from '@/lib/chat'
 import { Page, PageHeader } from '@/components/PageHeader'
+import { ProfileAvatar, ProfileLine, profileLinkOf, profileNameOf } from '@/components/ProfileAvatar'
 import { Button, Card, Chip, EmptyState, Field, Input, Modal, Select, Tabs, Textarea } from '@/components/ui'
 import { IconButton } from '@/components/ui'
 import { cn } from '@/lib/utils'
@@ -114,8 +116,23 @@ function fmtTime(iso: string): string {
   return new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit' }).format(new Date(iso))
 }
 
-function dayMatches(iso: string, f: DayFilter): boolean {
-  if (f === 'all') return true
+/** Distance vol d'oiseau en km. */
+function kmBetween(aLat: number, aLng: number, bLat: number, bLng: number): number {
+  const rad = (d: number) => (d * Math.PI) / 180
+  const R = 6371
+  const dLa = rad(bLat - aLat)
+  const dLn = rad(bLng - aLng)
+  const a =
+    Math.sin(dLa / 2) * Math.sin(dLa / 2) +
+    Math.cos(rad(aLat)) * Math.cos(rad(bLat)) * Math.sin(dLn / 2) * Math.sin(dLn / 2)
+  return 2 * R * Math.asin(Math.sqrt(a))
+}
+
+function fmtDistance(km: number): string {
+  return km < 1 ? `à ${Math.max(50, Math.round(km * 1000 / 50) * 50)} m` : `à ${km.toFixed(km < 10 ? 1 : 0)} km`
+}
+
+function dayMatches(iso: string, f: DayFilter): boolean {  if (f === 'all') return true
   const d = new Date(iso)
   const now = new Date()
   const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
@@ -335,24 +352,37 @@ export default function ExplorerPage() {
     [inZone, viewport],
   )
 
-  /* Recommandations : open + public, amis d'abord (sans badge pour les
-     sessions anonymes), puis date ; recherche texte. */
-  const reco = useMemo(() => {
+  /* Recommandations : abonnements d'abord, puis proximité.
+     Les sessions anonymes (open) ne vont jamais dans "abonnements"
+     (sinon ça trahirait l'hôte). */
+  const recoBase = useMemo(() => {
     const needle = recoQuery.trim().toLowerCase()
-    return sessions
-      .filter((s) => s.visibility !== 'invite')
-      .filter((s) => {
-        if (!needle) return true
-        return `${s.title} ${s.gym_name} ${s.address_text} ${s.description}`.toLowerCase().includes(needle)
-      })
-      .slice()
-      .sort((a, b) => {
-        const fa = followIds.has(a.host) ? 0 : 1
-        const fb = followIds.has(b.host) ? 0 : 1
-        if (fa !== fb) return fa - fb
-        return +new Date(a.starts_at) - +new Date(b.starts_at)
-      })
-  }, [sessions, recoQuery, followIds])
+    return sessions.filter((s) => {
+      if (s.visibility === 'invite') return false
+      if (!needle) return true
+      return `${s.title} ${s.gym_name} ${s.address_text} ${s.description}`.toLowerCase().includes(needle)
+    })
+  }, [sessions, recoQuery])
+  const recoFriends = useMemo(
+    () =>
+      recoBase
+        .filter((s) => s.visibility !== 'open' && followIds.has(s.host))
+        .slice()
+        .sort((a, b) => +new Date(a.starts_at) - +new Date(b.starts_at)),
+    [recoBase, followIds],
+  )
+  const recoNear = useMemo(() => {
+    const rest = recoBase.filter((s) => s.visibility === 'open' || !followIds.has(s.host))
+    const withDist = rest.map((s) => ({
+      s,
+      d: userPos ? kmBetween(userPos[0], userPos[1], s.lat, s.lng) : null,
+    }))
+    withDist.sort((a, b) => {
+      if (a.d !== null && b.d !== null && Math.abs(a.d - b.d) > 0.05) return a.d - b.d
+      return +new Date(a.s.starts_at) - +new Date(b.s.starts_at)
+    })
+    return withDist
+  }, [recoBase, followIds, userPos])
 
   const openThread = (t: ActiveThread) => {
     setThread(t)
@@ -465,48 +495,90 @@ export default function ExplorerPage() {
             act={act}
           />
         ) : view === 'reco' ? (
-          <div className="space-y-2">
+          <div className="space-y-4">
             <div className="relative">
               <Search size={15} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted" />
               <Input value={recoQuery} onChange={(e) => setRecoQuery(e.target.value)} placeholder="Titre, salle, ville…" className="pl-9" />
             </div>
-            <p className="text-xs font-extrabold tracking-wide text-muted uppercase">
-              D’abord tes abonnements ({loading ? '…' : reco.length})
-            </p>
             {loading ? (
               <p className="text-sm text-muted">Chargement…</p>
-            ) : reco.length === 0 ? (
-                <Card>
-                  <EmptyState
-                    icon={<MapPin size={24} />}
-                    title="Rien pour l'instant"
-                    message="Suis des sportifs pour voir leurs séances ici en premier, ou place un point sur la carte."
-                    action={<Button variant="primary" onClick={() => setView('carte')}><MapPin size={16} /> Choisir un point sur la carte</Button>}
-                  />
-                </Card>
+            ) : recoFriends.length === 0 && recoNear.length === 0 ? (
+              <Card>
+                <EmptyState
+                  icon={<MapPin size={24} />}
+                  title="Rien pour l'instant"
+                  message="Suis des sportifs pour voir leurs séances ici en premier, ou place un point sur la carte."
+                  action={<Button variant="primary" onClick={() => setView('carte')}><MapPin size={16} /> Choisir un point sur la carte</Button>}
+                />
+              </Card>
             ) : (
-              reco.map((s) => (
-                <div key={s.id} className="space-y-2">
-                  <SessionRow
-                    s={s}
-                    me={user?.id}
-                    friend={followIds.has(s.host)}
-                    selected={s.id === selectedId}
-                    onSelect={() => setSelectedId(s.id === selectedId ? null : s.id)}
-                  />
-                  {selectedId === s.id && (
-                    <SessionDetail
-                      s={s}
-                      me={user?.id}
-                      busy={busyId === s.id}
-                      onClose={() => setSelectedId(null)}
-                      onChanged={() => void reload()}
-                      onChat={(t) => openThread(t)}
-                      act={act}
-                    />
+              <>
+                <div className="space-y-2">
+                  <p className="text-xs font-extrabold tracking-wide text-muted uppercase">
+                    Tes abonnements ({recoFriends.length})
+                  </p>
+                  {recoFriends.length === 0 ? (
+                    <p className="text-xs text-muted">
+                      Aucune séance de tes abonnements — suis des sportifs pour les voir ici en premier.
+                    </p>
+                  ) : (
+                    recoFriends.map((s) => (
+                      <div key={s.id} className="space-y-2">
+                        <SessionRow
+                          s={s}
+                          me={user?.id}
+                          friend
+                          selected={s.id === selectedId}
+                          onSelect={() => setSelectedId(s.id === selectedId ? null : s.id)}
+                          distanceKm={userPos ? kmBetween(userPos[0], userPos[1], s.lat, s.lng) : null}
+                        />
+                        {selectedId === s.id && (
+                          <SessionDetail
+                            s={s}
+                            me={user?.id}
+                            busy={busyId === s.id}
+                            onClose={() => setSelectedId(null)}
+                            onChanged={() => void reload()}
+                            onChat={(t) => openThread(t)}
+                            act={act}
+                          />
+                        )}
+                      </div>
+                    ))
                   )}
                 </div>
-              ))
+                <div className="space-y-2">
+                  <p className="text-xs font-extrabold tracking-wide text-muted uppercase">
+                    À proximité ({recoNear.length}){!userPos ? ' — par date' : ''}
+                  </p>
+                  {!userPos && recoNear.length > 0 && (
+                    <p className="text-[11px] text-muted">Active ta position (📍 en haut) pour trier par proximité.</p>
+                  )}
+                  {recoNear.map(({ s, d }) => (
+                    <div key={s.id} className="space-y-2">
+                      <SessionRow
+                        s={s}
+                        me={user?.id}
+                        friend={s.visibility !== 'open' && followIds.has(s.host)}
+                        selected={s.id === selectedId}
+                        onSelect={() => setSelectedId(s.id === selectedId ? null : s.id)}
+                        distanceKm={d}
+                      />
+                      {selectedId === s.id && (
+                        <SessionDetail
+                          s={s}
+                          me={user?.id}
+                          busy={busyId === s.id}
+                          onClose={() => setSelectedId(null)}
+                          onChanged={() => void reload()}
+                          onChat={(t) => openThread(t)}
+                          act={act}
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
           </div>
         ) : (
@@ -626,7 +698,14 @@ export default function ExplorerPage() {
 
 /* ------------------------------ morceaux ------------------------------ */
 
-function SessionRow({ s, me, friend, selected, onSelect }: { s: SportSession; me?: string; friend?: boolean; selected: boolean; onSelect: () => void }) {
+function SessionRow({ s, me, friend, selected, onSelect, distanceKm }: {
+  s: SportSession
+  me?: string
+  friend?: boolean
+  selected: boolean
+  onSelect: () => void
+  distanceKm?: number | null
+}) {
   const full = s.spots_taken >= s.spots_total
   return (
     <button
@@ -649,6 +728,7 @@ function SessionRow({ s, me, friend, selected, onSelect }: { s: SportSession; me
         <span className="block truncate text-[11px] text-muted">
           {fmtDate(s.starts_at)} · {s.gym_name || 'Lieu à préciser'} · {s.spots_taken}/{s.spots_total}
           {s.host === me ? ' · ta session' : ''}
+          {distanceKm != null ? ` · ${fmtDistance(distanceKm)}` : ''}
         </span>
       </span>
       <span className={cn('shrink-0 rounded-lg px-2 py-1 text-[11px] font-extrabold', full ? 'bg-danger/10 text-danger' : 'bg-success/10 text-success')}>
@@ -708,15 +788,24 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
   const pending = (requests ?? []).filter((r) => r.status === 'pending')
   const pendingInvites = (invites ?? []).filter((i) => i.status === 'pending')
 
-  /* Nom de l'hôte : anonyme pour les sessions "sur proposition"
-     tant qu'on n'est pas membre. */
-  const hostLabel = mine
-    ? 'toi'
-    : s.visibility === 'open' && !isMember
-      ? 'un sportif anonyme 🤫'
-      : s.host_profile?.username
-        ? `@${s.host_profile.username}`
-        : (s.host_profile?.display_name ?? 'un sportif')
+  /* Hôte : cliquable (photo + nom + pseudo) sauf anonymat des
+     sessions "sur proposition" pour les non-membres. */
+  const hostTo = mine ? '/profil' : profileLinkOf(s.host_profile)
+  const hostNode =
+    s.visibility === 'open' && !isMember && !mine ? (
+      <b>un sportif anonyme 🤫</b>
+    ) : s.host_profile || mine ? (
+      <Link to={hostTo ?? '/profil'} className="inline-flex items-center gap-1 font-bold text-ink hover:text-accent">
+        <ProfileAvatar
+          url={s.host_profile?.avatar_url}
+          name={mine ? 'toi' : profileNameOf(s.host_profile)}
+          size={18}
+        />
+        {mine ? 'toi' : profileNameOf(s.host_profile)}
+      </Link>
+    ) : (
+      <b>un sportif</b>
+    )
 
   const propose = async () => {
     setReqBusy(true)
@@ -816,7 +905,7 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
           )}
           <p className="mt-0.5 text-xs text-muted">
             {s.visibility === 'invite' ? '🔒 Privée (sur invitation)' : s.visibility === 'open' ? '✨ Sur proposition (rencontre)' : '🌍 Publique (validation requise)'} · Niveau : {s.level} ·{' '}
-            {s.spots_taken}/{s.spots_total} · Par <b>{hostLabel}</b>
+            {s.spots_taken}/{s.spots_total} · Par {hostNode}
           </p>
           {/* Participants : cachés aux non-membres (sauf profils publics). */}
           {!isMember && publicOnes.length > 0 && (
@@ -835,17 +924,17 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
         <div className="space-y-1 rounded-xl bg-surface-2 p-2.5">
           <p className="text-[11px] font-extrabold tracking-wide text-muted uppercase">Inscrits ({members.length})</p>
           {members.map((m) => (
-            <div key={m.user_id} className="flex items-center gap-2">
-              <span className="min-w-0 flex-1 truncate text-[13px]">
-                <b>{displayNameOf(m.profile)}</b>
-                {m.user_id === s.host && <span className="ml-1 text-[10px] text-muted">(hôte)</span>}
-                {m.requestMessage && <span className="block truncate text-[11px] text-muted">« {m.requestMessage} »</span>}
-              </span>
-              {mine && m.user_id !== me && (
-                <Button size="sm" variant="ghost" onClick={() => chatWith(m.user_id, m.profile)}>
-                  <MessageCircle size={14} />
-                </Button>
-              )}
+            <div key={m.user_id} className="space-y-0.5">
+              <div className="flex items-center gap-2">
+                <ProfileLine profile={m.profile} size={26} />
+                {m.user_id === s.host && <span className="shrink-0 text-[10px] text-muted">(hôte)</span>}
+                {mine && m.user_id !== me && (
+                  <Button size="sm" variant="ghost" onClick={() => chatWith(m.user_id, m.profile)}>
+                    <MessageCircle size={14} />
+                  </Button>
+                )}
+              </div>
+              {m.requestMessage && <p className="truncate pl-9 text-[11px] text-muted">« {m.requestMessage} »</p>}
             </div>
           ))}
         </div>
@@ -933,10 +1022,10 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
           ) : (
             pending.map((r) => (
               <div key={r.user_id} className="flex items-center gap-2 rounded-lg bg-surface px-2.5 py-2">
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13px] font-bold">{displayNameOf(r.author)}</span>
-                  {r.message && <span className="block truncate text-[11px] text-muted">« {r.message} »</span>}
-                </span>
+                <div className="min-w-0 flex-1">
+                  <ProfileLine profile={r.author} size={26} />
+                  {r.message && <p className="truncate pl-9 text-[11px] text-muted">« {r.message} »</p>}
+                </div>
                 <Button size="sm" variant="primary" disabled={reqBusy || full} onClick={() => void decide(r, true)}>
                   <Check size={14} />
                 </Button>
@@ -962,7 +1051,7 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
           ) : (
             invites.map((i) => (
               <div key={i.user_id} className="flex items-center gap-2 rounded-lg bg-surface px-2.5 py-2">
-                <span className="min-w-0 flex-1 truncate text-[13px] font-bold">{displayNameOf(i.author)}</span>
+                <ProfileLine profile={i.author} size={26} />
                 <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-extrabold ${i.status === 'pending' ? 'bg-warning/15 text-warning' : i.status === 'accepted' ? 'bg-success/15 text-success' : 'bg-surface-3 text-muted'}`}>
                   {i.status === 'pending' ? 'En attente' : i.status === 'accepted' ? 'Accepté' : 'Refusé'}
                 </span>
@@ -1191,7 +1280,7 @@ function MessagesView({ initial, onConsumeInitial, onBack }: {
             onClick={() => setActive({ sessionId: t.session_id, title: t.session_title, otherId: t.other_id, other: t.other })}
             className="flex w-full items-center gap-3 rounded-xl border border-line bg-surface p-3 text-left transition-colors hover:bg-surface-2"
           >
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent-soft font-extrabold text-accent">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent-soft font-extrabold text-accent">
               {(t.other?.username ?? t.other?.display_name ?? '?').slice(0, 1).toUpperCase()}
             </span>
             <span className="min-w-0 flex-1">
@@ -1267,9 +1356,9 @@ function NewMessageModal({ open, onClose, onPick }: {
                 className="flex w-full items-center gap-3 rounded-xl bg-surface-2 p-2 text-left hover:brightness-105"
               >
                 {f.avatar_url ? (
-                  <img src={f.avatar_url} alt="" className="h-9 w-9 shrink-0 rounded-lg object-cover" referrerPolicy="no-referrer" />
+                  <img src={f.avatar_url} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" referrerPolicy="no-referrer" />
                 ) : (
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-soft font-extrabold text-accent">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-soft font-extrabold text-accent">
                     {(f.display_name ?? f.username ?? '?').slice(0, 1).toUpperCase()}
                   </span>
                 )}
