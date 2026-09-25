@@ -3,6 +3,7 @@ import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from 'react-lea
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import {
+  CalendarCheck,
   Check,
   CloudOff,
   LocateFixed,
@@ -38,6 +39,8 @@ import {
   displayNameOf,
   listMembers,
   listMessages,
+  listMyInvites,
+  listMyPendingRequests,
   listPublicParticipants,
   listRequests,
   listSessionInvites,
@@ -49,6 +52,8 @@ import {
   sendRequest,
   withdrawRequest,
   type ChatMessage,
+  type MyInvite,
+  type MyPendingRequest,
   type SessionInvite,
   type SessionMember,
   type SessionRequest,
@@ -62,7 +67,44 @@ import { cn } from '@/lib/utils'
 const FRANCE: [number, number] = [46.603354, 1.888334]
 
 type DayFilter = 'all' | 'today' | 'tomorrow' | 'weekend'
-type View = 'carte' | 'reco' | 'messages'
+type View = 'carte' | 'reco' | 'mine' | 'messages'
+
+/** Regroupe les points proches en clusters (grille selon le zoom). */
+interface Cluster {
+  key: string
+  lat: number
+  lng: number
+  sessions: SportSession[]
+}
+
+function clusterize(list: SportSession[], zoom: number): Cluster[] {
+  if (zoom >= 12 || list.length < 8) {
+    return list.map((s) => ({ key: s.id, lat: s.lat, lng: s.lng, sessions: [s] }))
+  }
+  const cell = 90 / Math.pow(2, zoom)
+  const cells = new Map<string, SportSession[]>()
+  for (const s of list) {
+    const k = `${Math.floor(s.lat / cell)}:${Math.floor(s.lng / cell)}`
+    const arr = cells.get(k)
+    if (arr) arr.push(s)
+    else cells.set(k, [s])
+  }
+  return [...cells.entries()].map(([key, arr]) => ({
+    key,
+    lat: arr.reduce((n, s) => n + s.lat, 0) / arr.length,
+    lng: arr.reduce((n, s) => n + s.lng, 0) / arr.length,
+    sessions: arr,
+  }))
+}
+
+function clusterIcon(n: number): L.DivIcon {
+  return L.divIcon({
+    className: '',
+    html: `<div style="display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:50%;background:#4f83ff;color:#fff;font-weight:800;font-size:13px;border:2px solid rgba(255,255,255,.8);box-shadow:0 2px 8px rgba(0,0,0,.4)">${n}</div>`,
+    iconSize: [34, 34],
+    iconAnchor: [17, 17],
+  })
+}
 
 function fmtDate(iso: string): string {
   return new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(iso))
@@ -121,6 +163,35 @@ function FlyTo({ target }: { target: { lat: number; lng: number; zoom?: number }
   return null
 }
 
+/** Suit la zone visible de la carte (bounds + zoom) pour filtrer la liste. */
+export interface MapViewport {
+  minLat: number
+  maxLat: number
+  minLng: number
+  maxLng: number
+  zoom: number
+}
+
+function BoundsTracker({ onChange }: { onChange: (v: MapViewport) => void }) {
+  const map = useMap()
+  const push = () => {
+    const b = map.getBounds()
+    onChange({
+      minLat: b.getSouth(),
+      maxLat: b.getNorth(),
+      minLng: b.getWest(),
+      maxLng: b.getEast(),
+      zoom: map.getZoom(),
+    })
+  }
+  useMapEvents({ moveend: push, zoomend: push })
+  useEffect(() => {
+    push()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map])
+  return null
+}
+
 export interface ActiveThread {
   sessionId: string
   title: string
@@ -146,6 +217,7 @@ export default function ExplorerPage() {
   const [flyTo, setFlyTo] = useState<{ lat: number; lng: number; zoom?: number } | null>(null)
   const [userPos, setUserPos] = useState<[number, number] | null>(null)
   const [picked, setPicked] = useState<{ lat: number; lng: number } | null>(null)
+  const [viewport, setViewport] = useState<MapViewport | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [thread, setThread] = useState<ActiveThread | null>(null)
@@ -243,9 +315,25 @@ export default function ExplorerPage() {
     () => sessions.filter((s) => dayMatches(s.starts_at, dayFilter)),
     [sessions, dayFilter],
   )
-  const invited = useMemo(() => visible.filter((s) => s.visibility === 'invite'), [visible])
-  const listed = useMemo(() => visible.filter((s) => s.visibility !== 'invite'), [visible])
-  const selected = sessions.find((s) => s.id === selectedId) ?? null
+  /* Liste carte = sessions open/public dans la zone visible (+25 % marge).
+     Les privées vivent dans l'onglet Mes séances, pas ici. */
+  const inZone = useMemo(() => {
+    const base = visible.filter((s) => s.visibility !== 'invite')
+    if (!viewport) return base
+    const dLat = (viewport.maxLat - viewport.minLat) * 0.25
+    const dLng = (viewport.maxLng - viewport.minLng) * 0.25
+    return base.filter(
+      (s) =>
+        s.lat >= viewport.minLat - dLat &&
+        s.lat <= viewport.maxLat + dLat &&
+        s.lng >= viewport.minLng - dLng &&
+        s.lng <= viewport.maxLng + dLng,
+    )
+  }, [visible, viewport])
+  const clusters = useMemo(
+    () => clusterize(inZone, viewport?.zoom ?? 6),
+    [inZone, viewport],
+  )
 
   /* Recommandations : open + public, amis d'abord (sans badge pour les
      sessions anonymes), puis date ; recherche texte. */
@@ -270,6 +358,15 @@ export default function ExplorerPage() {
     setThread(t)
     setView('messages')
   }
+
+  /* Tap sur un pin → la ligne correspondante se déplie + scroll jusqu'à elle.
+     Le détail ne s'affiche qu'à un seul endroit (jamais en double). */
+  const rowRefs = useRef(new Map<string, HTMLDivElement>())
+  useEffect(() => {
+    if (selectedId) {
+      rowRefs.current.get(selectedId)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }
+  }, [selectedId])
 
   const act = async (id: string, fn: () => Promise<void>, ok: string) => {
     setBusyId(id)
@@ -320,6 +417,7 @@ export default function ExplorerPage() {
             tabs={[
               { value: 'carte', label: 'Carte', icon: <MapIcon size={14} /> },
               { value: 'reco', label: 'Recommandations', icon: <Sparkles size={14} /> },
+              { value: 'mine', label: 'Mes séances', icon: <CalendarCheck size={14} /> },
               { value: 'messages', label: 'Messages', icon: <MessageCircle size={14} /> },
             ]}
           />
@@ -356,6 +454,15 @@ export default function ExplorerPage() {
             initial={thread}
             onConsumeInitial={() => setThread(null)}
             onBack={() => setView('carte')}
+          />
+        ) : view === 'mine' ? (
+          <MySessionsView
+            sessions={sessions}
+            followIds={followIds}
+            busyId={busyId}
+            onChanged={() => void reload()}
+            onChat={(t) => openThread(t)}
+            act={act}
           />
         ) : view === 'reco' ? (
           <div className="space-y-2">
@@ -414,9 +521,24 @@ export default function ExplorerPage() {
                 />
                 <ClickCatcher onPick={(lat, lng) => setPicked({ lat, lng })} />
                 <FlyTo target={flyTo} />
-                {visible.filter((s) => s.visibility !== 'invite').map((s) => (
-                  <Marker key={s.id} position={[s.lat, s.lng]} icon={pinIcon(s, user?.id, s.id === selectedId)} eventHandlers={{ click: () => setSelectedId(s.id) }} />
-                ))}
+                <BoundsTracker onChange={setViewport} />
+                {clusters.map((c) =>
+                  c.sessions.length === 1 ? (
+                    <Marker
+                      key={c.key}
+                      position={[c.lat, c.lng]}
+                      icon={pinIcon(c.sessions[0], user?.id, c.sessions[0].id === selectedId)}
+                      eventHandlers={{ click: () => setSelectedId(c.sessions[0].id) }}
+                    />
+                  ) : (
+                    <Marker
+                      key={c.key}
+                      position={[c.lat, c.lng]}
+                      icon={clusterIcon(c.sessions.length)}
+                      eventHandlers={{ click: () => setFlyTo({ lat: c.lat, lng: c.lng, zoom: Math.min(16, (viewport?.zoom ?? 6) + 2) }) }}
+                    />
+                  ),
+                )}
                 {userPos && <Marker position={userPos} icon={ME_ICON} interactive={false} />}
                 {picked && (
                   <Marker
@@ -440,49 +562,30 @@ export default function ExplorerPage() {
               </Card>
             )}
 
-            {invited.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-xs font-extrabold tracking-wide text-muted uppercase">📩 Mes invitations ({invited.length})</p>
-                {invited.map((s) => (
-                  <div key={s.id} className="space-y-2">
-                    <SessionRow s={s} me={user?.id} friend={followIds.has(s.host)} selected={s.id === selectedId} onSelect={() => setSelectedId(s.id === selectedId ? null : s.id)} />
-                    {selectedId === s.id && (
-                      <SessionDetail s={s} me={user?.id} busy={busyId === s.id} onClose={() => setSelectedId(null)} onChanged={() => void reload()} onChat={(t) => openThread(t)} act={act} />
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {selected && selected.visibility !== 'invite' && (
-              <SessionDetail
-                s={selected}
-                me={user?.id}
-                busy={busyId === selected.id}
-                onClose={() => setSelectedId(null)}
-                onChanged={() => void reload()}
-                onChat={(t) => openThread(t)}
-                act={act}
-              />
-            )}
-
             <div className="space-y-2">
               <p className="text-xs font-extrabold tracking-wide text-muted uppercase">
-                À venir ({loading ? '…' : listed.length})
+                Dans cette zone ({loading ? '…' : inZone.length})
               </p>
               {loading ? (
                 <p className="text-sm text-muted">Chargement de la carte…</p>
-              ) : listed.length === 0 ? (
+              ) : inZone.length === 0 ? (
                 <Card>
                   <EmptyState
                     icon={<MapPin size={24} />}
-                    title="Aucune séance ici pour l'instant"
-                    message="Touche la carte pour choisir un point, puis « Proposer ici »."
+                    title="Aucune séance dans cette zone"
+                    message="Déplace ou dézoome la carte — ou touche-la pour proposer ta séance ici."
                   />
                 </Card>
               ) : (
-                listed.map((s) => (
-                  <div key={s.id} className="space-y-2">
+                inZone.map((s) => (
+                  <div
+                    key={s.id}
+                    ref={(el) => {
+                      if (el) rowRefs.current.set(s.id, el)
+                      else rowRefs.current.delete(s.id)
+                    }}
+                    className="space-y-2"
+                  >
                     <SessionRow
                       s={s}
                       me={user?.id}
@@ -888,8 +991,7 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
   )
 }
 
-function ProposeBox({ msg, setMsg, busy, onSend, action = 'Se proposer 🙋', placeholder = 'Présente-toi en un mot (optionnel)…' }: {
-  msg: string
+function ProposeBox({ msg, setMsg, busy, onSend, action = 'Se proposer 🙋', placeholder = 'Présente-toi en un mot (optionnel)…' }: {  msg: string
   setMsg: (v: string) => void
   busy: boolean
   onSend: () => void
@@ -900,6 +1002,124 @@ function ProposeBox({ msg, setMsg, busy, onSend, action = 'Se proposer 🙋', pl
     <div className="flex gap-2">
       <Input value={msg} onChange={(e) => setMsg(e.target.value)} placeholder={placeholder} maxLength={280} />
       <Button size="sm" variant="primary" disabled={busy} onClick={onSend}>{action}</Button>
+    </div>
+  )
+}
+
+/* --------------------------- mes séances --------------------------- */
+/* Inscrit + créées + en attente (demandes et invitations). */
+
+function MySessionsView({ sessions, followIds, busyId, onChanged, onChat, act }: {
+  sessions: SportSession[]
+  followIds: Set<string>
+  busyId: string | null
+  onChanged: () => void
+  onChat: (t: ActiveThread) => void
+  act: (id: string, fn: () => Promise<void>, ok: string) => Promise<void>
+}) {
+  const { user } = useAuth()
+  const notify = useStore((s) => s.notify)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [pendingReqs, setPendingReqs] = useState<MyPendingRequest[]>([])
+  const [invites, setInvites] = useState<MyInvite[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const refreshLocal = async () => {
+    try {
+      const [r, i] = await Promise.all([
+        listMyPendingRequests().catch(() => [] as MyPendingRequest[]),
+        listMyInvites().catch(() => [] as MyInvite[]),
+      ])
+      setPendingReqs(r)
+      setInvites(i)
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Chargement impossible', 'error')
+    }
+  }
+
+  useEffect(() => {
+    setLoading(true)
+    void refreshLocal().finally(() => setLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const me = user?.id
+  const byId = useMemo(() => new Map(sessions.map((s) => [s.id, s])), [sessions])
+  const mine = sessions.filter((s) => s.host === me)
+  const joined = sessions.filter((s) => s.joined_by_me && s.host !== me)
+  const requested = pendingReqs.flatMap((r) => {
+    const s = byId.get(r.session.id)
+    return s ? [s] : []
+  })
+  const invitedOnes = invites.flatMap((i) => {
+    const s = byId.get(i.invite.session_id)
+    return s ? [s] : []
+  })
+
+  const changed = () => {
+    setSelectedId(null)
+    onChanged()
+    void refreshLocal()
+  }
+
+  const renderRow = (s: SportSession) => (
+    <div key={s.id} className="space-y-2">
+      <SessionRow
+        s={s}
+        me={me}
+        friend={followIds.has(s.host)}
+        selected={s.id === selectedId}
+        onSelect={() => setSelectedId(s.id === selectedId ? null : s.id)}
+      />
+      {selectedId === s.id && (
+        <SessionDetail
+          s={s}
+          me={me}
+          busy={busyId === s.id}
+          onClose={() => setSelectedId(null)}
+          onChanged={changed}
+          onChat={onChat}
+          act={act}
+        />
+      )}
+    </div>
+  )
+
+  const section = (title: string, list: SportSession[], empty: string) => (
+    <div className="space-y-2">
+      <p className="text-xs font-extrabold tracking-wide text-muted uppercase">{title} ({list.length})</p>
+      {list.length === 0 ? (
+        <p className="text-xs text-muted">{empty}</p>
+      ) : (
+        list.map(renderRow)
+      )}
+    </div>
+  )
+
+  if (loading) return <p className="py-6 text-center text-sm text-muted">Chargement de tes séances…</p>
+
+  if (mine.length === 0 && joined.length === 0 && requested.length === 0 && invitedOnes.length === 0) {
+    return (
+      <Card>
+        <EmptyState
+          icon={<CalendarCheck size={24} />}
+          title="Aucune séance pour l'instant"
+          message="Propose une séance depuis la carte, ou demande à rejoindre celles autour de toi : tout se retrouvera ici."
+        />
+      </Card>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {(invitedOnes.length > 0 || requested.length > 0) && (
+        <div className="space-y-3">
+          {section('📩 Invitations reçues', invitedOnes, '')}
+          {section('⏳ Demandes en attente', requested, '')}
+        </div>
+      )}
+      {section('🤝 Où je suis inscrit', joined, 'Aucune inscription pour l’instant.')}
+      {section('📣 Créées par moi', mine, 'Aucune séance créée pour l’instant.')}
     </div>
   )
 }

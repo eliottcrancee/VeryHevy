@@ -245,6 +245,38 @@ export async function cancelInvite(sessionId: string, userId: string): Promise<v
   if (error) throw new Error(`Retrait : ${error.message}`)
 }
 
+export interface MyPendingRequest {
+  request: SessionRequest
+  session: { id: string; title: string; starts_at: string; gym_name: string; visibility: string }
+}
+
+/** Mes candidatures/demandes en attente (toutes sessions). */
+export async function listMyPendingRequests(): Promise<MyPendingRequest[]> {
+  const sb = sbOrThrow()
+  const me = await myId()
+  const { data, error } = await sb
+    .from('session_requests')
+    .select('*')
+    .eq('user_id', me)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false })
+  if (error) throw new Error(`Demandes : ${error.message}`)
+  const reqs = (data as SessionRequest[]) ?? []
+  if (!reqs.length) return []
+  const { data: sessions } = await sb
+    .from('sessions')
+    .select('id,title,starts_at,gym_name,visibility')
+    .in('id', reqs.map((r) => r.session_id))
+  const byId = new Map(
+    ((sessions as MyPendingRequest['session'][] ?? [])).map((s) => [s.id, s]),
+  )
+  return reqs.flatMap((request) => {
+    const session = byId.get(request.session_id)
+    if (!session) return []
+    return [{ request, session }]
+  })
+}
+
 /* ------------------------------ membres ------------------------------ */
 
 export interface SessionMember {
