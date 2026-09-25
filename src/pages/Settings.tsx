@@ -19,6 +19,7 @@ import {
 import type { AppData, SocialProfile } from '@/types'
 import { useStore } from '@/store/store'
 import { deleteCloudData, isCloudSyncPaused, resumeCloudSync } from '@/lib/cloudSync'
+import { deleteAccountEverywhere } from '@/lib/account'
 import { listMyBlocks, unblockUser } from '@/lib/social'
 import { useAuth } from '@/lib/auth'
 import { isCloudEnabled } from '@/lib/supabase'
@@ -75,6 +76,8 @@ export default function SettingsPage() {
   const [busy, setBusy] = useState(false)
   const [confirmDeleteCloud, setConfirmDeleteCloud] = useState(false)
   const [cloudPaused, setCloudPaused] = useState(() => user ? isCloudSyncPaused(user.id) : false)
+  const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(false)
+  const [wiping, setWiping] = useState(false)
   const [blocks, setBlocks] = useState<SocialProfile[]>([])
   const [blocksLoaded, setBlocksLoaded] = useState(false)
 
@@ -114,6 +117,21 @@ export default function SettingsPage() {
       notify(err instanceof Error ? err.message : 'Suppression impossible', 'error')
     } finally {
       setConfirmDeleteCloud(false)
+    }
+  }
+
+  const wipeAccount = async () => {
+    setWiping(true)
+    try {
+      await deleteAccountEverywhere()
+      resetAll()
+      setConfirmDeleteAccount(false)
+      await signOut()
+      notify('Compte supprimé', 'info')
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Suppression impossible', 'error')
+    } finally {
+      setWiping(false)
     }
   }
 
@@ -209,41 +227,47 @@ export default function SettingsPage() {
 
       <Page className="max-w-3xl space-y-6 pb-10">
         {/* Compte */}
-        <Card className="flex items-center gap-3 p-4">
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-lg font-extrabold text-accent">
-            {(user?.user_metadata?.full_name as string | undefined)?.slice(0, 1).toUpperCase()
-              ?? user?.email?.slice(0, 1).toUpperCase()
-              ?? '🏋️'}
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-bold">
-              {cloudEnabled && user
-                ? ((user.user_metadata?.full_name as string | undefined) ?? user.email)
-                : 'Mode local'}
-            </p>
-            <p className="truncate text-xs text-muted">
-              {cloudEnabled && user
-                ? `Connecté avec Google · ${user.email}`
-                : isCloudEnabled
-                  ? 'Non connecté — vos données restent sur cet appareil'
-                  : 'Cloud non configuré — 100 % local, aucune donnée envoyée'}
-            </p>
+        <Card className="space-y-3 p-4">
+          <div className="flex items-center gap-3">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent-soft text-lg font-extrabold text-accent">
+              {(user?.user_metadata?.full_name as string | undefined)?.slice(0, 1).toUpperCase()
+                ?? user?.email?.slice(0, 1).toUpperCase()
+                ?? '🏋️'}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-bold">
+                {cloudEnabled && user
+                  ? ((user.user_metadata?.full_name as string | undefined) ?? user.email)
+                  : 'Mode local'}
+              </p>
+              <p className="truncate text-xs text-muted">
+                {cloudEnabled && user
+                  ? `Connecté avec Google · ${user.email}`
+                  : isCloudEnabled
+                    ? 'Non connecté — tes données restent sur cet appareil'
+                    : 'Cloud non configuré — 100 % local, aucune donnée envoyée'}
+              </p>
+            </div>
           </div>
-          <Link to="/profil">
-            <Button size="sm" variant="primary">Mon profil</Button>
-          </Link>
-          {cloudEnabled && user && (
-            <Button
-              size="sm"
-              variant="danger"
-              onClick={() => {
-                void signOut()
-                notify('Déconnecté — vos données locales sont conservées', 'info')
-              }}
-            >
-              <LogOut size={14} /> Déconnexion
-            </Button>
-          )}
+          <div className="flex gap-2">
+            <Link to="/profil" className="flex-1">
+              <Button size="sm" variant="primary" block>Mon profil</Button>
+            </Link>
+            {cloudEnabled && user && (
+              <Button
+                size="sm"
+                variant="danger"
+                block
+                className="flex-1"
+                onClick={() => {
+                  void signOut()
+                  notify('Déconnecté — tes données locales sont conservées', 'info')
+                }}
+              >
+                <LogOut size={14} /> Déconnexion
+              </Button>
+            )}
+          </div>
         </Card>
 
         {/* Apparence */}
@@ -461,7 +485,7 @@ export default function SettingsPage() {
           <p className="text-sm text-muted">
             {pluralize(workouts.length, 'séance')} · {pluralize(routines.length, 'programme')} ·{' '}
             {pluralize(totalSets, 'série')} enregistrées. Stockées localement (IndexedDB)
-            et synchronisées avec le cloud quand vous êtes connecté.
+            et synchronisées avec le cloud quand tu es connecté.
           </p>
           <div className="flex flex-wrap gap-2">
             <Button size="sm" variant="primary" onClick={exportAll}>
@@ -516,6 +540,26 @@ export default function SettingsPage() {
             </div>
           )}
         </Card>
+
+        {/* Zone danger : suppression de compte (cohérente, pas de demi-mesure) */}
+        {cloudEnabled && user && (
+          <Card className="space-y-3 border-danger/40 p-4">
+            <SectionTitle className="mb-0">
+              <span className="inline-flex items-center gap-1.5 text-danger">
+                <Trash2 size={13} /> Zone danger
+              </span>
+            </SectionTitle>
+            <Button size="sm" variant="danger" onClick={() => setConfirmDeleteAccount(true)}>
+              <Trash2 size={14} /> Supprimer mon compte
+            </Button>
+            <p className="text-[11px] text-muted">
+              Efface tout : séances, programmes, exercices, posts, sorties, messages,
+              abonnements et profil — en ligne ET sur cet appareil — puis te déconnecte.
+              Les notifs déjà reçues par d'autres peuvent rester visibles sans ton nom.
+              Pense à faire une sauvegarde (Données) avant : irréversible.
+            </p>
+          </Card>
+        )}
 
         {/* Comptes bloqués */}
         {cloudEnabled && user && (
@@ -609,9 +653,19 @@ export default function SettingsPage() {
       />
 
       <ConfirmDialog
+        open={confirmDeleteAccount}
+        title="Supprimer ton compte ?"
+        message="Tes séances, programmes, exercices, posts, sorties, messages, abonnements et ton profil seront effacés en ligne ET sur cet appareil. Tu seras déconnecté. Irréversible — fais une sauvegarde avant."
+        confirmLabel={wiping ? 'Suppression…' : 'Tout supprimer'}
+        danger
+        onCancel={() => setConfirmDeleteAccount(false)}
+        onConfirm={() => void wipeAccount()}
+      />
+
+      <ConfirmDialog
         open={confirmReset}
         title="Tout réinitialiser ?"
-        message="Toutes vos séances, programmes et réglages seront effacés. La bibliothèque d’exercices sera remise à sa version par défaut. Pensez à faire une sauvegarde avant."
+        message="Tes séances, programmes et réglages de CET appareil seront effacés (propagé en ligne à la prochaine synchro). Ta bibliothèque repart de zéro. Tes posts, sorties, messages et abonnements en ligne sont conservés — supprime ton compte pour tout effacer. Pense à faire une sauvegarde avant."
         confirmLabel="Tout effacer"
         danger
         onCancel={() => setConfirmReset(false)}

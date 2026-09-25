@@ -32,9 +32,12 @@ l'app reste 100 % locale et aucune page de login n'est exigée.
     inscriptions et capacités en base, notifications automatiques, photos
     privées, masquage de l'adresse et de l'hôte anonyme). Cette étape est
     nécessaire avant de publier le nouveau client.
+12. Puis exécutez `supabase/schema_account.sql` (suppression de compte :
+    les participants peuvent effacer leurs messages).
 
-Pour un projet déjà installé jusqu'à l'étape 10, exécutez uniquement l'étape
-11. Vérifiez ensuite dans Supabase que le bucket `post-photos` est privé.
+Pour un projet déjà installé jusqu'à l'étape 10, exécutez uniquement les
+étapes 11 et 12. Vérifiez ensuite dans Supabase que le bucket `post-photos`
+est privé.
 
 ## 2. Activer Google
 

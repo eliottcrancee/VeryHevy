@@ -214,6 +214,13 @@ export async function cancelInvite(sessionId: string, userId: string): Promise<v
   if (error) throw new Error(`Retrait : ${error.message}`)
 }
 
+/** Exclure un membre d'une sortie (hôte). */
+export async function kickMember(sessionId: string, userId: string): Promise<void> {
+  const sb = sbOrThrow()
+  const { error } = await sb.from('session_joins').delete().eq('session_id', sessionId).eq('user_id', userId)
+  if (error) throw new Error(`Exclusion : ${error.message}`)
+}
+
 export interface MyPendingRequest {
   request: SessionRequest
   session: { id: string; title: string; starts_at: string; gym_name: string; visibility: string }

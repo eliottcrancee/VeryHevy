@@ -14,6 +14,7 @@ import {
   Search,
   Send,
   Users,
+  UserX,
   X,
 } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
@@ -39,6 +40,7 @@ import {
   declineInvite,
   declineRequest,
   displayNameOf,
+  kickMember,
   listMembers,
   listMessages,
   listMyInvites,
@@ -924,7 +926,6 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
   const chatWith = (otherId: string, other: SocialProfile | null) => {
     onChat({ sessionId: s.id, title: s.title, otherId, other })
   }
-
   const uninvite = async (u: SessionInvite) => {
     setReqBusy(true)
     try {
@@ -934,6 +935,22 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
       onChanged()
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Action impossible', 'error')
+    } finally {
+      setReqBusy(false)
+    }
+  }
+
+  /* Exclure un membre accepté (hôte / admin de la sortie). */
+  const kickOne = async (uid: string, name: string) => {
+    if (!window.confirm(`Exclure ${name} de la sortie ? Il devra redemander pour revenir.`)) return
+    setReqBusy(true)
+    try {
+      await kickMember(s.id, uid)
+      setMembers(await listMembers(s.id))
+      notify(`${name} exclu`, 'info')
+      onChanged()
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Exclusion impossible', 'error')
     } finally {
       setReqBusy(false)
     }
@@ -982,6 +999,18 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
                 {mine && m.user_id !== me && (
                   <Button size="sm" variant="ghost" onClick={() => chatWith(m.user_id, m.profile)}>
                     <MessageCircle size={14} />
+                  </Button>
+                )}
+                {mine && m.user_id !== me && !past && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    title={`Exclure ${displayNameOf(m.profile)}`}
+                    disabled={reqBusy}
+                    onClick={() => void kickOne(m.user_id, displayNameOf(m.profile))}
+                    className="hover:text-danger"
+                  >
+                    <UserX size={14} />
                   </Button>
                 )}
               </div>
