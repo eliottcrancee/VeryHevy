@@ -21,6 +21,7 @@ import CalendarPage from '@/pages/Calendar'
 import SettingsPage from '@/pages/Settings'
 import LoginPage from '@/pages/Login'
 import ProfilePage from '@/pages/Profile'
+import NotificationsPage from '@/pages/Notifications'
 
 /** Garde : si le cloud est configuré, les pages privées exigent un compte Google. */
 function RequireAuth() {
@@ -105,6 +106,7 @@ export default function App() {
             <Route path="programmes" element={<RoutinesPage />} />
             <Route path="profil" element={<ProfilePage />} />
             <Route path="profil/:username" element={<ProfilePage />} />
+            <Route path="notifications" element={<NotificationsPage />} />
             {/* Routes techniques (cachées de la nav, seront rattachées au Profil en Étape B) */}
             <Route path="seance" element={<ActiveWorkoutPage />} />
             <Route path="programmes/:id" element={<RoutineEditorPage />} />

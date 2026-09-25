@@ -83,6 +83,24 @@ export async function fetchProfileByUsername(username: string): Promise<SocialPr
   return (data as SocialProfile | null) ?? null
 }
 
+/** Recherche floue par pseudo : suggestions qui contiennent la saisie. */
+export async function searchProfiles(query: string, limit = 8): Promise<SocialProfile[]> {
+  const sb = sbOrThrow()
+  const me = await myId()
+  const clean = normalizeUsername(query).replace(/[%_]/g, '')
+  if (clean.length < 2) return []
+  const { data, error } = await sb
+    .from('profiles')
+    .select('*')
+    .not('username', 'is', null)
+    .neq('id', me)
+    .ilike('username', `%${clean}%`)
+    .order('followers_count', { ascending: false })
+    .limit(limit)
+  if (error) throw new Error(`Recherche : ${error.message}`)
+  return (data as SocialProfile[]) ?? []
+}
+
 /** MAJ de mon profil (bio, ville, visibilité, pseudo, nom affiché). */
 export async function updateMyProfile(
   patch: Partial<Pick<SocialProfile, 'bio' | 'city' | 'visibility' | 'username' | 'display_name' | 'avatar_url'>>,
@@ -133,13 +151,56 @@ export async function fetchSocialProfiles(ids: string[]): Promise<Map<string, So
   return map
 }
 
-/** Suivre / ne plus suivre. */
+/** Suivre (compte public) : direct. Conservé pour compat interne. */
 export async function followUser(targetId: string): Promise<void> {
   const sb = sbOrThrow()
   const me = await myId()
   if (targetId === me) throw new Error('Impossible de se suivre soi-même')
   const { error } = await sb.from('follows').insert({ follower: me, followed: targetId })
   if (error && !error.message.includes('duplicate')) throw new Error(`Suivre : ${error.message}`)
+}
+
+export type FollowState = 'following' | 'requested' | 'none'
+
+/** État de ma relation avec target. */
+export async function followStatus(targetId: string): Promise<FollowState> {
+  if (await amIFollowing(targetId)) return 'following'
+  const sb = sbOrThrow()
+  const me = await myId()
+  const { data } = await sb
+    .from('follow_requests')
+    .select('requester')
+    .eq('requester', me)
+    .eq('target', targetId)
+    .maybeSingle()
+  return data ? 'requested' : 'none'
+}
+
+/**
+ * Suivre : direct si le compte est public, demande d'ami + notification
+ * si le compte est privé. Retourne l'état résultant.
+ */
+export async function requestFollow(targetId: string): Promise<FollowState> {
+  const sb = sbOrThrow()
+  const me = await myId()
+  if (targetId === me) throw new Error('Impossible de se suivre soi-même')
+  const { data: target } = await sb
+    .from('profiles')
+    .select('visibility,username')
+    .eq('id', targetId)
+    .maybeSingle()
+  const t = target as { visibility: string | null; username: string | null } | null
+  const { myUsername, sendNotification } = await import('./notifications')
+  const mine = await myUsername()
+  if (t?.visibility === 'private') {
+    const { error } = await sb.from('follow_requests').insert({ requester: me, target: targetId })
+    if (error && !error.message.includes('duplicate')) throw new Error(`Demande : ${error.message}`)
+    await sendNotification(targetId, 'follow_request', { from_id: me, from_username: mine })
+    return 'requested'
+  }
+  await followUser(targetId)
+  await sendNotification(targetId, 'new_follower', { from_id: me, from_username: mine })
+  return 'following'
 }
 
 export async function unfollowUser(targetId: string): Promise<void> {

@@ -408,7 +408,9 @@ export default function ExplorerPage() {
           </div>
         ) : (
           <>
-            <div className="overflow-hidden rounded-2xl border border-line">
+            {/* relative z-0 : contexte d'empilement pour que les panneaux
+                Leaflet (z-index internes élevés) restent SOUS les modales. */}
+            <div className="relative z-0 overflow-hidden rounded-2xl border border-line">
               <MapContainer center={center} zoom={zoom} style={{ height: '52vh', minHeight: 320, width: '100%' }} scrollWheelZoom>
                 <TileLayer
                   attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
@@ -607,7 +609,7 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
     setReqBusy(true)
     try {
       if (myReq?.status === 'declined') await withdrawRequest(s.id)
-      await sendRequest(s.id, reqMsg)
+      await sendRequest(s.id, reqMsg, s.host)
       setMyReq(await myRequestStatus(s.id))
       setReqMsg('')
       notify('Candidature envoyée — l’hôte va te répondre 💬', 'success')
@@ -623,7 +625,7 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
     try {
       if (ok) {
         if (s.spots_taken >= s.spots_total) throw new Error('Session complète')
-        await acceptRequest(s.id, r.user_id)
+        await acceptRequest(s.id, r.user_id, s.title)
         notify(`Match avec ${displayNameOf(r.author)} 🤝 Discutez !`, 'success')
       } else {
         await declineRequest(s.id, r.user_id)

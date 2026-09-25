@@ -13,6 +13,12 @@ l'app reste 100 % locale et aucune page de login n'est exigée.
    posts/likes/comments, sessions carte, notifs/blocks/reports + buckets Storage).
 4. Puis exécutez `supabase/schema_chat.sql` (match : candidatures,
    chat 1-1, anonymat des inscrits + RPC participants publics).
+5. Puis exécutez `supabase/schema_fix_policies.sql` (OBLIGATOIRE :
+   corrige « infinite recursion in policy for relation sessions » qui
+   bloque la carte + la création de séance, et permet à l'hôte
+   d'accepter les candidatures).
+6. Puis exécutez `supabase/schema_follow_requests.sql` (demandes d'amis
+   pour comptes privés + notifications entre utilisateurs).
 
 ## 2. Activer Google
 

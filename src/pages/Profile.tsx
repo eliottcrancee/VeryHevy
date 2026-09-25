@@ -12,14 +12,16 @@ import {
 import { useAuth } from '@/lib/auth'
 import { useStore } from '@/store/store'
 import {
-  amIFollowing,
   fetchProfileByUsername,
-  followUser,
+  followStatus,
   getMyProfile,
   isUsernameAvailable,
+  requestFollow,
   unfollowUser,
   updateMyProfile,
+  type FollowState,
 } from '@/lib/social'
+import { cancelFollowRequest } from '@/lib/notifications'
 import { listMyPosts } from '@/lib/posts'
 import { PostCard } from '@/components/PostCard'
 import type { Post, PostVisibility, SocialProfile } from '@/types'
@@ -78,7 +80,7 @@ export default function ProfilePage() {
   const [myProfile, setMyProfile] = useState<SocialProfile | null>(null)
   const [publicProfile, setPublicProfile] = useState<SocialProfile | null | undefined>(undefined)
   const [loadingProfile, setLoadingProfile] = useState(true)
-  const [following, setFollowing] = useState(false)
+  const [following, setFollowing] = useState<FollowState>('none')
   const [followBusy, setFollowBusy] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [myPosts, setMyPosts] = useState<Post[]>([])
@@ -113,9 +115,9 @@ export default function ProfilePage() {
           setPublicProfile(p)
           if (p && user && p.id !== user.id) {
             try {
-              setFollowing(await amIFollowing(p.id))
+              setFollowing(await followStatus(p.id))
             } catch {
-              setFollowing(false)
+              setFollowing('none')
             }
           }
           setLoadingProfile(false)
@@ -163,13 +165,22 @@ export default function ProfilePage() {
     if (!publicProfile) return
     setFollowBusy(true)
     try {
-      if (following) {
+      if (following === 'following') {
         await unfollowUser(publicProfile.id)
-        setFollowing(false)
+        setFollowing('none')
+      } else if (following === 'requested') {
+        await cancelFollowRequest(publicProfile.id)
+        setFollowing('none')
+        notify('Demande annulée', 'info')
       } else {
-        await followUser(publicProfile.id)
-        setFollowing(true)
-        notify(`Tu suis @${publicProfile.username} 🎉`, 'success')
+        const next = await requestFollow(publicProfile.id)
+        setFollowing(next)
+        notify(
+          next === 'requested'
+            ? `Demande envoyée à @${publicProfile.username} 🔒`
+            : `Tu suis @${publicProfile.username} 🎉`,
+          'success',
+        )
       }
       const fresh = await fetchProfileByUsername(publicProfile.username ?? '')
       setPublicProfile(fresh)
@@ -198,8 +209,10 @@ export default function ProfilePage() {
               <Card className="flex items-center gap-4 p-4">
                 <Avatar url={p.avatar_url} name={p.display_name ?? p.username ?? '?'} />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-lg font-extrabold">{p.display_name ?? `@${p.username}`}</p>
-                  <p className="truncate text-sm text-muted">@{p.username}</p>
+                  <p className="truncate text-lg font-extrabold">
+                    {p.display_name ?? `@${p.username}`}
+                    {p.visibility === 'private' && <span className="ml-1.5 text-sm" title="Compte privé">🔒</span>}
+                  </p>
                   {p.bio && <p className="mt-1 text-sm">{p.bio}</p>}
                   {p.city && <p className="mt-0.5 text-xs text-muted">📍 {p.city}</p>}
                   <p className="mt-1.5 text-xs font-semibold text-muted">
@@ -208,9 +221,14 @@ export default function ProfilePage() {
                 </div>
               </Card>
               {user && p.id !== user.id && (
-                <Button variant={following ? 'secondary' : 'primary'} block disabled={followBusy} onClick={() => void toggleFollow()}>
-                  {following ? <UserMinus size={16} /> : <UserPlus size={16} />}
-                  {following ? 'Ne plus suivre' : 'Suivre'}
+                <Button
+                  variant={following === 'none' ? 'primary' : 'secondary'}
+                  block
+                  disabled={followBusy}
+                  onClick={() => void toggleFollow()}
+                >
+                  {following === 'following' ? <UserMinus size={16} /> : <UserPlus size={16} />}
+                  {following === 'following' ? 'Ne plus suivre' : following === 'requested' ? 'Demandé — annuler' : p.visibility === 'private' ? 'Demander à suivre 🔒' : 'Suivre'}
                 </Button>
               )}
               <Card>
@@ -231,7 +249,7 @@ export default function ProfilePage() {
     <div>
       <PageHeader
         title={myProfile?.username ? `@${myProfile.username}` : 'Profil'}
-        subtitle={cloudEnabled ? displayName : 'Compte local'}
+        subtitle={myProfile?.city || (!cloudEnabled ? 'Compte local' : undefined)}
         actions={
           <IconButton label="Réglages" onClick={() => navigate('/reglages')}>
             <SettingsIcon size={20} />
@@ -244,6 +262,7 @@ export default function ProfilePage() {
           <div className="min-w-0 flex-1">
             <p className="flex items-center gap-1.5 text-lg font-extrabold">
               <span className="truncate">{displayName}</span>
+              {myProfile?.visibility === 'private' && <span className="text-sm" title="Compte privé">🔒</span>}
               {cloudEnabled && user && (
                 <button
                   type="button"
@@ -256,7 +275,6 @@ export default function ProfilePage() {
                 </button>
               )}
             </p>
-            {myProfile?.username && <p className="truncate text-sm text-accent">@{myProfile.username}</p>}
             {myProfile?.bio && <p className="mt-1 text-sm">{myProfile.bio}</p>}
             {myProfile?.city && <p className="mt-0.5 text-xs text-muted">📍 {myProfile.city}</p>}
             <p className="mt-1.5 text-xs font-semibold text-muted">
@@ -340,9 +358,11 @@ function EditProfileModal({
 }) {
   const notify = useStore((s) => s.notify)
   const [username, setUsername] = useState(initial?.username ?? '')
+  const [name, setName] = useState(initial?.display_name ?? '')
   const [bio, setBio] = useState(initial?.bio ?? '')
   const [city, setCity] = useState(initial?.city ?? '')
-  const [visibility, setVisibility] = useState<PostVisibility>(defaultVisibility)
+  const [account, setAccount] = useState<'public' | 'private'>(initial?.visibility === 'private' ? 'private' : 'public')
+  const [postVis, setPostVis] = useState<PostVisibility>(defaultVisibility)
   const [checking, setChecking] = useState(false)
   const [hint, setHint] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -350,9 +370,11 @@ function EditProfileModal({
   useEffect(() => {
     if (open) {
       setUsername(initial?.username ?? '')
+      setName(initial?.display_name ?? '')
       setBio(initial?.bio ?? '')
       setCity(initial?.city ?? '')
-      setVisibility(defaultVisibility)
+      setAccount(initial?.visibility === 'private' ? 'private' : 'public')
+      setPostVis(defaultVisibility)
       setHint(null)
     }
   }, [open, initial, defaultVisibility])
@@ -386,9 +408,15 @@ function EditProfileModal({
     if (!valid) return
     setSaving(true)
     try {
-      const p = await updateMyProfile({ username: clean, bio, city, visibility })
+      const p = await updateMyProfile({
+        username: clean,
+        display_name: name.trim() ? name.trim() : null,
+        bio,
+        city,
+        visibility: account,
+      })
       notify(usernameChanged ? `Pseudo → @${clean} 🎉` : 'Profil mis à jour', 'success')
-      onSaved(p, visibility)
+      onSaved(p, postVis)
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Sauvegarde impossible', 'error')
     } finally {
@@ -408,14 +436,23 @@ function EditProfileModal({
           </Button>
           {hint && <p className="mt-1 text-xs text-muted">{hint}</p>}
         </div>
+        <Field label="Nom affiché" hint="Ton prénom ou surnom, 60 caractères max">
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Léa" autoComplete="off" maxLength={60} />
+        </Field>
         <Field label="Bio" hint="160 caractères max">
           <Textarea value={bio} onChange={(e) => setBio(e.target.value)} rows={2} maxLength={160} placeholder="Objectifs, salle, devise…" />
         </Field>
         <Field label="Ville">
           <Input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Lyon" autoComplete="off" />
         </Field>
+        <Field label="Compte" hint="Privé : chaque nouvel abonné devra être accepté">
+          <Select value={account} onChange={(e) => setAccount(e.target.value as 'public' | 'private')}>
+            <option value="public">Public — suivi direct</option>
+            <option value="private">Privé 🔒 — sur demande</option>
+          </Select>
+        </Field>
         <Field label="Visibilité par défaut des posts">
-          <Select value={visibility} onChange={(e) => setVisibility(e.target.value as PostVisibility)}>
+          <Select value={postVis} onChange={(e) => setPostVis(e.target.value as PostVisibility)}>
             <option value="followers">Abonnés (recommandé)</option>
             <option value="public">Public</option>
             <option value="private">Privé</option>

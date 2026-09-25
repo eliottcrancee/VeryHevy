@@ -321,6 +321,7 @@ export interface AppData {
 
 export type PostVisibility = 'public' | 'followers' | 'private'
 export type SessionVisibility = 'public' | 'private'
+export type ProfileVisibility = 'private' | 'followers' | 'public'
 
 export interface SocialProfile {
   id: string
@@ -338,6 +339,25 @@ export interface SocialProfile {
 export interface Follow {
   follower: string
   followed: string
+  created_at: string
+}
+
+/** Demande d'ami (compte privé). */
+export interface FollowRequest {
+  requester: string
+  target: string
+  created_at: string
+  profile?: SocialProfile | null
+}
+
+/** Notification in-app (cloche). Types : follow_request, follow_accepted,
+ *  new_follower, session_request, session_accepted. */
+export interface AppNotification {
+  id: string
+  user_id: string
+  type: string
+  payload: Record<string, unknown>
+  read_at: string | null
   created_at: string
 }
 

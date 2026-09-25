@@ -31,7 +31,7 @@ export interface SessionRequest {
 
 /* ---------------------------- candidatures ---------------------------- */
 
-export async function sendRequest(sessionId: string, message = ''): Promise<void> {
+export async function sendRequest(sessionId: string, message = '', hostId?: string): Promise<void> {
   const sb = sbOrThrow()
   const me = await myId()
   const { error } = await sb.from('session_requests').insert({
@@ -41,6 +41,11 @@ export async function sendRequest(sessionId: string, message = ''): Promise<void
     status: 'pending',
   })
   if (error && !error.message.includes('duplicate')) throw new Error(`Candidature : ${error.message}`)
+  if (hostId) {
+    const { myUsername, sendNotification } = await import('./notifications')
+    const mine = await myUsername()
+    await sendNotification(hostId, 'session_request', { session_id: sessionId, from_id: me, from_username: mine })
+  }
 }
 
 export async function myRequestStatus(sessionId: string): Promise<SessionRequest | null> {
@@ -77,7 +82,7 @@ export async function listRequests(sessionId: string): Promise<SessionRequest[]>
 }
 
 /** Accepter = inscrit le membre (compteur auto via trigger). */
-export async function acceptRequest(sessionId: string, userId: string): Promise<void> {
+export async function acceptRequest(sessionId: string, userId: string, sessionTitle?: string): Promise<void> {
   const sb = sbOrThrow()
   const { error: jErr } = await sb.from('session_joins').insert({ session_id: sessionId, user_id: userId })
   if (jErr && !jErr.message.includes('duplicate')) throw new Error(`Acceptation : ${jErr.message}`)
@@ -87,6 +92,13 @@ export async function acceptRequest(sessionId: string, userId: string): Promise<
     .eq('session_id', sessionId)
     .eq('user_id', userId)
   if (error) throw new Error(`Acceptation : ${error.message}`)
+  const { myUsername, sendNotification } = await import('./notifications')
+  const mine = await myUsername()
+  await sendNotification(userId, 'session_accepted', {
+    session_id: sessionId,
+    session_title: sessionTitle ?? '',
+    from_username: mine,
+  })
 }
 
 export async function declineRequest(sessionId: string, userId: string): Promise<void> {
