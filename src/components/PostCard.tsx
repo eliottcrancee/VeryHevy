@@ -44,6 +44,57 @@ function Avatar({ url, name, size = 40 }: { url?: string | null; name: string; s
  * Carte post du feed : auteur, photo, légende, résumé séance,
  * likes, commentaires, cloner sans démarrer.
  */
+function WorkoutDetail({
+  name,
+  sets,
+  volume,
+  seconds,
+  exercises,
+  cloning,
+  onClone,
+  onOpen,
+}: {
+  name: string
+  sets: number
+  volume: number
+  seconds: number
+  exercises: { name: string; count: number }[]
+  cloning: boolean
+  onClone: () => void
+  onOpen?: () => void
+}) {
+  return (
+    <div className="rounded-xl bg-surface-2 p-2.5">
+      <div className="space-y-1.5">
+        <p className="text-[13px] font-extrabold">{name}</p>
+        <p className="text-[11px] text-muted">
+          {sets} séries · {formatVolume(volume, 'kg')} · {formatDuration(seconds, 'compact')}
+        </p>
+        <ul className="space-y-0.5">
+          {exercises.slice(0, 6).map((e, i) => (
+            <li key={i} className="text-xs text-muted">
+              {e.name} · {e.count} série(s)
+            </li>
+          ))}
+        </ul>
+        {exercises.length > 6 && (
+          <p className="text-[11px] text-muted">+{exercises.length - 6} exercice(s)</p>
+        )}
+        <div className="flex gap-2 pt-1">
+          <Button size="sm" variant="primary" disabled={cloning} onClick={onClone}>
+            <Copy size={14} /> Cloner la séance
+          </Button>
+          {onOpen && (
+            <Button size="sm" variant="ghost" onClick={onOpen}>
+              Ouvrir
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => void }) {
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -150,7 +201,10 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
   }
 
   /** Cloner sans démarrer : crée la séance, reste sur le feed. */
-  const clone = async () => {
+  const cloneSource = async (source: {
+    name: string
+    exercises: { exerciseId?: string; name: string; setCount: number }[]
+  }) => {
     if (busy) return
     const st = useStore.getState()
     if (st.workouts.some((w) => w.status === 'active')) {
@@ -159,17 +213,21 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
     }
     setBusy(true)
     try {
-      let w: Workout | null | undefined = localWorkout
-      if (!w && post.workout_id) w = await getPostWorkout(post)
-      if (!w) throw new Error('Séance introuvable')
       startWorkout({
-        name: w.name,
-        exercises: w.exercises.map((we) => ({
-          exerciseId: we.exerciseId,
-          setCount: we.sets.length,
-          restSeconds: we.restSeconds,
-          exerciseName: we.exerciseName,
-        })),
+        name: source.name,
+        exercises: source.exercises.map((e) => {
+          const found =
+            (e.exerciseId ? st.exercises.find((x) => x.id === e.exerciseId) : undefined) ??
+            st.exercises.find((x) => x.name.toLowerCase() === e.name.toLowerCase())
+          return {
+            exerciseId:
+              found?.id ??
+              e.exerciseId ??
+              `ext-${e.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 24)}`,
+            setCount: Math.max(1, e.setCount),
+            exerciseName: e.name,
+          }
+        }),
       })
       notify('Séance clonée ! Ouvre-la quand tu es à la salle 💪', 'success')
     } catch (err) {
@@ -177,6 +235,31 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
     } finally {
       setBusy(false)
     }
+  }
+
+  const clone = async () => {
+    const snap = post.workout_snapshot
+    if (snap) {
+      await cloneSource({
+        name: snap.name,
+        exercises: snap.exercises.map((e) => ({ exerciseId: e.exerciseId, name: e.name, setCount: e.sets.length })),
+      })
+      return
+    }
+    let w: Workout | null | undefined = localWorkout
+    if (!w && post.workout_id) w = await getPostWorkout(post)
+    if (!w) {
+      notify('Séance introuvable', 'error')
+      return
+    }
+    await cloneSource({
+      name: w.name,
+      exercises: w.exercises.map((we) => ({
+        exerciseId: we.exerciseId,
+        name: we.exerciseName ?? 'Exercice',
+        setCount: we.sets.length,
+      })),
+    })
   }
 
   const authorName = displayAuthor(post.author)
@@ -216,7 +299,31 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
       <div className="space-y-2.5 p-3">
         {post.caption && <p className="text-sm whitespace-pre-wrap">{post.caption}</p>}
 
-        {post.workout_id && (
+        {post.workout_snapshot ? (
+          /* Détail toujours visible (snapshot figé à la publication). */
+          <WorkoutDetail
+            name={post.workout_snapshot.name}
+            sets={post.workout_snapshot.sets}
+            volume={post.workout_snapshot.volume}
+            seconds={post.workout_snapshot.seconds}
+            exercises={post.workout_snapshot.exercises.map((e) => ({ name: e.name, count: e.sets.length }))}
+            cloning={busy}
+            onClone={() => void clone()}
+          />
+        ) : localWorkout ? (
+          /* Ancien post de ma propre séance : détail local, visible aussi. */
+          <WorkoutDetail
+            name={localWorkout.name}
+            sets={workoutSets(localWorkout)}
+            volume={workoutVolume(localWorkout)}
+            seconds={workoutDurationSeconds(localWorkout)}
+            exercises={localWorkout.exercises.map((we) => ({ name: we.exerciseName ?? 'Exercice', count: we.sets.length }))}
+            cloning={busy}
+            onClone={() => void clone()}
+            onOpen={() => navigate(`/historique/${localWorkout.id}`)}
+          />
+        ) : post.workout_id ? (
+          /* Ancien post d'un autre compte : repli lecture distante. */
           <div>
             {!expanded ? (
               <button
@@ -231,38 +338,22 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
                 {loadingWorkout ? (
                   <p className="text-xs text-muted">Chargement…</p>
                 ) : workout ? (
-                  <div className="space-y-1.5">
-                    <p className="text-[13px] font-extrabold">{workout.name}</p>
-                    <p className="text-[11px] text-muted">
-                      {workoutSets(workout)} séries · {formatVolume(workoutVolume(workout), 'kg')} ·{' '}
-                      {formatDuration(workoutDurationSeconds(workout), 'compact')}
-                    </p>
-                    <ul className="space-y-0.5">
-                      {workout.exercises.slice(0, 6).map((we) => (
-                        <li key={we.id} className="text-xs text-muted">
-                          {we.exerciseName ?? 'Exercice'} · {we.sets.length} série(s)
-                        </li>
-                      ))}
-                    </ul>
-                    {workout.exercises.length > 6 && (
-                      <p className="text-[11px] text-muted">+{workout.exercises.length - 6} exercice(s)</p>
-                    )}
-                    <div className="flex gap-2 pt-1">
-                      <Button size="sm" variant="primary" disabled={busy} onClick={() => void clone()}>
-                        <Copy size={14} /> Cloner la séance
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => navigate(`/historique/${workout.id}`)} disabled={!localWorkout}>
-                        Ouvrir
-                      </Button>
-                    </div>
-                  </div>
+                  <WorkoutDetail
+                    name={workout.name}
+                    sets={workoutSets(workout)}
+                    volume={workoutVolume(workout)}
+                    seconds={workoutDurationSeconds(workout)}
+                    exercises={workout.exercises.map((we) => ({ name: we.exerciseName ?? 'Exercice', count: we.sets.length }))}
+                    cloning={busy}
+                    onClone={() => void clone()}
+                  />
                 ) : (
                   <p className="text-xs text-muted">Séance non partagée en détail.</p>
                 )}
               </div>
             )}
           </div>
-        )}
+        ) : null}
 
         <div className="flex items-center gap-1 border-t border-line pt-2">
           <button

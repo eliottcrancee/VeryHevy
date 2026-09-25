@@ -3,9 +3,10 @@
  * Photo optionnelle (Storage post-photos), likes, commentaires,
  * lecture workout auteur pour « Cloner sans démarrer ».
  */
-import type { Post, PostComment, PostVisibility, SocialProfile, Workout } from '@/types'
+import type { Post, PostComment, PostVisibility, SocialProfile, Workout, WorkoutSnapshot } from '@/types'
 import { getSupabase } from './supabase'
 import { fetchSocialProfiles } from './social'
+import { workoutDurationSeconds, workoutSets, workoutVolume } from './calc'
 
 function sbOrThrow() {
   const sb = getSupabase()
@@ -63,8 +64,27 @@ async function uploadPostPhoto(file: File, userId: string): Promise<string> {
 
 /* ------------------------------ posts ------------------------------ */
 
+export function buildWorkoutSnapshot(w: Workout): WorkoutSnapshot {
+  const doneExercises = w.exercises.map((we) => ({ ...we, sets: we.sets.filter((s) => s.completed) }))
+  const done = { ...w, exercises: doneExercises }
+  return {
+    name: w.name,
+    sets: workoutSets(done),
+    volume: workoutVolume(done),
+    seconds: workoutDurationSeconds(w),
+    exercises: doneExercises
+      .filter((we) => we.sets.length > 0)
+      .map((we) => ({
+        exerciseId: we.exerciseId,
+        name: we.exerciseName ?? 'Exercice',
+        sets: we.sets.map((s) => ({ reps: s.reps ?? null, weight: s.weight ?? null, duration: s.duration ?? null })),
+      })),
+  }
+}
+
 export async function createPost(input: {
   workout_id?: string | null
+  snapshot?: WorkoutSnapshot | null
   caption: string
   visibility: PostVisibility
   photoFile?: File | null
@@ -76,7 +96,14 @@ export async function createPost(input: {
   if (input.photoFile) photo_url = await uploadPostPhoto(input.photoFile, me)
   const { data, error } = await sb
     .from('posts')
-    .insert({ user_id: me, workout_id: input.workout_id ?? null, caption, visibility: input.visibility, photo_url })
+    .insert({
+      user_id: me,
+      workout_id: input.workout_id ?? null,
+      workout_snapshot: input.snapshot ?? null,
+      caption,
+      visibility: input.visibility,
+      photo_url,
+    })
     .select('*')
     .single()
   if (error) throw new Error(`Publication : ${error.message}`)

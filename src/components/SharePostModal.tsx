@@ -3,7 +3,7 @@ import { ImagePlus } from 'lucide-react'
 import { Field, Button, Modal, Select, Textarea } from '@/components/ui'
 import { useStore } from '@/store/store'
 import type { PostVisibility } from '@/types'
-import { createPost } from '@/lib/posts'
+import { buildWorkoutSnapshot, createPost } from '@/lib/posts'
 
 /**
  * Publier une séance en post (photo optionnelle + légende + visibilité).
@@ -52,7 +52,16 @@ export function SharePostModal({
   const publish = async () => {
     setPublishing(true)
     try {
-      await createPost({ workout_id: workoutId, caption, visibility, photoFile: file })
+      // Snapshot figé : le détail reste visible par les abonnés
+      // même si la séance locale n'est pas (ou plus) synchronisée.
+      const w = workoutId ? useStore.getState().workouts.find((x) => x.id === workoutId) : undefined
+      await createPost({
+        workout_id: workoutId,
+        snapshot: w ? buildWorkoutSnapshot(w) : null,
+        caption,
+        visibility,
+        photoFile: file,
+      })
       notify('Publié dans le feed 🎉', 'success')
       onClose()
       onPublished?.()

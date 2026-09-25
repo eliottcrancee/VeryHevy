@@ -7,11 +7,13 @@ import {
   Check,
   CloudOff,
   LocateFixed,
+  Map as MapIcon,
   MapPin,
   MessageCircle,
   Plus,
   Search,
   Send,
+  Sparkles,
   Users,
   X,
 } from 'lucide-react'
@@ -49,7 +51,7 @@ import {
   type Thread,
 } from '@/lib/chat'
 import { Page, PageHeader } from '@/components/PageHeader'
-import { Button, Card, Chip, EmptyState, Field, Input, Modal, Select, Textarea } from '@/components/ui'
+import { Button, Card, Chip, EmptyState, Field, Input, Modal, Select, Tabs, Textarea } from '@/components/ui'
 import { IconButton } from '@/components/ui'
 import { cn } from '@/lib/utils'
 
@@ -306,27 +308,16 @@ export default function ExplorerPage() {
         }
       >
         <div className="mx-auto w-full max-w-5xl space-y-2 px-4 pb-3">
-          <div className="flex gap-2">
-            {(
-              [
-                { v: 'carte', label: '🗺️ Carte' },
-                { v: 'reco', label: '✨ Recommandations' },
-                { v: 'messages', label: '💬 Messages' },
-              ] as { v: View; label: string }[]
-            ).map((t) => (
-              <button
-                key={t.v}
-                type="button"
-                onClick={() => setView(t.v)}
-                className={cn(
-                  'flex-1 rounded-full border px-3 py-1.5 text-[13px] font-bold transition-all',
-                  view === t.v ? 'border-accent-solid bg-accent-solid text-accent-contrast' : 'border-line bg-surface text-muted',
-                )}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
+          {/* Même style que les onglets du Profil : compact, une ligne. */}
+          <Tabs<View>
+            value={view}
+            onChange={setView}
+            tabs={[
+              { value: 'carte', label: 'Carte', icon: <MapIcon size={14} /> },
+              { value: 'reco', label: 'Recommandations', icon: <Sparkles size={14} /> },
+              { value: 'messages', label: 'Messages', icon: <MessageCircle size={14} /> },
+            ]}
+          />
           {view === 'carte' && (
             <>
               <div className="relative">

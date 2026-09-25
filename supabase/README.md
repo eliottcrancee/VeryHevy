@@ -22,6 +22,8 @@ l'app reste 100 % locale et aucune page de login n'est exigée.
 7. Puis exécutez `supabase/schema_blocks.sql` (blocage à sens unique +
    retirer un abonné : masquage profil/recherche/listes/posts/séances
    pour la personne bloquée).
+8. Puis exécutez `supabase/schema_post_snapshot.sql` (détail des séances
+   publiées visible par les abonnés, sans lecture inter-comptes).
 
 ## 2. Activer Google
 

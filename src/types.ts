@@ -350,6 +350,21 @@ export interface FollowRequest {
   profile?: SocialProfile | null
 }
 
+/** Résumé figé d'une séance au moment de sa publication (post). */
+export interface WorkoutSetSummary {
+  reps: number | null
+  weight: number | null
+  duration: number | null
+}
+
+export interface WorkoutSnapshot {
+  name: string
+  sets: number
+  volume: number
+  seconds: number
+  exercises: { exerciseId?: string; name: string; sets: WorkoutSetSummary[] }[]
+}
+
 /** Notification in-app (cloche). Types : follow_request, follow_accepted,
  *  new_follower, session_request, session_accepted. */
 export interface AppNotification {
@@ -365,6 +380,8 @@ export interface Post {
   id: string
   user_id: string
   workout_id?: string | null
+  /** Résumé figé (nouveaux posts) : affiché inline sans lecture inter-comptes. */
+  workout_snapshot?: WorkoutSnapshot | null
   photo_url?: string | null
   caption: string
   visibility: PostVisibility
