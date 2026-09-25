@@ -242,7 +242,12 @@ export default function HomePage() {
                   className="min-w-0 flex-1 text-left"
                   onClick={() => p.username && navigate(`/profil/${p.username}`)}
                 >
-                  <span className="block truncate text-sm font-bold">@{p.username}</span>
+                  <span className="block truncate text-sm font-bold">
+                    @{p.username}
+                    {p.visibility === 'private' && st !== 'following' && (
+                      <span className="ml-1" title="Compte privé">🔒</span>
+                    )}
+                  </span>
                   {p.bio && <span className="block truncate text-xs text-muted">{p.bio}</span>}
                 </button>
                 {st === 'following' ? (

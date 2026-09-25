@@ -270,7 +270,11 @@ export default function ProfilePage() {
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-lg font-extrabold">
                     {p.display_name ?? `@${p.username}`}
-                    {p.visibility === 'private' && <span className="ml-1.5 text-sm" title="Compte privé">🔒</span>}
+                    {/* Cadenas : profil privé ET inaccessible (non suivi). Ni pour
+                        moi, ni une fois ami (demande acceptée). */}
+                    {p.visibility === 'private' && following !== 'following' && p.id !== user?.id && (
+                      <span className="ml-1.5 text-sm" title="Compte privé">🔒</span>
+                    )}
                   </p>
                   {p.display_name && <p className="truncate text-sm text-muted">@{p.username}</p>}
                   {p.bio && <p className="mt-1 text-sm">{p.bio}</p>}
@@ -403,7 +407,6 @@ export default function ProfilePage() {
           <div className="min-w-0 flex-1">
             <p className="flex items-center gap-1.5 text-lg font-extrabold">
               <span className="truncate">{displayName}</span>
-              {myProfile?.visibility === 'private' && <span className="text-sm" title="Compte privé">🔒</span>}
               {cloudEnabled && user && (
                 <button
                   type="button"
