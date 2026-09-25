@@ -5,7 +5,7 @@
 import { spawn } from 'node:child_process'
 import puppeteer from 'puppeteer-core'
 
-const EDGE = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'
+import { browserPath } from './browser.mjs'
 const PORT = 4322
 const BASE = `http://localhost:${PORT}`
 
@@ -253,7 +253,7 @@ const server = spawn(
 )
 await new Promise((r) => setTimeout(r, 2500))
 
-const browser = await puppeteer.launch({ executablePath: EDGE, headless: true, args: ['--no-sandbox'] })
+const browser = await puppeteer.launch({ executablePath: browserPath, headless: true, args: ['--no-sandbox'] })
 const page = await browser.newPage()
 await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1, isMobile: true, hasTouch: true })
 

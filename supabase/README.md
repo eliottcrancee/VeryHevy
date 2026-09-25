@@ -28,6 +28,13 @@ l'app reste 100 % locale et aucune page de login n'est exigée.
    invite/open/public + table session_invites ; 'private' → 'open').
 10. Puis exécutez `supabase/schema_dm.sql` (DM par paire : la discussion
     survit à la suppression de la séance + messages directs entre amis).
+11. Enfin exécutez `supabase/schema_prod_hardening.sql` (contrôles des suivis,
+    inscriptions et capacités en base, notifications automatiques, photos
+    privées, masquage de l'adresse et de l'hôte anonyme). Cette étape est
+    nécessaire avant de publier le nouveau client.
+
+Pour un projet déjà installé jusqu'à l'étape 10, exécutez uniquement l'étape
+11. Vérifiez ensuite dans Supabase que le bucket `post-photos` est privé.
 
 ## 2. Activer Google
 
@@ -60,12 +67,17 @@ npm run dev
 - Auto après chaque modification (débounce 4 s), toutes les 5 min, au retour online.
 - Dernier écrit gagne (ISO), suppressions via tombstones (`deleted_items`).
 - Premier login sur un nouvel appareil : pull complet puis fusion locale.
-- Un compte par appareil recommandé : le store local n'est pas namespacé par utilisateur.
+- Le carnet local est séparé par compte sur un appareil partagé. Lors de la
+  première connexion, l'ancien carnet local est attribué au compte déjà connu
+  sur cet appareil, ou au premier compte utilisé.
+- L'option « Supprimer mes entraînements du cloud » met la synchronisation en
+  pause pour éviter que la copie locale ne soit aussitôt renvoyée. Réactiver
+  la synchronisation renvoie la copie locale.
 
 ## Tables
 
 | Table | Clé | Contenu |
 |---|---|---|
-| `profiles` | `id` (= auth.uid) | email, nom, avatar Google |
+| `profiles` | `id` (= auth.uid) | pseudo, nom, avatar, ville, visibilité ; l'email historique est inaccessible au client |
 | `workouts` / `routines` / `exercises` | `(user_id, id)` | document complet en `data` jsonb + `updated_at` |
 | `deleted_items` | `(user_id, kind, item_id)` | anti-résurrection |

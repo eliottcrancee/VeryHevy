@@ -28,7 +28,7 @@ export function isSessionPast(s: Pick<SportSession, 'starts_at'>): boolean {
 
 async function enrich(list: SportSession[], me: string): Promise<SportSession[]> {
   if (!list.length) return list
-  const hosts = await fetchSocialProfiles([...new Set(list.map((s) => s.host))])
+  const hosts = await fetchSocialProfiles([...new Set(list.map((s) => s.host).filter(Boolean))])
   const sb = sbOrThrow()
   const { data: joins } = await sb
     .from('session_joins')
@@ -46,29 +46,25 @@ async function enrich(list: SportSession[], me: string): Promise<SportSession[]>
 }
 
 /** Sessions visibles à venir (open/public + mes invite/rejointes via RLS). */
-export async function listSessions(limit = 200): Promise<SportSession[]> {
+export async function listSessions(): Promise<SportSession[]> {
   const sb = sbOrThrow()
   const me = await myId()
-  const { data, error } = await sb
-    .from('sessions')
-    .select('*')
-    .gte('starts_at', new Date(Date.now() - SESSION_PAST_AFTER_MS).toISOString())
-    .order('starts_at', { ascending: true })
-    .limit(limit)
-  if (error) throw new Error(`Sessions : ${error.message}`)
-  return enrich((data as SportSession[]) ?? [], me)
+  const all: SportSession[] = []
+  for (let offset = 0; ; offset += 500) {
+    const { data, error } = await sb.rpc('visible_sessions', { p_limit: 500, p_offset: offset })
+    if (error) throw new Error(`Sessions : ${error.message}`)
+    const page = (data as SportSession[]) ?? []
+    all.push(...page)
+    if (page.length < 500) break
+  }
+  return enrich(all, me)
 }
 
 /** Séances passées me concernant (créées ou rejointes) : historique. */
-export async function listPastSessions(limit = 50): Promise<SportSession[]> {
+export async function listPastSessions(limit = 100): Promise<SportSession[]> {
   const sb = sbOrThrow()
   const me = await myId()
-  const { data, error } = await sb
-    .from('sessions')
-    .select('*')
-    .lt('starts_at', new Date(Date.now() - SESSION_PAST_AFTER_MS).toISOString())
-    .order('starts_at', { ascending: false })
-    .limit(limit)
+  const { data, error } = await sb.rpc('visible_sessions', { p_past: true, p_limit: limit })
   if (error) throw new Error(`Sessions : ${error.message}`)
   return enrich((data as SportSession[]) ?? [], me)
 }
@@ -105,10 +101,10 @@ export async function createSession(input: {
       description: (input.description ?? '').slice(0, 500),
       visibility: input.visibility,
     })
-    .select('*')
+    .select('id,title,gym_name,lat,lng,starts_at,spots_total,spots_taken,level,description,visibility,created_at')
     .single()
   if (error) throw new Error(`Création : ${error.message}`)
-  return data as SportSession
+  return { ...(data as SportSession), host: me, address_text: input.address_text ?? '' }
 }
 
 export async function leaveSession(sessionId: string): Promise<void> {
@@ -116,6 +112,22 @@ export async function leaveSession(sessionId: string): Promise<void> {
   const me = await myId()
   const { error } = await sb.from('session_joins').delete().eq('session_id', sessionId).eq('user_id', me)
   if (error) throw new Error(`Désinscription : ${error.message}`)
+}
+
+export async function updateSession(sessionId: string, input: Pick<SportSession,
+  'title' | 'gym_name' | 'address_text' | 'starts_at' | 'spots_total' | 'level' | 'description' | 'visibility'>): Promise<void> {
+  const sb = sbOrThrow()
+  const { error } = await sb.from('sessions').update({
+    title: input.title.trim().slice(0, 80),
+    gym_name: input.gym_name.trim().slice(0, 120),
+    address_text: input.address_text.trim().slice(0, 200),
+    starts_at: input.starts_at,
+    spots_total: input.spots_total,
+    level: input.level,
+    description: input.description.trim().slice(0, 500),
+    visibility: input.visibility,
+  }).eq('id', sessionId)
+  if (error) throw new Error(`Modification : ${error.message}`)
 }
 
 export async function deleteSession(sessionId: string): Promise<void> {

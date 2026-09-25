@@ -15,7 +15,7 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import puppeteer from 'puppeteer-core'
 
-const EDGE = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'
+import { browserPath } from './browser.mjs'
 const PORT = 4336
 const PREFIX = '/veryhevy'
 
@@ -60,7 +60,7 @@ if (!LIVE) {
   await new Promise((r) => server.listen(PORT, r))
 }
 
-const browser = await puppeteer.launch({ executablePath: EDGE, headless: true, args: ['--no-sandbox'] })
+const browser = await puppeteer.launch({ executablePath: browserPath, headless: true, args: ['--no-sandbox'] })
 const page = await browser.newPage()
 await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1, isMobile: true, hasTouch: true })
 

@@ -16,7 +16,7 @@ import { shareWorkout } from '@/lib/share'
 
 type Period = 'tout' | '30j' | '90j' | 'annee'
 
-export default function HistoryPage() {
+export default function HistoryPage({ bare = false }: { bare?: boolean }) {
   const navigate = useNavigate()
   const workouts = useStore((s) => s.workouts)
   const exercises = useStore((s) => s.exercises)
@@ -66,7 +66,7 @@ export default function HistoryPage() {
 
   return (
     <div>
-      <PageHeader title="Historique" subtitle={`${all.length} séance${all.length > 1 ? 's' : ''} enregistrée${all.length > 1 ? 's' : ''}`} />
+      {!bare && <PageHeader title="Historique" subtitle={`${all.length} séance${all.length > 1 ? 's' : ''} enregistrée${all.length > 1 ? 's' : ''}`} />}
 
       <Page className="space-y-5">
         <div className="space-y-2">

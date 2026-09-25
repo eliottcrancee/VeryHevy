@@ -5,7 +5,7 @@ import { useAuth } from '@/lib/auth'
 import { useStore } from '@/store/store'
 import type { FollowState } from '@/lib/social'
 import type { Post, SocialProfile } from '@/types'
-import { listFeed } from '@/lib/posts'
+import { listDiscoverPosts, listFeed } from '@/lib/posts'
 import { cancelFollowRequest } from '@/lib/notifications'
 import { countUnread } from '@/lib/notifications'
 import { followStatus, isBlockedByMe, requestFollow, searchProfiles } from '@/lib/social'
@@ -19,8 +19,7 @@ import { cn } from '@/lib/utils'
 const PAGE_SIZE = 20
 
 /**
- * Accueil = feed seul.
- * Le démarrage de séance se fait via le + (séance vide) ou Programmes.
+ * Accueil = entraînement en cours, feed et découverte.
  */
 export default function HomePage() {
   const navigate = useNavigate()
@@ -28,11 +27,14 @@ export default function HomePage() {
   const notify = useStore((s) => s.notify)
   const startWorkout = useStore((s) => s.startWorkout)
   const activeId = useStore((s) => s.activeWorkoutId)
+  const workouts = useStore((s) => s.workouts)
 
   const [posts, setPosts] = useState<Post[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(true)
+  const [discover, setDiscover] = useState<Post[]>([])
+  const [feedError, setFeedError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
 
   const [query, setQuery] = useState('')
@@ -54,10 +56,14 @@ export default function HomePage() {
     else setLoading(true)
     try {
       const page = await listFeed(PAGE_SIZE, offset)
+      setFeedError(null)
       setPosts((prev) => (append ? [...prev, ...page] : page))
       setHasMore(page.length === PAGE_SIZE)
+      if (!append && page.length === 0) {
+        setDiscover(await listDiscoverPosts())
+      } else if (!append) setDiscover([])
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Feed illisible', 'error')
+      setFeedError(err instanceof Error ? err.message : 'Feed illisible')
     } finally {
       setLoading(false)
       setLoadingMore(false)
@@ -211,6 +217,7 @@ export default function HomePage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') void search() }}
+            aria-label="Rechercher un sportif par pseudo"
             placeholder="Rechercher un pseudo…"
             autoComplete="off"
           />
@@ -225,7 +232,7 @@ export default function HomePage() {
             </button>
           )}
         </div>
-        <Button variant="primary" disabled={searching || query.trim().length < 2} onClick={() => void search()}>
+        <Button aria-label="Lancer la recherche" variant="primary" disabled={searching || query.trim().length < 2} onClick={() => void search()}>
           <Search size={16} />
         </Button>
       </div>
@@ -327,6 +334,14 @@ export default function HomePage() {
         }
       />
       <Page className="max-w-2xl space-y-3 pb-10">
+        <Card className="flex items-center gap-3 border-accent-line bg-accent-soft p-4">
+          <span className="rounded-xl bg-accent/15 p-2 text-accent"><Plus size={22} /></span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-extrabold">{activeId ? 'Séance en cours' : 'Prêt pour ta prochaine séance ?'}</p>
+            <p className="text-xs text-muted">{workouts.filter((w) => w.status === 'completed').length} séance(s) terminée(s) dans ton carnet</p>
+          </div>
+          <Button size="sm" variant="primary" onClick={startEmpty}>{activeId ? 'Reprendre' : 'Démarrer'}</Button>
+        </Card>
         {searchBlock}
         <div
           className={cn(
@@ -337,13 +352,18 @@ export default function HomePage() {
           <span className={cn('inline-block h-4 w-4 rounded-full border-2 border-accent border-t-transparent', (refreshing || pull >= 64) && 'animate-spin')} />
           {refreshing ? 'Actualisation…' : pull >= 64 ? 'Relâche pour actualiser' : 'Tire pour actualiser'}
         </div>
-        {loading ? (
+        {feedError ? (
+          <Card className="p-4">
+            <EmptyState title="Impossible de charger le feed" message={feedError}
+              action={<Button variant="primary" onClick={refresh}>Réessayer</Button>} />
+          </Card>
+        ) : loading ? (
           <p className="py-8 text-center text-sm text-muted">Chargement du feed…</p>
         ) : posts.length === 0 ? (
           <Card className="space-y-3 p-4">
             <EmptyState
               title="Ton feed est vide"
-              message="Recherche un pseudo ci-dessus pour suivre des sportifs, puis publie ton premier post depuis un rapport de séance."
+              message="Suis des sportifs pour retrouver leurs séances ici. Tu peux aussi découvrir les publications publiques ci-dessous."
             />
           </Card>
         ) : (
@@ -357,6 +377,12 @@ export default function HomePage() {
               </Button>
             )}
           </>
+        )}
+        {!feedError && !loading && posts.length === 0 && discover.length > 0 && (
+          <section className="space-y-3">
+            <h2 className="text-sm font-extrabold">À découvrir</h2>
+            {discover.map((p) => <PostCard key={p.id} post={p} onChanged={refresh} />)}
+          </section>
         )}
       </Page>
     </div>

@@ -18,7 +18,7 @@ import {
 } from 'lucide-react'
 import type { AppData, SocialProfile } from '@/types'
 import { useStore } from '@/store/store'
-import { deleteCloudData } from '@/lib/cloudSync'
+import { deleteCloudData, isCloudSyncPaused, resumeCloudSync } from '@/lib/cloudSync'
 import { listMyBlocks, unblockUser } from '@/lib/social'
 import { useAuth } from '@/lib/auth'
 import { isCloudEnabled } from '@/lib/supabase'
@@ -74,6 +74,7 @@ export default function SettingsPage() {
   } | null>(null)
   const [busy, setBusy] = useState(false)
   const [confirmDeleteCloud, setConfirmDeleteCloud] = useState(false)
+  const [cloudPaused, setCloudPaused] = useState(() => user ? isCloudSyncPaused(user.id) : false)
   const [blocks, setBlocks] = useState<SocialProfile[]>([])
   const [blocksLoaded, setBlocksLoaded] = useState(false)
 
@@ -107,7 +108,8 @@ export default function SettingsPage() {
   const eraseCloud = async () => {
     try {
       await deleteCloudData()
-      notify('Données cloud supprimées (cet appareil garde sa copie locale)', 'success')
+      setCloudPaused(true)
+      notify('Données d’entraînement supprimées du cloud. La synchro est en pause.', 'success')
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Suppression impossible', 'error')
     } finally {
@@ -502,11 +504,14 @@ export default function SettingsPage() {
           </p>
           {cloudEnabled && user && (
             <div>
-              <Button size="sm" variant="danger" onClick={() => setConfirmDeleteCloud(true)}>
-                <Trash2 size={14} /> Supprimer mes données cloud
-              </Button>
+              {cloudPaused ? <Button size="sm" onClick={() => { resumeCloudSync(user.id); setCloudPaused(false) }}>
+                Réactiver la synchronisation
+              </Button> : <Button size="sm" variant="danger" onClick={() => setConfirmDeleteCloud(true)}>
+                <Trash2 size={14} /> Supprimer mes entraînements du cloud
+              </Button>}
               <p className="mt-1 text-[11px] text-muted">
-                Efface séances, programmes et exercices en ligne. La copie locale de cet appareil est conservée.
+                {cloudPaused ? 'La copie locale est conservée. Réactiver la synchro la renverra vers le cloud.'
+                  : 'Efface séances, programmes et exercices en ligne puis met la synchro en pause. Les publications et le profil restent en ligne.'}
               </p>
             </div>
           )}
@@ -595,9 +600,9 @@ export default function SettingsPage() {
 
       <ConfirmDialog
         open={confirmDeleteCloud}
-        title="Supprimer les données cloud ?"
-        message="Tes séances, programmes et exercices stockés en ligne seront effacés. La copie locale de CET appareil est conservée."
-        confirmLabel="Tout supprimer en ligne"
+        title="Supprimer les entraînements du cloud ?"
+        message="Séances, programmes et exercices en ligne seront effacés. La copie locale sera conservée et la synchronisation mise en pause. Publications et profil ne sont pas concernés."
+        confirmLabel="Supprimer les entraînements"
         danger
         onCancel={() => setConfirmDeleteCloud(false)}
         onConfirm={() => void eraseCloud()}

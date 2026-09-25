@@ -39,6 +39,8 @@ function notifIcon(type: string) {
       return <HeartHandshake size={16} />
     case 'session_invite_declined':
       return <MessageCircle size={16} />
+    case 'message':
+      return <MessageCircle size={16} />
     default:
       return <UserPlus size={16} />
   }
@@ -47,6 +49,7 @@ function describe(n: AppNotification): { text: string; to: string | null } {
   const p = n.payload as Record<string, string | undefined>
   const who = p.from_username ? `@${p.from_username}` : p.username ? `@${p.username}` : 'Un sportif'
   const whoLink = p.from_username ? `/profil/${p.from_username}` : p.username ? `/profil/${p.username}` : null
+  const sessionLink = p.session_id ? `/explorer?session=${encodeURIComponent(p.session_id)}` : '/explorer'
   switch (n.type) {
     case 'follow_request':
       return { text: `${who} veut te suivre`, to: whoLink }
@@ -55,13 +58,15 @@ function describe(n: AppNotification): { text: string; to: string | null } {
     case 'new_follower':
       return { text: `${who} te suit`, to: whoLink }
     case 'session_request':
-      return { text: `${who} veut rejoindre ${p.session_title ? `« ${p.session_title} »` : 'ta sortie'}`, to: '/explorer' }
+      return { text: `${who} veut rejoindre ${p.session_title ? `« ${p.session_title} »` : 'ta sortie'}`, to: sessionLink }
     case 'session_invite':
-      return { text: `${who} t'invite à « ${p.session_title ?? 'une séance'} » 🎉`, to: '/explorer' }
+      return { text: `${who} t'invite à « ${p.session_title ?? 'une séance'} » 🎉`, to: sessionLink }
     case 'session_invite_declined':
-      return { text: `${who} a décliné ton invitation${p.session_title ? ` (« ${p.session_title} »)` : ''}`, to: '/explorer' }
+      return { text: `${who} a décliné ton invitation${p.session_title ? ` (« ${p.session_title} »)` : ''}`, to: sessionLink }
     case 'session_accepted':
-      return { text: `Match ! ${who} t'a accepté${p.session_title ? ` : « ${p.session_title} »` : ''} 🤝`, to: '/explorer' }
+      return { text: `Match ! ${who} t'a accepté${p.session_title ? ` : « ${p.session_title} »` : ''} 🤝`, to: sessionLink }
+    case 'message':
+      return { text: `${who} t'a envoyé un message`, to: p.from_id ? `/explorer?message=${encodeURIComponent(p.from_id)}` : '/explorer' }
     default:
       return { text: 'Nouvelle notification', to: null }
   }

@@ -36,7 +36,7 @@ type Range = '30j' | '90j' | '6m' | 'tout'
 
 const RANGE_DAYS: Record<Range, number | null> = { '30j': 30, '90j': 90, '6m': 182, tout: null }
 
-export default function StatsPage() {
+export default function StatsPage({ bare = false }: { bare?: boolean }) {
   const workouts = useStore((s) => s.workouts)
   const exercises = useStore((s) => s.exercises)
   const settings = useStore((s) => s.settings)
@@ -156,7 +156,7 @@ export default function StatsPage() {
   if (!all.length) {
     return (
       <div>
-        <PageHeader title="Stats" />
+        {!bare && <PageHeader title="Stats" />}
         <Page>
           <Card>
             <EmptyState
@@ -172,7 +172,7 @@ export default function StatsPage() {
 
   return (
     <div>
-      <PageHeader title="Stats" subtitle={`${filtered.length} séances sur la période`} />
+      {!bare && <PageHeader title="Stats" subtitle={`${filtered.length} séances sur la période`} />}
       <Page className="space-y-5">
         <div className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1">
           {(

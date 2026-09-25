@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -30,9 +30,11 @@ import {
   listPastSessions,
   listSessions,
   searchPlaces,
+  updateSession,
   type PlaceResult,
 } from '@/lib/sessions'
 import { listMyFollowIds } from '@/lib/social'
+import { countUnreadMessages, markMessagesRead } from '@/lib/notifications'
 import {
   acceptInvite,
   acceptRequest,
@@ -66,6 +68,7 @@ import { Page, PageHeader } from '@/components/PageHeader'
 import { ProfileAvatar, ProfileLine, profileLinkOf, profileNameOf } from '@/components/ProfileAvatar'
 import { Button, Card, Chip, EmptyState, Field, Input, Modal, Select, Tabs, Textarea } from '@/components/ui'
 import { IconButton } from '@/components/ui'
+import { ReportDialog } from '@/components/ReportDialog'
 import { cn } from '@/lib/utils'
 
 const FRANCE: [number, number] = [46.603354, 1.888334]
@@ -218,9 +221,26 @@ export interface ActiveThread {
   other: SocialProfile | null
 }
 
+function mapViewKey(userId?: string): string {
+  return `veryhevy-map-view:${userId ?? 'local'}`
+}
+
+function savedMapView(userId?: string): { center: [number, number]; zoom: number } {
+  try {
+    const saved = JSON.parse(localStorage.getItem(mapViewKey(userId)) ?? 'null')
+    if (Array.isArray(saved?.center) && saved.center.length === 2
+      && saved.center.every((n: unknown) => typeof n === 'number' && Number.isFinite(n))
+      && typeof saved.zoom === 'number' && saved.zoom >= 3 && saved.zoom <= 18) {
+      return saved as { center: [number, number]; zoom: number }
+    }
+  } catch { /* stockage indisponible */ }
+  return { center: FRANCE, zoom: 6 }
+}
+
 /* ------------------------------------------------------------------ */
 
 export default function ExplorerPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const { cloudEnabled, user } = useAuth()
   const notify = useStore((s) => s.notify)
 
@@ -231,8 +251,9 @@ export default function ExplorerPage() {
   const [dayFilter, setDayFilter] = useState<DayFilter>('all')
   const [recoQuery, setRecoQuery] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [center, setCenter] = useState<[number, number]>(FRANCE)
-  const [zoom, setZoom] = useState(6)
+  const [initialMap] = useState(() => savedMapView(user?.id))
+  const [center, setCenter] = useState<[number, number]>(initialMap.center)
+  const [zoom, setZoom] = useState(initialMap.zoom)
   const [flyTo, setFlyTo] = useState<{ lat: number; lng: number; zoom?: number } | null>(null)
   const [userPos, setUserPos] = useState<[number, number] | null>(null)
   const [picked, setPicked] = useState<{ lat: number; lng: number } | null>(null)
@@ -240,7 +261,7 @@ export default function ExplorerPage() {
   const [createOpen, setCreateOpen] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [thread, setThread] = useState<ActiveThread | null>(null)
-  const located = useRef(false)
+  const [unreadMessages, setUnreadMessages] = useState(0)
 
   const [q, setQ] = useState('')
   const [results, setResults] = useState<PlaceResult[]>([])
@@ -269,22 +290,40 @@ export default function ExplorerPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cloudEnabled])
 
-  /* Géolocalisation auto au premier affichage (silencieuse si refusée). */
   useEffect(() => {
-    if (located.current || !('geolocation' in navigator)) return
-    located.current = true
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const c: [number, number] = [pos.coords.latitude, pos.coords.longitude]
-        setUserPos(c)
-        setCenter(c)
-        setZoom(13)
-        setFlyTo({ lat: c[0], lng: c[1], zoom: 13 })
-      },
-      () => {},
-      { timeout: 8000 },
-    )
-  }, [])
+    if (!cloudEnabled || !user) return
+    const refresh = () => { void countUnreadMessages().then(setUnreadMessages) }
+    refresh()
+    const id = setInterval(refresh, 30_000)
+    return () => clearInterval(id)
+  }, [cloudEnabled, user])
+
+  useEffect(() => {
+    const messageId = searchParams.get('message')
+    if (messageId) {
+      setThread({ sessionId: null, title: 'Message direct', otherId: messageId, other: null })
+      setView('messages')
+      setSearchParams({}, { replace: true })
+      return
+    }
+    const sessionId = searchParams.get('session')
+    if (!sessionId || loading) return
+    const s = sessions.find((item) => item.id === sessionId)
+    if (s) {
+      setSelectedId(s.id)
+      setView(s.visibility === 'invite' ? 'mine' : 'carte')
+      setFlyTo({ lat: s.lat, lng: s.lng, zoom: 14 })
+    }
+    setSearchParams({}, { replace: true })
+  }, [searchParams, sessions, loading, setSearchParams])
+
+  /* La carte reprend la dernière zone consultée. La localisation reste volontaire. */
+  useEffect(() => {
+    if (!viewport) return
+    const next = { center: [(viewport.minLat + viewport.maxLat) / 2,
+      (viewport.minLng + viewport.maxLng) / 2], zoom: viewport.zoom }
+    try { localStorage.setItem(mapViewKey(user?.id), JSON.stringify(next)) } catch { /* privé */ }
+  }, [viewport, user?.id])
 
   const onQuery = (v: string) => {
     setQ(v)
@@ -436,28 +475,33 @@ export default function ExplorerPage() {
         title="Explorer"
         subtitle="Touche la carte pour proposer une séance"
         actions={
-          <IconButton label="Me localiser" onClick={locate}>
-            <LocateFixed size={20} />
-          </IconButton>
+          <div className="flex items-center gap-1">
+            <Button size="sm" variant="primary" onClick={() => setCreateOpen(true)}>
+              <Plus size={15} /> Proposer
+            </Button>
+            <IconButton label="Me localiser" onClick={locate}>
+              <LocateFixed size={20} />
+            </IconButton>
+          </div>
         }
       >
         <div className="mx-auto w-full max-w-5xl space-y-2 px-4 pb-3">
-          {/* Même style que les onglets du Profil : compact, une ligne. */}
           <Tabs<View>
             value={view}
             onChange={setView}
+            className="grid grid-cols-2 sm:grid-cols-4"
             tabs={[
               { value: 'carte', label: 'Carte', icon: <MapIcon size={14} /> },
               { value: 'reco', label: 'Recommandations', icon: <Sparkles size={14} /> },
               { value: 'mine', label: 'Mes séances', icon: <CalendarCheck size={14} /> },
-              { value: 'messages', label: 'Messages', icon: <MessageCircle size={14} /> },
+              { value: 'messages', label: unreadMessages ? `Messages (${unreadMessages})` : 'Messages', icon: <MessageCircle size={14} /> },
             ]}
           />
           {view === 'carte' && (
             <>
               <div className="relative">
                 <Search size={15} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted" />
-                <Input value={q} onChange={(e) => onQuery(e.target.value)} placeholder="Ville, salle… (ex. Basic-Fit Lyon)" className="pl-9" />
+                <Input aria-label="Rechercher une ville ou une salle" value={q} onChange={(e) => onQuery(e.target.value)} placeholder="Ville, salle… (ex. Basic-Fit Lyon)" className="pl-9" />
                 {(searching || results.length > 0) && (
                   <div className="absolute inset-x-0 top-full z-50 mt-1 overflow-hidden rounded-xl border border-line bg-surface shadow-xl">
                     {searching && <p className="px-3 py-2 text-xs text-muted">Recherche…</p>}
@@ -490,6 +534,7 @@ export default function ExplorerPage() {
         ) : view === 'mine' ? (
           <MySessionsView
             sessions={sessions}
+            initialSelectedId={selectedId}
             followIds={followIds}
             busyId={busyId}
             onChanged={() => void reload()}
@@ -757,6 +802,8 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
   const past = isSessionPast(s)
   const mine = s.host === me
   const [inviteOpen, setInviteOpen] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
+  const [reportOpen, setReportOpen] = useState(false)
   const [members, setMembers] = useState<SessionMember[] | null>(null)
   const [publicOnes, setPublicOnes] = useState<SocialProfile[]>([])
   const [requests, setRequests] = useState<SessionRequest[] | null>(null)
@@ -815,7 +862,7 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
     setReqBusy(true)
     try {
       if (myReq?.status === 'declined') await withdrawRequest(s.id)
-      await sendRequest(s.id, reqMsg, s.host, s.title)
+      await sendRequest(s.id, reqMsg)
       setMyReq(await myRequestStatus(s.id))
       setReqMsg('')
       notify(s.visibility === 'open' ? 'Candidature envoyée — l’hôte va te répondre 💬' : 'Demande envoyée — l’hôte va te répondre 💬', 'success')
@@ -847,7 +894,7 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
   const declineMyInvite = async () => {
     setReqBusy(true)
     try {
-      await declineInvite(s.id, s.title)
+      await declineInvite(s.id)
       setMyInvite(await myInviteStatus(s.id))
       notify('Invitation déclinée', 'info')
       onChanged()
@@ -863,7 +910,7 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
     try {
       if (ok) {
         if (s.spots_taken >= s.spots_total) throw new Error('Session complète')
-        await acceptRequest(s.id, r.user_id, s.title)
+        await acceptRequest(s.id, r.user_id)
         notify(`Match avec ${displayNameOf(r.author)} 🤝 Discutez !`, 'success')
       } else {
         await declineRequest(s.id, r.user_id)
@@ -919,7 +966,11 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
             </p>
           )}
         </div>
-        <Button size="sm" variant="ghost" onClick={onClose}>Fermer</Button>
+        <div className="flex gap-1">
+          {mine && <Button size="sm" variant="ghost" onClick={() => setEditOpen(true)}>Modifier</Button>}
+          {!mine && <Button size="sm" variant="ghost" onClick={() => setReportOpen(true)}>Signaler</Button>}
+          <Button size="sm" variant="ghost" onClick={onClose}>Fermer</Button>
+        </div>
       </div>
       {s.description && <p className="text-sm text-muted">{s.description}</p>}
 
@@ -1095,6 +1146,8 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
           }}
         />
       )}
+      <ReportDialog open={reportOpen} targetType="session" targetId={s.id} onClose={() => setReportOpen(false)} />
+      <EditSessionModal session={s} open={editOpen} onClose={() => setEditOpen(false)} onSaved={onChanged} />
     </Card>
   )
 }
@@ -1117,8 +1170,9 @@ function ProposeBox({ msg, setMsg, busy, onSend, action = 'Se proposer 🙋', pl
 /* --------------------------- mes séances --------------------------- */
 /* Inscrit + créées + en attente (demandes et invitations). */
 
-function MySessionsView({ sessions, followIds, busyId, onChanged, onChat, act }: {
+function MySessionsView({ sessions, initialSelectedId, followIds, busyId, onChanged, onChat, act }: {
   sessions: SportSession[]
+  initialSelectedId: string | null
   followIds: Set<string>
   busyId: string | null
   onChanged: () => void
@@ -1127,7 +1181,8 @@ function MySessionsView({ sessions, followIds, busyId, onChanged, onChat, act }:
 }) {
   const { user } = useAuth()
   const notify = useStore((s) => s.notify)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId)
+  useEffect(() => { if (initialSelectedId) setSelectedId(initialSelectedId) }, [initialSelectedId])
   const [pendingReqs, setPendingReqs] = useState<MyPendingRequest[]>([])
   const [invites, setInvites] = useState<MyInvite[]>([])
   const [pastOnes, setPastOnes] = useState<SportSession[]>([])
@@ -1406,14 +1461,16 @@ function ConversationView({ t, onBack }: { t: ActiveThread; onBack: () => void }
   const { user } = useAuth()
   const notify = useStore((s) => s.notify)
   const [msgs, setMsgs] = useState<ChatMessage[]>([])
+  const [messageLimit, setMessageLimit] = useState(200)
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   const bottom = useRef<HTMLDivElement>(null)
 
   const load = async (silent = false) => {
     try {
-      const list = await listMessages(t.otherId)
+      const list = await listMessages(t.otherId, messageLimit)
       setMsgs(list)
+      void markMessagesRead(t.otherId)
       if (!silent) bottom.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
     } catch (err) {
       if (!silent) notify(err instanceof Error ? err.message : 'Discussion illisible', 'error')
@@ -1425,7 +1482,7 @@ function ConversationView({ t, onBack }: { t: ActiveThread; onBack: () => void }
     const id = setInterval(() => void load(true), 5000)
     return () => clearInterval(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [t.otherId])
+  }, [t.otherId, messageLimit])
 
   const send = async () => {
     if (!draft.trim() || sending) return
@@ -1452,6 +1509,11 @@ function ConversationView({ t, onBack }: { t: ActiveThread; onBack: () => void }
         </div>
       </div>
       <div className="flex-1 space-y-2 overflow-y-auto p-3">
+        {msgs.length >= messageLimit && (
+          <Button size="sm" variant="ghost" block onClick={() => setMessageLimit((n) => n + 200)}>
+            Charger les messages précédents
+          </Button>
+        )}
         {msgs.length === 0 && (
           <p className="py-6 text-center text-xs text-muted">
             {t.sessionId ? 'Match 🤝 Dis bonjour et organisez votre séance !' : 'Écris à ton ami 💬'}
@@ -1520,7 +1582,7 @@ function InviteBox({ session, onDone }: { session: SportSession; onDone: () => v
       const fresh = picked.filter((id) => !already.has(id))
       const removed = current.filter((i) => i.status === 'pending' && !picked.includes(i.user_id))
       await Promise.all([
-        ...fresh.map((id) => sendInvite(session.id, id, session.title)),
+        ...fresh.map((id) => sendInvite(session.id, id)),
         ...removed.map((i) => cancelInvite(session.id, i.user_id)),
       ])
       onDone()
@@ -1552,6 +1614,72 @@ function InviteBox({ session, onDone }: { session: SportSession; onDone: () => v
   )
 }
 
+function EditSessionModal({ session, open, onClose, onSaved }: {
+  session: SportSession
+  open: boolean
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const notify = useStore((s) => s.notify)
+  const [title, setTitle] = useState(session.title)
+  const [gym, setGym] = useState(session.gym_name)
+  const [address, setAddress] = useState(session.address_text)
+  const [starts, setStarts] = useState(() => {
+    const d = new Date(session.starts_at)
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 16)
+  })
+  const [spots, setSpots] = useState(session.spots_total)
+  const [level, setLevel] = useState(session.level)
+  const [visibility, setVisibility] = useState<SessionVisibility>(session.visibility)
+  const [description, setDescription] = useState(session.description)
+  const [saving, setSaving] = useState(false)
+
+  const save = async () => {
+    const date = new Date(starts)
+    if (!title.trim() || !Number.isFinite(date.getTime()) || date.getTime() < Date.now()) {
+      notify('Indique un titre et une date à venir', 'error')
+      return
+    }
+    setSaving(true)
+    try {
+      await updateSession(session.id, { title, gym_name: gym, address_text: address,
+        starts_at: date.toISOString(), spots_total: spots, level, description, visibility })
+      notify('Sortie modifiée', 'success')
+      onClose()
+      onSaved()
+    } catch (err) { notify(err instanceof Error ? err.message : 'Modification impossible', 'error') }
+    finally { setSaving(false) }
+  }
+
+  return <Modal open={open} onClose={onClose} title="Modifier la sortie">
+    <div className="space-y-3">
+      <Field label="Titre"><Input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={80} /></Field>
+      <Field label="Salle / lieu"><Input value={gym} onChange={(e) => setGym(e.target.value)} maxLength={120} /></Field>
+      <Field label="Adresse exacte"><Input value={address} onChange={(e) => setAddress(e.target.value)} maxLength={200} /></Field>
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Date et heure"><Input type="datetime-local" value={starts} onChange={(e) => setStarts(e.target.value)} /></Field>
+        <Field label="Places"><Select value={spots} onChange={(e) => setSpots(Number(e.target.value))}>
+          {[2, 3, 4, 5, 6, 7, 8].map((n) => <option key={n} value={n}>{n}</option>)}
+        </Select></Field>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Niveau"><Select value={level} onChange={(e) => setLevel(e.target.value)}>
+          <option value="tous">Tous niveaux</option><option value="débutant">Débutant</option>
+          <option value="intermédiaire">Intermédiaire</option><option value="confirmé">Confirmé</option>
+        </Select></Field>
+        <Field label="Type"><Select value={visibility} onChange={(e) => setVisibility(e.target.value as SessionVisibility)}>
+          <option value="invite">Entre amis</option><option value="open">Sur proposition</option>
+          <option value="public">Publique</option>
+        </Select></Field>
+      </div>
+      <Field label="Description"><Textarea value={description} onChange={(e) => setDescription(e.target.value)} maxLength={500} rows={3} /></Field>
+      <Button variant="primary" block disabled={saving} onClick={() => void save()}>
+        {saving ? 'Enregistrement…' : 'Enregistrer les modifications'}
+      </Button>
+    </div>
+  </Modal>
+}
+
 function CreateSessionModal({ open, picked, onClose, onCreated }: {
   open: boolean
   picked: { lat: number; lng: number } | null
@@ -1562,13 +1690,20 @@ function CreateSessionModal({ open, picked, onClose, onCreated }: {
   const [title, setTitle] = useState('Push — pecs / épaules')
   const [gym, setGym] = useState('')
   const [address, setAddress] = useState('')
-  const [day, setDay] = useState('1')
+  const [date, setDate] = useState(() => {
+    const tomorrow = new Date(Date.now() + 86_400_000)
+    return `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`
+  })
   const [hour, setHour] = useState('19:00')
   const [spots, setSpots] = useState('3')
   const [level, setLevel] = useState('tous')
   const [visibility, setVisibility] = useState<SessionVisibility>('open')
   const [desc, setDesc] = useState('')
   const [saving, setSaving] = useState(false)
+  const [placeQuery, setPlaceQuery] = useState('')
+  const [places, setPlaces] = useState<PlaceResult[]>([])
+  const [placeBusy, setPlaceBusy] = useState(false)
+  const [chosenPlace, setChosenPlace] = useState<PlaceResult | null>(null)
 
   const [candidates, setCandidates] = useState<SocialProfile[]>([])
   const [invited, setInvited] = useState<string[]>([])
@@ -1580,18 +1715,27 @@ function CreateSessionModal({ open, picked, onClose, onCreated }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, visibility])
 
+  useEffect(() => {
+    if (!open) { setChosenPlace(null); setPlaces([]); setPlaceQuery('') }
+  }, [open])
+
   if (!open) return null
 
+  const location = chosenPlace ?? picked
+  const findPlace = async () => {
+    setPlaceBusy(true)
+    try { setPlaces(await searchPlaces(placeQuery)) }
+    catch (err) { notify(err instanceof Error ? err.message : 'Lieu introuvable', 'error') }
+    finally { setPlaceBusy(false) }
+  }
+
   const submit = async () => {
-    if (!picked) {
-      notify('Touche la carte pour placer ta séance (ou cherche un lieu)', 'error')
+    if (!location) {
+      notify('Choisis un lieu dans la recherche ou sur la carte', 'error')
       return
     }
-    const [h, m] = hour.split(':').map(Number)
-    const d = new Date()
-    d.setDate(d.getDate() + Number(day))
-    d.setHours(h || 19, m || 0, 0, 0)
-    if (d.getTime() < Date.now() - 5 * 60 * 1000) {
+    const d = new Date(`${date}T${hour}:00`)
+    if (!Number.isFinite(d.getTime()) || d.getTime() < Date.now()) {
       notify('Choisis une date à venir', 'error')
       return
     }
@@ -1601,8 +1745,8 @@ function CreateSessionModal({ open, picked, onClose, onCreated }: {
         title: title.trim() || 'Séance ouverte',
         gym_name: gym.trim() || 'Salle à préciser en privé',
         address_text: address.trim(),
-        lat: picked.lat,
-        lng: picked.lng,
+        lat: location.lat,
+        lng: location.lng,
         starts_at: d.toISOString(),
         spots_total: Number(spots) || 3,
         level,
@@ -1610,7 +1754,7 @@ function CreateSessionModal({ open, picked, onClose, onCreated }: {
         visibility,
       })
       if (visibility === 'invite' && invited.length > 0) {
-        await Promise.all(invited.map((id) => sendInvite(s.id, id, s.title).catch(() => {})))
+        await Promise.all(invited.map((id) => sendInvite(s.id, id).catch(() => {})))
       }
       notify(
         visibility === 'invite'
@@ -1631,14 +1775,24 @@ function CreateSessionModal({ open, picked, onClose, onCreated }: {
   return (
     <Modal open={open} onClose={onClose} title="Proposer une séance">
       <div className="space-y-3">
-        {!picked && (
-          <p className="rounded-xl bg-warning/10 p-2.5 text-xs font-semibold text-warning">
-            Aucun point choisi : touche la carte ou cherche un lieu, puis reviens ici.
-          </p>
-        )}
-        {picked && (
-          <p className="text-xs text-muted">📍 {picked.lat}, {picked.lng}</p>
-        )}
+        <Field label="Lieu de la séance" hint="Cherche une salle ou une ville, ou touche la carte avant d’ouvrir ce formulaire.">
+          <div className="flex gap-2">
+            <Input value={placeQuery} onChange={(e) => setPlaceQuery(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void findPlace() } }}
+              placeholder="Ville ou salle…" />
+            <Button size="sm" disabled={placeBusy || placeQuery.trim().length < 3} onClick={() => void findPlace()}>
+              <Search size={15} /> Chercher
+            </Button>
+          </div>
+        </Field>
+        {places.length > 0 && <div className="max-h-36 space-y-1 overflow-y-auto">
+          {places.map((place, i) => <button key={i} type="button"
+            className="block w-full rounded-lg bg-surface-2 p-2 text-left text-xs hover:bg-accent-soft"
+            onClick={() => { setChosenPlace(place); setPlaceQuery(place.label); setPlaces([]) }}>
+            📍 {place.label}
+          </button>)}
+        </div>}
+        {location && <p className="text-xs text-muted">📍 {chosenPlace?.label ?? `${location.lat}, ${location.lng}`}</p>}
         <Field label="Titre"><Input value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
         <Field label="Salle / lieu" hint="Nom libre, ex. Basic-Fit Part-Dieu">
           <Input value={gym} onChange={(e) => setGym(e.target.value)} placeholder="Ma salle habituelle…" />
@@ -1647,15 +1801,7 @@ function CreateSessionModal({ open, picked, onClose, onCreated }: {
           <Input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="12 rue des Sports" />
         </Field>
         <div className="grid grid-cols-3 gap-2">
-          <Field label="Jour">
-            <Select value={day} onChange={(e) => setDay(e.target.value)}>
-              <option value="0">Aujourd’hui</option>
-              <option value="1">Demain</option>
-              <option value="2">Dans 2 j</option>
-              <option value="3">Dans 3 j</option>
-              <option value="6">Dans 6 j</option>
-            </Select>
-          </Field>
+          <Field label="Date"><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
           <Field label="Heure"><Input type="time" value={hour} onChange={(e) => setHour(e.target.value)} /></Field>
           <Field label="Places">
             <Select value={spots} onChange={(e) => setSpots(e.target.value)}>

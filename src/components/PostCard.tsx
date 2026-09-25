@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Copy, Dumbbell, Heart, MessageCircle, Trash2 } from 'lucide-react'
-import type { Post, PostComment, Workout } from '@/types'
+import { BookmarkPlus, Dumbbell, Flag, Heart, MessageCircle, Pencil, Play, Trash2 } from 'lucide-react'
+import type { Post, PostComment, PostVisibility, Workout } from '@/types'
 import { useStore } from '@/store/store'
 import { useAuth } from '@/lib/auth'
 import {
@@ -12,11 +12,14 @@ import {
   getPostWorkout,
   listComments,
   toggleLike,
+  updatePost,
 } from '@/lib/posts'
 import { workoutDurationSeconds, workoutSets, workoutVolume } from '@/lib/calc'
 import { formatDate, formatDuration, formatVolume } from '@/lib/utils'
-import { Button, Card, Input } from '@/components/ui'
+import { Button, Card, Field, Input, Modal, Select, Textarea } from '@/components/ui'
+import { ReportDialog } from '@/components/ReportDialog'
 import { cn } from '@/lib/utils'
+import { uid } from '@/lib/utils'
 
 function Avatar({ url, name, size = 40 }: { url?: string | null; name: string; size?: number }) {
   if (url) {
@@ -42,7 +45,7 @@ function Avatar({ url, name, size = 40 }: { url?: string | null; name: string; s
 
 /**
  * Carte post du feed : auteur, photo, légende, résumé séance,
- * likes, commentaires, cloner sans démarrer.
+ * likes, commentaires et réutilisation de la séance.
  */
 function WorkoutDetail({
   name,
@@ -50,8 +53,9 @@ function WorkoutDetail({
   volume,
   seconds,
   exercises,
-  cloning,
-  onClone,
+  busy,
+  onSave,
+  onStart,
   onOpen,
 }: {
   name: string
@@ -59,8 +63,9 @@ function WorkoutDetail({
   volume: number
   seconds: number
   exercises: { name: string; count: number }[]
-  cloning: boolean
-  onClone: () => void
+  busy: boolean
+  onSave: () => void
+  onStart: () => void
   onOpen?: () => void
 }) {
   return (
@@ -80,9 +85,12 @@ function WorkoutDetail({
         {exercises.length > 6 && (
           <p className="text-[11px] text-muted">+{exercises.length - 6} exercice(s)</p>
         )}
-        <div className="flex gap-2 pt-1">
-          <Button size="sm" variant="primary" disabled={cloning} onClick={onClone}>
-            <Copy size={14} /> Cloner la séance
+        <div className="flex flex-wrap gap-2 pt-1">
+          <Button size="sm" variant="primary" disabled={busy} onClick={onSave}>
+            <BookmarkPlus size={14} /> Enregistrer comme programme
+          </Button>
+          <Button size="sm" variant="ghost" disabled={busy} onClick={onStart}>
+            <Play size={14} /> Démarrer maintenant
           </Button>
           {onOpen && (
             <Button size="sm" variant="ghost" onClick={onOpen}>
@@ -100,7 +108,6 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
   const navigate = useNavigate()
   const notify = useStore((s) => s.notify)
   const localWorkouts = useStore((s) => s.workouts)
-  const startWorkout = useStore((s) => s.startWorkout)
 
   const [liked, setLiked] = useState(Boolean(post.liked_by_me))
   const [likes, setLikes] = useState(post.likes_count)
@@ -113,6 +120,10 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
   const [remoteWorkout, setRemoteWorkout] = useState<Workout | null>(null)
   const [loadingWorkout, setLoadingWorkout] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [reportOpen, setReportOpen] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
+  const [caption, setCaption] = useState(post.caption)
+  const [visibility, setVisibility] = useState<PostVisibility>(post.visibility)
 
   const mine = user?.id === post.user_id
   const localWorkout = post.workout_id ? localWorkouts.find((w) => w.id === post.workout_id) : undefined
@@ -182,6 +193,17 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
     }
   }
 
+  const savePost = async () => {
+    setBusy(true)
+    try {
+      await updatePost(post.id, caption, visibility)
+      setEditOpen(false)
+      notify('Publication modifiée', 'success')
+      onChanged?.()
+    } catch (err) { notify(err instanceof Error ? err.message : 'Modification impossible', 'error') }
+    finally { setBusy(false) }
+  }
+
   const expandWorkout = async () => {
     if (expanded) {
       setExpanded(false)
@@ -200,22 +222,20 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
     }
   }
 
-  /** Cloner sans démarrer : crée la séance, reste sur le feed. */
+  /** Un programme se sauvegarde sans créer de séance active. */
   const cloneSource = async (source: {
     name: string
-    exercises: { exerciseId?: string; name: string; setCount: number }[]
-  }) => {
+    exercises: { exerciseId?: string; name: string; sets: { reps?: number | null; weight?: number | null; duration?: number | null }[] }[]
+  }, start: boolean) => {
     if (busy) return
     const st = useStore.getState()
-    if (st.workouts.some((w) => w.status === 'active')) {
-      notify('Termine ta séance en cours avant d’en cloner une', 'error')
+    if (start && st.workouts.some((w) => w.status === 'active')) {
+      notify('Termine ta séance en cours avant d’en démarrer une autre', 'error')
       return
     }
     setBusy(true)
     try {
-      startWorkout({
-        name: source.name,
-        exercises: source.exercises.map((e) => {
+      const exercises = source.exercises.map((e) => {
           const found =
             (e.exerciseId ? st.exercises.find((x) => x.id === e.exerciseId) : undefined) ??
             st.exercises.find((x) => x.name.toLowerCase() === e.name.toLowerCase())
@@ -224,26 +244,43 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
               found?.id ??
               e.exerciseId ??
               `ext-${e.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 24)}`,
-            setCount: Math.max(1, e.setCount),
+            sets: e.sets.length ? e.sets : [{}],
             exerciseName: e.name,
           }
-        }),
-      })
-      notify('Séance clonée ! Ouvre-la quand tu es à la salle 💪', 'success')
+        })
+      if (start) {
+        st.startWorkout({ name: source.name, exercises: exercises.map((e) => ({
+          exerciseId: e.exerciseId, exerciseName: e.exerciseName, setCount: e.sets.length,
+        })) })
+        navigate('/seance')
+      } else {
+        st.createRoutine({
+          name: source.name,
+          description: 'Enregistré depuis une publication',
+          exercises: exercises.map((e) => ({
+            id: uid('re'), exerciseId: e.exerciseId, exerciseName: e.exerciseName,
+            restSeconds: st.settings.defaultRestSeconds,
+            sets: e.sets.map((s) => ({ type: 'normal' as const,
+              reps: s.reps ?? undefined, weight: s.weight ?? undefined,
+              duration: s.duration ?? undefined })),
+          })),
+        })
+        notify('Programme enregistré dans Programmes', 'success')
+      }
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Clone impossible', 'error')
+      notify(err instanceof Error ? err.message : 'Copie impossible', 'error')
     } finally {
       setBusy(false)
     }
   }
 
-  const clone = async () => {
+  const clone = async (start: boolean) => {
     const snap = post.workout_snapshot
     if (snap) {
       await cloneSource({
         name: snap.name,
-        exercises: snap.exercises.map((e) => ({ exerciseId: e.exerciseId, name: e.name, setCount: e.sets.length })),
-      })
+        exercises: snap.exercises.map((e) => ({ exerciseId: e.exerciseId, name: e.name, sets: e.sets })),
+      }, start)
       return
     }
     let w: Workout | null | undefined = localWorkout
@@ -257,9 +294,9 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
       exercises: w.exercises.map((we) => ({
         exerciseId: we.exerciseId,
         name: we.exerciseName ?? 'Exercice',
-        setCount: we.sets.length,
+        sets: we.sets,
       })),
-    })
+    }, start)
   }
 
   const authorName = displayAuthor(post.author)
@@ -285,11 +322,10 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
             {formatDate(post.created_at)} · {post.visibility === 'public' ? 'Public' : post.visibility === 'followers' ? 'Abonnés' : 'Privé'}
           </p>
         </div>
-        {mine && (
-          <button type="button" onClick={() => void removePost()} title="Supprimer" className="rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-danger">
-            <Trash2 size={16} />
-          </button>
-        )}
+        {mine ? <div className="flex">
+          <button type="button" onClick={() => setEditOpen(true)} aria-label="Modifier la publication" className="rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-accent"><Pencil size={16} /></button>
+          <button type="button" onClick={() => void removePost()} aria-label="Supprimer la publication" className="rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-danger"><Trash2 size={16} /></button>
+        </div> : <button type="button" onClick={() => setReportOpen(true)} aria-label="Signaler la publication" className="rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-danger"><Flag size={16} /></button>}
       </div>
 
       {post.photo_url && (
@@ -307,8 +343,9 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
             volume={post.workout_snapshot.volume}
             seconds={post.workout_snapshot.seconds}
             exercises={post.workout_snapshot.exercises.map((e) => ({ name: e.name, count: e.sets.length }))}
-            cloning={busy}
-            onClone={() => void clone()}
+            busy={busy}
+            onSave={() => void clone(false)}
+            onStart={() => void clone(true)}
           />
         ) : localWorkout ? (
           /* Ancien post de ma propre séance : détail local, visible aussi. */
@@ -318,8 +355,9 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
             volume={workoutVolume(localWorkout)}
             seconds={workoutDurationSeconds(localWorkout)}
             exercises={localWorkout.exercises.map((we) => ({ name: we.exerciseName ?? 'Exercice', count: we.sets.length }))}
-            cloning={busy}
-            onClone={() => void clone()}
+            busy={busy}
+            onSave={() => void clone(false)}
+            onStart={() => void clone(true)}
             onOpen={() => navigate(`/historique/${localWorkout.id}`)}
           />
         ) : post.workout_id ? (
@@ -344,8 +382,9 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
                     volume={workoutVolume(workout)}
                     seconds={workoutDurationSeconds(workout)}
                     exercises={workout.exercises.map((we) => ({ name: we.exerciseName ?? 'Exercice', count: we.sets.length }))}
-                    cloning={busy}
-                    onClone={() => void clone()}
+                    busy={busy}
+                    onSave={() => void clone(false)}
+                    onStart={() => void clone(true)}
                   />
                 ) : (
                   <p className="text-xs text-muted">Séance non partagée en détail.</p>
@@ -415,6 +454,16 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
           </div>
         )}
       </div>
+      <ReportDialog open={reportOpen} targetType="post" targetId={post.id} onClose={() => setReportOpen(false)} />
+      <Modal open={editOpen} onClose={() => setEditOpen(false)} title="Modifier la publication">
+        <div className="space-y-3">
+          <Field label="Texte"><Textarea value={caption} onChange={(e) => setCaption(e.target.value)} maxLength={500} rows={4} /></Field>
+          <Field label="Visibilité"><Select value={visibility} onChange={(e) => setVisibility(e.target.value as PostVisibility)}>
+            <option value="public">Public</option><option value="followers">Abonnés</option><option value="private">Moi uniquement</option>
+          </Select></Field>
+          <Button block variant="primary" disabled={busy} onClick={() => void savePost()}>Enregistrer</Button>
+        </div>
+      </Modal>
     </Card>
   )
 }

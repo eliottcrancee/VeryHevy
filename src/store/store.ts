@@ -31,6 +31,7 @@ import { uid } from '@/lib/utils'
 
 export const DATA_VERSION = 1
 const STORAGE_KEY = 'veryhevy-store'
+const LAST_ACCOUNT_KEY = 'veryhevy-cloud-uid'
 
 const idbStorage = {
   getItem: (name: string) => get<string>(name).then((v) => v ?? null),
@@ -417,7 +418,6 @@ export const useStore = create<StoreState>()(
           syncDeleted: [...get().syncDeleted, ...tombstones],
         })
         set({ routines: createSeedRoutines(get().exercises) })
-        void del(STORAGE_KEY)
         get().notify('Données réinitialisées', 'success')
       },
 
@@ -1293,6 +1293,60 @@ export const useStore = create<StoreState>()(
     },
   ),
 )
+
+let activeAccount: string | null | undefined
+let accountSwitch: Promise<void> = Promise.resolve()
+
+/** Charge un carnet local distinct pour chaque compte connecté. */
+export function activateAccount(userId: string | null): Promise<void> {
+  accountSwitch = accountSwitch.catch(() => {}).then(async () => {
+    if (activeAccount === userId) return
+    if (!useStore.persist.hasHydrated()) {
+      await new Promise<void>((resolve) => {
+        const off = useStore.persist.onFinishHydration(() => { off(); resolve() })
+      })
+    }
+    const name = userId ? `${STORAGE_KEY}:${userId}` : `${STORAGE_KEY}:signed-out`
+    let raw: string | undefined
+    try { raw = await get<string>(name) } catch { /* stockage indisponible */ }
+    if (!raw && userId) {
+      // Première migration : le carnet historique appartient au dernier compte
+      // connu, ou au premier compte utilisé sur cet appareil.
+      let previous: string | null = null
+      try { previous = localStorage.getItem(LAST_ACCOUNT_KEY) } catch { /* privé */ }
+      if (!previous || previous === userId) {
+        try { raw = await get<string>(STORAGE_KEY) } catch { /* privé */ }
+      }
+    }
+    let saved: Partial<StoreState> = {}
+    if (raw) {
+      try {
+        const candidate = JSON.parse(raw)?.state
+        if (candidate && typeof candidate === 'object') saved = candidate as Partial<StoreState>
+      } catch { /* sauvegarde corrompue */ }
+    }
+    useStore.persist.setOptions({ name })
+    useStore.setState({
+      exercises: Array.isArray(saved.exercises) ? saved.exercises : [],
+      workouts: Array.isArray(saved.workouts) ? saved.workouts : [],
+      routines: Array.isArray(saved.routines) ? saved.routines : [],
+      settings: saved.settings ?? DEFAULT_SETTINGS,
+      activeWorkoutId: saved.activeWorkoutId ?? null,
+      restTimer: saved.restTimer ?? { endsAt: null, totalSeconds: 0 },
+      syncDeleted: Array.isArray(saved.syncDeleted) ? saved.syncDeleted : [],
+      toasts: [],
+      hydrated: false,
+    })
+    useStore.getState().bootstrap()
+    activeAccount = userId
+    if (userId) {
+      try { localStorage.setItem(LAST_ACCOUNT_KEY, userId) } catch { /* privé */ }
+    }
+  })
+  return accountSwitch
+}
+
+export function activeAccountId(): string | null | undefined { return activeAccount }
 
 function mergeById<T extends { id: string }>(current: T[], incoming: T[]): T[] {
   const map = new Map(current.map((x) => [x.id, x]))

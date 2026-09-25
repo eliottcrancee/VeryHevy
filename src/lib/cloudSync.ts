@@ -7,7 +7,7 @@
  *   n'est pas configuré ou si personne n'est connecté.
  */
 import type { Exercise, Routine, SyncTombstone, Workout } from '@/types'
-import { syncTs, useStore } from '@/store/store'
+import { activateAccount, activeAccountId, syncTs, useStore } from '@/store/store'
 import { getSupabase, isCloudEnabled } from './supabase'
 
 export interface CloudSyncSummary {
@@ -19,10 +19,20 @@ export interface CloudSyncSummary {
   error?: string
 }
 
-const UID_KEY = 'veryhevy-cloud-uid'
-
 let running: Promise<CloudSyncSummary> | null = null
 let kickTimer: ReturnType<typeof setTimeout> | null = null
+const pauseKey = (uid: string) => `veryhevy-cloud-paused:${uid}`
+
+export function isCloudSyncPaused(uid: string): boolean {
+  try { return localStorage.getItem(pauseKey(uid)) === '1' }
+  catch { return false }
+}
+
+export function resumeCloudSync(uid: string): void {
+  localStorage.removeItem(pauseKey(uid))
+  useStore.getState().setLastSync(null)
+  kickCloudSoon(0)
+}
 
 export function kickCloudSoon(delayMs = 4000): void {
   if (typeof window === 'undefined') return
@@ -31,6 +41,16 @@ export function kickCloudSoon(delayMs = 4000): void {
     kickTimer = null
     void syncCloudNow()
   }, delayMs)
+}
+
+/** Après une connexion, une passe du nouveau compte attend la passe précédente. */
+export function syncAccountAfterSwitch(userId: string): void {
+  const previous = running
+  if (previous) {
+    void previous.then(() => {
+      if (activeAccountId() === userId) return syncCloudNow()
+    }).catch(() => {})
+  } else kickCloudSoon(500)
 }
 
 function fingerprint(): string {
@@ -55,36 +75,19 @@ export function syncCloudNow(): Promise<CloudSyncSummary> {
     const { data: { session } } = await supabase.auth.getSession()
     const user = session?.user
     if (!user) return { status: 'skipped' }
+    if (isCloudSyncPaused(user.id)) return { status: 'skipped' }
     if (typeof navigator !== 'undefined' && !navigator.onLine) return { status: 'skipped' }
 
     try {
+      await activateAccount(user.id)
       const st = useStore.getState()
-      // Changement de compte sur cet appareil : on repart d'un pull complet
-      // pour ne pas rater l'historique du nouveau compte.
-      let since = st.settings.lastSyncAt ?? ''
-      try {
-        const prevUid = localStorage.getItem(UID_KEY)
-        if (prevUid && prevUid !== user.id) since = ''
-        localStorage.setItem(UID_KEY, user.id)
-      } catch { /* stockage indisponible */ }
+      const since = st.settings.lastSyncAt ?? ''
 
       const dirtyWorkouts = st.workouts.filter((w) => syncTs(w) > since)
       const dirtyRoutines = st.routines.filter((r) => syncTs(r) > since)
       const dirtyExercises = st.exercises.filter((e) => syncTs(e) > since)
       const dirtyDeleted = st.syncDeleted.filter((t) => t.deletedAt > since)
       const pushed = dirtyWorkouts.length + dirtyRoutines.length + dirtyExercises.length + dirtyDeleted.length
-
-      // Profil (email / nom / avatar Google) — best effort.
-      void supabase.from('profiles').upsert({
-        id: user.id,
-        email: user.email ?? null,
-        display_name:
-          (user.user_metadata?.full_name as string | undefined) ??
-          (user.user_metadata?.name as string | undefined) ??
-          null,
-        avatar_url: (user.user_metadata?.avatar_url as string | undefined) ?? null,
-        updated_at: new Date().toISOString(),
-      })
 
       if (dirtyWorkouts.length) {
         const { error } = await supabase.from('workouts').upsert(
@@ -146,21 +149,36 @@ export function syncCloudNow(): Promise<CloudSyncSummary> {
       }
 
       const now = new Date().toISOString()
-      const [wRes, rRes, eRes, dRes] = await Promise.all([
-        supabase.from('workouts').select('data').eq('user_id', user.id).gt('updated_at', since),
-        supabase.from('routines').select('data').eq('user_id', user.id).gt('updated_at', since),
-        supabase.from('exercises').select('data').eq('user_id', user.id).gt('updated_at', since),
-        supabase.from('deleted_items').select('kind,item_id,deleted_at').eq('user_id', user.id).gt('deleted_at', since),
+      // Supabase limite par défaut les résultats d'une requête. Parcourir toutes
+      // les pages évite une perte silencieuse après 1 000 éléments.
+      const fetchPages = async (table: 'workouts' | 'routines' | 'exercises' | 'deleted_items') => {
+        const rows: Record<string, unknown>[] = []
+        const stamp = table === 'deleted_items' ? 'deleted_at' : 'updated_at'
+        const columns = table === 'deleted_items' ? 'kind,item_id,deleted_at' : 'data'
+        for (let offset = 0; ; offset += 500) {
+          const { data, error } = await supabase.from(table).select(columns)
+            .eq('user_id', user.id).gt(stamp, since)
+            .order(stamp, { ascending: true }).range(offset, offset + 499)
+          if (error) throw new Error(`Pull ${table} : ${error.message}`)
+          const page = (data ?? []) as unknown as Record<string, unknown>[]
+          rows.push(...page)
+          if (page.length < 500) return rows
+        }
+      }
+      const [wRows, rRows, eRows, dRows] = await Promise.all([
+        fetchPages('workouts'), fetchPages('routines'), fetchPages('exercises'), fetchPages('deleted_items'),
       ])
-      const firstErr = wRes.error ?? rRes.error ?? eRes.error ?? dRes.error
-      if (firstErr) throw new Error(`Pull : ${firstErr.message}`)
 
+      const { data: latestAuth } = await supabase.auth.getSession()
+      if (latestAuth.session?.user.id !== user.id || activeAccountId() !== user.id) {
+        return { status: 'skipped' }
+      }
       const pull = {
         time: now,
-        workouts: (wRes.data ?? []).map((r) => (r as { data: Workout }).data),
-        routines: (rRes.data ?? []).map((r) => (r as { data: Routine }).data),
-        exercises: (eRes.data ?? []).map((r) => (r as { data: Exercise }).data),
-        deleted: ((dRes.data ?? []) as { kind: string; item_id: string; deleted_at: string }[]).map(
+        workouts: wRows.map((r) => r.data as Workout),
+        routines: rRows.map((r) => r.data as Routine),
+        exercises: eRows.map((r) => r.data as Exercise),
+        deleted: (dRows as { kind: string; item_id: string; deleted_at: string }[]).map(
           (r): SyncTombstone => ({ kind: r.kind as SyncTombstone['kind'], id: r.item_id, deletedAt: r.deleted_at }),
         ),
       }
@@ -170,7 +188,9 @@ export function syncCloudNow(): Promise<CloudSyncSummary> {
       return { status: 'ok', pushed, pulled: applied, deleted, at: pull.time }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Échec de synchro cloud'
-      useStore.getState().setLastSync(useStore.getState().settings.lastSyncAt, message)
+      if (activeAccountId() === user.id) {
+        useStore.getState().setLastSync(useStore.getState().settings.lastSyncAt, message)
+      }
       return { status: 'error', error: message }
     } finally {
       running = null
@@ -206,8 +226,16 @@ export async function deleteCloudData(): Promise<void> {
   const { data: { session } } = await supabase.auth.getSession()
   const user = session?.user
   if (!user) throw new Error('Non connecté')
-  for (const table of ['workouts', 'routines', 'exercises', 'deleted_items'] as const) {
-    const { error } = await supabase.from(table).delete().eq('user_id', user.id)
-    if (error) throw new Error(`${table} : ${error.message}`)
+  // Empêche immédiatement une resynchronisation qui recréerait les lignes.
+  localStorage.setItem(pauseKey(user.id), '1')
+  if (running) await running
+  try {
+    for (const table of ['workouts', 'routines', 'exercises', 'deleted_items'] as const) {
+      const { error } = await supabase.from(table).delete().eq('user_id', user.id)
+      if (error) throw new Error(`${table} : ${error.message}`)
+    }
+  } catch (err) {
+    localStorage.removeItem(pauseKey(user.id))
+    throw err
   }
 }

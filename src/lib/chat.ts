@@ -31,7 +31,7 @@ export interface SessionRequest {
 
 /* ---------------------------- candidatures ---------------------------- */
 
-export async function sendRequest(sessionId: string, message = '', hostId?: string, sessionTitle?: string): Promise<void> {
+export async function sendRequest(sessionId: string, message = ''): Promise<void> {
   const sb = sbOrThrow()
   const me = await myId()
   const { error } = await sb.from('session_requests').insert({
@@ -41,11 +41,6 @@ export async function sendRequest(sessionId: string, message = '', hostId?: stri
     status: 'pending',
   })
   if (error && !error.message.includes('duplicate')) throw new Error(`Demande : ${error.message}`)
-  if (hostId) {
-    const { myUsername, sendNotification } = await import('./notifications')
-    const mine = await myUsername()
-    await sendNotification(hostId, 'session_request', { session_id: sessionId, session_title: sessionTitle ?? '', from_id: me, from_username: mine })
-  }
 }
 
 export async function myRequestStatus(sessionId: string): Promise<SessionRequest | null> {
@@ -82,7 +77,7 @@ export async function listRequests(sessionId: string): Promise<SessionRequest[]>
 }
 
 /** Accepter = inscrit le membre (compteur auto via trigger). */
-export async function acceptRequest(sessionId: string, userId: string, sessionTitle?: string): Promise<void> {
+export async function acceptRequest(sessionId: string, userId: string): Promise<void> {
   const sb = sbOrThrow()
   const { error: jErr } = await sb.from('session_joins').insert({ session_id: sessionId, user_id: userId })
   if (jErr && !jErr.message.includes('duplicate')) throw new Error(`Acceptation : ${jErr.message}`)
@@ -92,13 +87,6 @@ export async function acceptRequest(sessionId: string, userId: string, sessionTi
     .eq('session_id', sessionId)
     .eq('user_id', userId)
   if (error) throw new Error(`Acceptation : ${error.message}`)
-  const { myUsername, sendNotification } = await import('./notifications')
-  const mine = await myUsername()
-  await sendNotification(userId, 'session_accepted', {
-    session_id: sessionId,
-    session_title: sessionTitle ?? '',
-    from_username: mine,
-  })
 }
 
 export async function declineRequest(sessionId: string, userId: string): Promise<void> {
@@ -123,7 +111,7 @@ export interface SessionInvite {
 }
 
 /** Inviter (hôte) + notifier l'invité. */
-export async function sendInvite(sessionId: string, userId: string, sessionTitle?: string): Promise<void> {
+export async function sendInvite(sessionId: string, userId: string): Promise<void> {
   const sb = sbOrThrow()
   const { error } = await sb.from('session_invites').insert({
     session_id: sessionId,
@@ -131,13 +119,6 @@ export async function sendInvite(sessionId: string, userId: string, sessionTitle
     status: 'pending',
   })
   if (error && !error.message.includes('duplicate')) throw new Error(`Invitation : ${error.message}`)
-  const { myUsername, sendNotification } = await import('./notifications')
-  const mine = await myUsername()
-  await sendNotification(userId, 'session_invite', {
-    session_id: sessionId,
-    session_title: sessionTitle ?? '',
-    from_username: mine,
-  })
 }
 
 export interface MyInvite {
@@ -159,11 +140,10 @@ export async function listMyInvites(): Promise<MyInvite[]> {
   if (error) throw new Error(`Invitations : ${error.message}`)
   const invites = (data as SessionInvite[]) ?? []
   if (!invites.length) return []
-  const { data: sessions } = await sb
-    .from('sessions')
-    .select('id,title,starts_at,gym_name,host')
-    .in('id', invites.map((i) => i.session_id))
-  const list = (sessions as { id: string; title: string; starts_at: string; gym_name: string; host: string }[] ?? [])
+  const rows = await Promise.all(invites.map((i) =>
+    sb.rpc('visible_sessions', { p_session_id: i.session_id }),
+  ))
+  const list = rows.flatMap((r) => (r.data as { id: string; title: string; starts_at: string; gym_name: string; host: string }[] | null) ?? [])
   const hosts = await fetchSocialProfiles([...new Set(list.map((s) => s.host))])
   const byId = new Map(list.map((s) => [s.id, s]))
   return invites.flatMap((inv) => {
@@ -216,7 +196,7 @@ export async function acceptInvite(sessionId: string): Promise<void> {
 }
 
 /** Refuser une invitation (+ notifie l'hôte). */
-export async function declineInvite(sessionId: string, sessionTitle?: string): Promise<void> {
+export async function declineInvite(sessionId: string): Promise<void> {
   const sb = sbOrThrow()
   const me = await myId()
   const { error } = await sb
@@ -225,17 +205,6 @@ export async function declineInvite(sessionId: string, sessionTitle?: string): P
     .eq('session_id', sessionId)
     .eq('user_id', me)
   if (error) throw new Error(`Refus : ${error.message}`)
-  const { data: session } = await sb.from('sessions').select('host').eq('id', sessionId).maybeSingle()
-  const host = (session as { host: string } | null)?.host
-  if (host) {
-    const { myUsername, sendNotification } = await import('./notifications')
-    const mine = await myUsername()
-    await sendNotification(host, 'session_invite_declined', {
-      session_id: sessionId,
-      session_title: sessionTitle ?? '',
-      from_username: mine,
-    })
-  }
 }
 
 /** Retirer une invitation (hôte). */
@@ -343,14 +312,16 @@ export interface Thread {
 export async function listThreads(): Promise<Thread[]> {
   const sb = sbOrThrow()
   const me = await myId()
-  const { data, error } = await sb
-    .from('messages')
-    .select('*')
-    .or(`from_id.eq.${me},to_id.eq.${me}`)
-    .order('created_at', { ascending: false })
-    .limit(200)
-  if (error) throw new Error(`Messages : ${error.message}`)
-  const all = (data as ChatMessage[]) ?? []
+  const all: ChatMessage[] = []
+  for (let offset = 0; ; offset += 500) {
+    const { data, error } = await sb.from('messages').select('*')
+      .or(`from_id.eq.${me},to_id.eq.${me}`)
+      .order('created_at', { ascending: false }).range(offset, offset + 499)
+    if (error) throw new Error(`Messages : ${error.message}`)
+    const page = (data as ChatMessage[]) ?? []
+    all.push(...page)
+    if (page.length < 500) break
+  }
   const byOther = new Map<string, ChatMessage[]>()
   for (const m of all) {
     const other = m.from_id === me ? m.to_id : m.from_id
@@ -380,17 +351,17 @@ export async function listThreads(): Promise<Thread[]> {
 }
 
 /** Discussion avec un correspondant (toutes sessions confondues). */
-export async function listMessages(otherId: string): Promise<ChatMessage[]> {
+export async function listMessages(otherId: string, limit = 200): Promise<ChatMessage[]> {
   const sb = sbOrThrow()
   const me = await myId()
   const { data, error } = await sb
     .from('messages')
     .select('*')
     .or(`and(from_id.eq.${me},to_id.eq.${otherId}),and(from_id.eq.${otherId},to_id.eq.${me})`)
-    .order('created_at', { ascending: true })
-    .limit(200)
+    .order('created_at', { ascending: false })
+    .limit(limit)
   if (error) throw new Error(`Discussion : ${error.message}`)
-  return (data as ChatMessage[]) ?? []
+  return ((data as ChatMessage[]) ?? []).reverse()
 }
 
 /** Envoyer (sessionId optionnel : simple contexte). Repli sans session

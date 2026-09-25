@@ -5,6 +5,8 @@ import type { SocialProfile } from '@/types'
 import { normalizeUsername } from '@/types'
 import { getSupabase } from './supabase'
 
+const PROFILE_COLUMNS = 'id,username,display_name,avatar_url,bio,city,visibility,followers_count,following_count,updated_at'
+
 function sbOrThrow() {
   const sb = getSupabase()
   if (!sb) throw new Error('Cloud non configuré')
@@ -22,7 +24,7 @@ async function myId(): Promise<string> {
 export async function getMyProfile(): Promise<SocialProfile | null> {
   const sb = sbOrThrow()
   const id = await myId()
-  const { data, error } = await sb.from('profiles').select('*').eq('id', id).maybeSingle()
+  const { data, error } = await sb.from('profiles').select(PROFILE_COLUMNS).eq('id', id).maybeSingle()
   if (error) throw new Error(`Profil : ${error.message}`)
   return (data as SocialProfile | null) ?? null
 }
@@ -61,7 +63,7 @@ export async function claimUsername(wanted: string): Promise<SocialProfile> {
       { id, username, display_name: display, avatar_url: avatar, updated_at: new Date().toISOString() },
       { onConflict: 'id' },
     )
-    .select('*')
+    .select(PROFILE_COLUMNS)
     .single()
   if (error) {
     if (error.message.includes('duplicate') || error.message.includes('unique')) {
@@ -77,7 +79,7 @@ export async function fetchProfileByUsername(username: string): Promise<SocialPr
   const sb = sbOrThrow()
   const clean = normalizeUsername(username)
   if (!clean) return null
-  const { data, error } = await sb.from('profiles').select('*').ilike('username', clean).maybeSingle()
+  const { data, error } = await sb.from('profiles').select(PROFILE_COLUMNS).ilike('username', clean).maybeSingle()
   if (error) throw new Error(`Profil : ${error.message}`)
   return (data as SocialProfile | null) ?? null
 }
@@ -90,7 +92,7 @@ export async function searchProfiles(query: string, limit = 8): Promise<SocialPr
   if (clean.length < 2) return []
   const { data, error } = await sb
     .from('profiles')
-    .select('*')
+    .select(PROFILE_COLUMNS)
     .not('username', 'is', null)
     .neq('id', me)
     .ilike('username', `%${clean}%`)
@@ -120,7 +122,7 @@ export async function updateMyProfile(
     }
     clean.username = username
   }
-  const { data, error } = await sb.from('profiles').update(clean).eq('id', id).select('*').single()
+  const { data, error } = await sb.from('profiles').update(clean).eq('id', id).select(PROFILE_COLUMNS).single()
   if (error) {
     if (error.message.includes('duplicate') || error.message.includes('unique')) {
       throw new Error('Ce pseudo est déjà pris')
@@ -144,7 +146,7 @@ export async function fetchSocialProfiles(ids: string[]): Promise<Map<string, So
   const map = new Map<string, SocialProfile>()
   if (!ids.length) return map
   const sb = sbOrThrow()
-  const { data, error } = await sb.from('profiles').select('*').in('id', ids)
+  const { data, error } = await sb.from('profiles').select(PROFILE_COLUMNS).in('id', ids)
   if (error) throw new Error(`Profils : ${error.message}`)
   for (const p of (data as SocialProfile[]) ?? []) map.set(p.id, p)
   return map
@@ -189,16 +191,12 @@ export async function requestFollow(targetId: string): Promise<FollowState> {
     .eq('id', targetId)
     .maybeSingle()
   const t = target as { visibility: string | null; username: string | null } | null
-  const { myUsername, sendNotification } = await import('./notifications')
-  const mine = await myUsername()
   if (t?.visibility === 'private') {
     const { error } = await sb.from('follow_requests').insert({ requester: me, target: targetId })
     if (error && !error.message.includes('duplicate')) throw new Error(`Demande : ${error.message}`)
-    await sendNotification(targetId, 'follow_request', { from_id: me, from_username: mine })
     return 'requested'
   }
   await followUser(targetId)
-  await sendNotification(targetId, 'new_follower', { from_id: me, from_username: mine })
   return 'following'
 }
 

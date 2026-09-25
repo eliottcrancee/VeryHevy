@@ -9,7 +9,7 @@ import { mkdirSync, existsSync } from 'node:fs'
 import path from 'node:path'
 import puppeteer from 'puppeteer-core'
 
-const EDGE = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'
+import { browserPath } from './browser.mjs'
 const PORT = 4319
 const BASE = `http://localhost:${PORT}`
 const SHOTS = path.resolve('screenshots')
@@ -45,7 +45,7 @@ async function main() {
   )
 
   const browser = await puppeteer.launch({
-    executablePath: EDGE,
+    executablePath: browserPath,
     headless: true,
     args: ['--no-sandbox', '--disable-gpu', '--window-size=430,932'],
     defaultViewport: { width: 430, height: 932, deviceScaleFactor: 2, isMobile: true, hasTouch: true },

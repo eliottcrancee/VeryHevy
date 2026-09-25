@@ -1,6 +1,6 @@
 /**
  * Posts & feed : photo optionnelle (Storage post-photos), likes,
- * commentaires, snapshot workout pour « Cloner sans démarrer ».
+ * commentaires, snapshot workout pour réutiliser une séance.
  */
 import type { Post, PostComment, PostVisibility, SocialProfile, Workout, WorkoutSnapshot } from '@/types'
 import { getSupabase } from './supabase'
@@ -55,10 +55,27 @@ async function uploadPostPhoto(file: File, userId: string): Promise<string> {
   const sb = sbOrThrow()
   if (file.size > 8 * 1024 * 1024) throw new Error('Photo trop lourde (max 8 Mo)')
   const blob = await compressImage(file)
-  const path = `${userId}/${Date.now()}.jpg`
+  const path = `${userId}/${crypto.randomUUID()}.jpg`
   const { error } = await sb.storage.from('post-photos').upload(path, blob, { contentType: 'image/jpeg' })
   if (error) throw new Error(`Upload : ${error.message}`)
-  return sb.storage.from('post-photos').getPublicUrl(path).data.publicUrl
+  return path
+}
+
+function photoPath(value: string | null | undefined): string | null {
+  if (!value) return null
+  const marker = '/post-photos/'
+  const at = value.indexOf(marker)
+  return at >= 0 ? decodeURIComponent(value.slice(at + marker.length).split('?')[0]) : value
+}
+
+async function withSignedPhotos(posts: Post[]): Promise<Post[]> {
+  const storage = sbOrThrow().storage.from('post-photos')
+  return Promise.all(posts.map(async (post) => {
+    const path = photoPath(post.photo_url)
+    if (!path) return post
+    const { data, error } = await storage.createSignedUrl(path, 3600)
+    return { ...post, photo_url: error ? null : data.signedUrl }
+  }))
 }
 
 /* ------------------------------ posts ------------------------------ */
@@ -105,8 +122,11 @@ export async function createPost(input: {
     })
     .select('*')
     .single()
-  if (error) throw new Error(`Publication : ${error.message}`)
-  return data as Post
+  if (error) {
+    if (photo_url) void sb.storage.from('post-photos').remove([photo_url])
+    throw new Error(`Publication : ${error.message}`)
+  }
+  return (await withSignedPhotos([data as Post]))[0]
 }
 
 /** Feed : mes posts + ceux de mes follows, ordre chrono. */
@@ -133,11 +153,30 @@ export async function listFeed(limit = 20, offset = 0): Promise<Post[]> {
     .eq('user_id', me)
     .in('post_id', posts.map((p) => p.id))
   const liked = new Set(((likes as { post_id: string }[] ?? []).map((l) => l.post_id)))
-  return posts.map((p) => ({
+  return withSignedPhotos(posts.map((p) => ({
     ...p,
     author: authors.get(p.user_id) ?? null,
     liked_by_me: liked.has(p.id),
-  }))
+  })))
+}
+
+/** Quelques publications publiques pour lancer la découverte d'un nouveau compte. */
+export async function listDiscoverPosts(limit = 6): Promise<Post[]> {
+  const sb = sbOrThrow()
+  const me = await myId()
+  const { data, error } = await sb.from('posts').select('*')
+    .eq('visibility', 'public').neq('user_id', me)
+    .order('created_at', { ascending: false }).limit(limit)
+  if (error) throw new Error(`Découverte : ${error.message}`)
+  const posts = (data as Post[]) ?? []
+  if (!posts.length) return []
+  const authors = await fetchSocialProfiles([...new Set(posts.map((p) => p.user_id))])
+  const { data: likes } = await sb.from('post_likes').select('post_id')
+    .eq('user_id', me).in('post_id', posts.map((p) => p.id))
+  const liked = new Set(((likes as { post_id: string }[] ?? []).map((l) => l.post_id)))
+  return withSignedPhotos(posts.map((p) => ({ ...p,
+    author: authors.get(p.user_id) ?? null, liked_by_me: liked.has(p.id),
+  })))
 }
 
 /** Posts d'un utilisateur (profil public) : RLS filtre selon visibilité. */
@@ -160,11 +199,11 @@ export async function listUserPosts(userId: string, limit = 20, offset = 0): Pro
     .eq('user_id', me)
     .in('post_id', posts.map((p) => p.id))
   const liked = new Set(((likes as { post_id: string }[] ?? []).map((l) => l.post_id)))
-  return posts.map((p) => ({
+  return withSignedPhotos(posts.map((p) => ({
     ...p,
     author: authors.get(p.user_id) ?? null,
     liked_by_me: liked.has(p.id),
-  }))
+  })))
 }
 
 /** Mes posts (onglet Posts du Profil). */
@@ -179,13 +218,23 @@ export async function listMyPosts(limit = 20, offset = 0): Promise<Post[]> {
     .range(offset, offset + limit - 1)
   if (error) throw new Error(`Posts : ${error.message}`)
   const authors = await fetchSocialProfiles([me])
-  return ((data as Post[]) ?? []).map((p) => ({ ...p, author: authors.get(p.user_id) ?? null, liked_by_me: false }))
+  return withSignedPhotos(((data as Post[]) ?? []).map((p) => ({ ...p, author: authors.get(p.user_id) ?? null, liked_by_me: false })))
 }
 
 export async function deletePost(postId: string): Promise<void> {
   const sb = sbOrThrow()
+  const { data } = await sb.from('posts').select('photo_url').eq('id', postId).maybeSingle()
   const { error } = await sb.from('posts').delete().eq('id', postId)
   if (error) throw new Error(`Suppression : ${error.message}`)
+  const path = photoPath((data as { photo_url?: string } | null)?.photo_url)
+  if (path) await sb.storage.from('post-photos').remove([path])
+}
+
+export async function updatePost(postId: string, caption: string, visibility: PostVisibility): Promise<void> {
+  const sb = sbOrThrow()
+  const { error } = await sb.from('posts').update({ caption: caption.trim().slice(0, 500), visibility })
+    .eq('id', postId)
+  if (error) throw new Error(`Modification : ${error.message}`)
 }
 
 /* ------------------------------ likes ------------------------------ */

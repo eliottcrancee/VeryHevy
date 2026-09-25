@@ -1,6 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
 import { getSupabase, isCloudEnabled } from './supabase'
+import { activateAccount } from '@/store/store'
+import { syncAccountAfterSwitch } from './cloudSync'
 
 interface AuthState {
   /** Cloud désactivé (pas de VITE_SUPABASE_*) : mode 100 % local, pas de login requis. */
@@ -31,15 +33,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false)
       return
     }
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session)
-      setLoading(false)
+    let alive = true
+    let revision = 0
+    let receivedAuthEvent = false
+    const applySession = async (next: Session | null) => {
+      const current = ++revision
+      setLoading(true)
+      try {
+        await activateAccount(next?.user.id ?? null)
+        if (alive && current === revision) {
+          setSession(next)
+          if (next?.user) syncAccountAfterSwitch(next.user.id)
+        }
+      } finally {
+        if (alive && current === revision) setLoading(false)
+      }
+    }
+    void supabase.auth.getSession().then(({ data }) => {
+      if (!receivedAuthEvent) return applySession(data.session)
     })
     const { data: sub } = supabase.auth.onAuthStateChange((_event, next) => {
-      setSession(next)
-      setLoading(false)
+      receivedAuthEvent = true
+      void applySession(next)
     })
-    return () => sub.subscription.unsubscribe()
+    return () => { alive = false; sub.subscription.unsubscribe() }
   }, [supabase])
 
   const signInWithGoogle = useCallback(async () => {
@@ -57,7 +74,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(async () => {
     if (!supabase) return
     await supabase.auth.signOut()
-    setSession(null)
   }, [supabase])
 
   const value = useMemo<AuthState>(

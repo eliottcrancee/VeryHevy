@@ -32,6 +32,7 @@ import {
 import { cancelFollowRequest } from '@/lib/notifications'
 import { listMyPosts, listUserPosts } from '@/lib/posts'
 import { PostCard } from '@/components/PostCard'
+import { ReportDialog } from '@/components/ReportDialog'
 import { ProfileAvatar } from '@/components/ProfileAvatar'
 import type { Post, PostVisibility, SocialProfile } from '@/types'
 import { normalizeUsername } from '@/types'
@@ -94,13 +95,18 @@ export default function ProfilePage() {
   const [following, setFollowing] = useState<FollowState>('none')
   const [blockedByMe, setBlockedByMe] = useState(false)
   const [confirmBlock, setConfirmBlock] = useState(false)
+  const [reportOpen, setReportOpen] = useState(false)
   const [followBusy, setFollowBusy] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [followList, setFollowList] = useState<{ tab: 'followers' | 'following'; userId: string; title: string } | null>(null)
   const [myPosts, setMyPosts] = useState<Post[]>([])
   const [loadingPosts, setLoadingPosts] = useState(false)
+  const [myPostsMore, setMyPostsMore] = useState(false)
+  const [myPostsError, setMyPostsError] = useState<string | null>(null)
   const [userPosts, setUserPosts] = useState<Post[]>([])
   const [loadingUserPosts, setLoadingUserPosts] = useState(false)
+  const [userPostsMore, setUserPostsMore] = useState(false)
+  const [userPostsError, setUserPostsError] = useState<string | null>(null)
 
   const isPublicView = Boolean(routeUsername)
 
@@ -108,9 +114,12 @@ export default function ProfilePage() {
     if (!cloudEnabled) return
     setLoadingUserPosts(true)
     try {
-      setUserPosts(await listUserPosts(uid, 20, 0))
-    } catch {
-      setUserPosts([])
+      const page = await listUserPosts(uid, 20, 0)
+      setUserPosts(page)
+      setUserPostsMore(page.length === 20)
+      setUserPostsError(null)
+    } catch (err) {
+      setUserPostsError(err instanceof Error ? err.message : 'Posts illisibles')
     } finally {
       setLoadingUserPosts(false)
     }
@@ -170,13 +179,35 @@ export default function ProfilePage() {
     if (!cloudEnabled || !user) return
     setLoadingPosts(true)
     try {
-      setMyPosts(await listMyPosts(20, 0))
-    } catch {
-      setMyPosts([])
+      const page = await listMyPosts(20, 0)
+      setMyPosts(page)
+      setMyPostsMore(page.length === 20)
+      setMyPostsError(null)
+    } catch (err) {
+      setMyPostsError(err instanceof Error ? err.message : 'Posts illisibles')
     } finally {
       setLoadingPosts(false)
     }
   }, [cloudEnabled, user])
+
+  const moreUserPosts = async (uid: string) => {
+    setLoadingUserPosts(true)
+    try {
+      const page = await listUserPosts(uid, 20, userPosts.length)
+      setUserPosts((old) => [...old, ...page])
+      setUserPostsMore(page.length === 20)
+    } catch (err) { setUserPostsError(err instanceof Error ? err.message : 'Chargement impossible') }
+    finally { setLoadingUserPosts(false) }
+  }
+  const moreMyPosts = async () => {
+    setLoadingPosts(true)
+    try {
+      const page = await listMyPosts(20, myPosts.length)
+      setMyPosts((old) => [...old, ...page])
+      setMyPostsMore(page.length === 20)
+    } catch (err) { setMyPostsError(err instanceof Error ? err.message : 'Chargement impossible') }
+    finally { setLoadingPosts(false) }
+  }
 
   useEffect(() => {
     if (tab === 'posts' && !isPublicView) void refreshPosts()
@@ -336,11 +367,18 @@ export default function ProfilePage() {
                     >
                       Bloquer ce profil
                     </button>
+                    <button type="button" onClick={() => setReportOpen(true)}
+                      className="mx-auto block text-xs font-semibold text-muted underline decoration-dotted underline-offset-2">
+                      Signaler ce profil
+                    </button>
                   </>
                 )
               )}
               <PublicMiniStats posts={userPosts} />
-              {loadingUserPosts ? (
+              {userPostsError ? (
+                <Card><EmptyState title="Posts indisponibles" message={userPostsError}
+                  action={<Button onClick={() => void refreshUserPosts(p.id)}>Réessayer</Button>} /></Card>
+              ) : loadingUserPosts && userPosts.length === 0 ? (
                 <p className="py-4 text-center text-sm text-muted">Chargement des posts…</p>
               ) : userPosts.length === 0 ? (
                 <Card>
@@ -358,6 +396,9 @@ export default function ProfilePage() {
                   {userPosts.map((post) => (
                     <PostCard key={post.id} post={post} onChanged={() => void refreshUserPosts(p.id)} />
                   ))}
+                  {userPostsMore && <Button block disabled={loadingUserPosts} onClick={() => void moreUserPosts(p.id)}>
+                    {loadingUserPosts ? 'Chargement…' : 'Charger plus'}
+                  </Button>}
                 </div>
               )}
             </>
@@ -374,6 +415,7 @@ export default function ProfilePage() {
             }
           }}
         />
+        {p && <ReportDialog open={reportOpen} targetType="profile" targetId={p.id} onClose={() => setReportOpen(false)} />}
         <ConfirmDialog
           open={confirmBlock}
           title={`Bloquer ${pname} ?`}
@@ -470,7 +512,10 @@ export default function ProfilePage() {
                 message="Connecte-toi avec Google pour publier tes séances dans le feed."
               />
             </Card>
-          ) : loadingPosts ? (
+          ) : myPostsError ? (
+            <Card><EmptyState title="Posts indisponibles" message={myPostsError}
+              action={<Button onClick={() => void refreshPosts()}>Réessayer</Button>} /></Card>
+          ) : loadingPosts && myPosts.length === 0 ? (
             <p className="py-4 text-center text-sm text-muted">Chargement…</p>
           ) : myPosts.length === 0 ? (
             <Card>
@@ -484,11 +529,14 @@ export default function ProfilePage() {
               {myPosts.map((p) => (
                 <PostCard key={p.id} post={p} onChanged={() => void refreshPosts()} />
               ))}
+              {myPostsMore && <Button block disabled={loadingPosts} onClick={() => void moreMyPosts()}>
+                {loadingPosts ? 'Chargement…' : 'Charger plus'}
+              </Button>}
             </div>
           )
         )}
-        {tab === 'historique' && <div className="-mx-4"><HistoryPage /></div>}
-        {tab === 'stats' && <div className="-mx-4"><StatsPage /></div>}
+        {tab === 'historique' && <div className="-mx-4"><HistoryPage bare /></div>}
+        {tab === 'stats' && <div className="-mx-4"><StatsPage bare /></div>}
       </Page>
 
       <EditProfileModal

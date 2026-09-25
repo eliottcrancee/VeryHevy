@@ -925,14 +925,16 @@ export function Tabs<T extends string>({
   className?: string
 }) {
   return (
-    <div className={cn('no-scrollbar flex gap-1 overflow-x-auto', className)}>
+    <div role="tablist" className={cn('no-scrollbar flex gap-1 overflow-x-auto', className)}>
       {tabs.map((t) => (
         <button
           key={t.value}
           type="button"
+          role="tab"
+          aria-selected={value === t.value}
           onClick={() => onChange(t.value)}
           className={cn(
-            'flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-[13px] font-semibold transition-colors',
+            'flex min-w-0 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[13px] font-semibold transition-colors',
             value === t.value ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-surface-2 hover:text-ink',
           )}
         >

@@ -20,34 +20,6 @@ async function myId(): Promise<string> {
   return session.user.id
 }
 
-/** Notifier un autre utilisateur (non bloquant : échec silencieux). */
-export async function sendNotification(
-  userId: string,
-  type: AppNotification['type'],
-  payload: Record<string, unknown> = {},
-): Promise<void> {
-  try {
-    const sb = sbOrThrow()
-    const me = await myId()
-    if (userId === me) return
-    await sb.from('notifications').insert({ user_id: userId, type, payload })
-  } catch {
-    /* la notif ne doit jamais casser l'action principale */
-  }
-}
-
-/** Mon pseudo (pour signer les notifs que j'envoie). */
-export async function myUsername(): Promise<string> {
-  try {
-    const sb = sbOrThrow()
-    const me = await myId()
-    const { data } = await sb.from('profiles').select('username').eq('id', me).maybeSingle()
-    return (data as { username: string | null } | null)?.username ?? ''
-  } catch {
-    return ''
-  }
-}
-
 export async function listNotifications(limit = 30): Promise<AppNotification[]> {
   const sb = sbOrThrow()
   const me = await myId()
@@ -71,6 +43,24 @@ export async function countUnread(): Promise<number> {
     .is('read_at', null)
   if (error) return 0
   return count ?? 0
+}
+
+export async function countUnreadMessages(): Promise<number> {
+  const sb = sbOrThrow()
+  const me = await myId()
+  const { count, error } = await sb.from('notifications')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', me).eq('type', 'message').is('read_at', null)
+  if (error) return 0
+  return count ?? 0
+}
+
+export async function markMessagesRead(otherId: string): Promise<void> {
+  const sb = sbOrThrow()
+  const me = await myId()
+  await sb.from('notifications').update({ read_at: new Date().toISOString() })
+    .eq('user_id', me).eq('type', 'message').is('read_at', null)
+    .contains('payload', { from_id: otherId })
 }
 
 export async function markAllRead(): Promise<void> {
