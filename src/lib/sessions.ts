@@ -1,8 +1,8 @@
 /**
- * Sessions carto (Explorer) : proposées sur la carte, publiques ou
- * privées sur invitation. Lieux = salles saisies par les users.
+ * Sessions carto (Explorer) : 3 types — invite (privée, invités seuls),
+ * open (sur proposition, hôte anonyme), public (demande + validation).
  */
-import type { SocialProfile, SportSession } from '@/types'
+import type { SessionVisibility, SocialProfile, SportSession } from '@/types'
 import { getSupabase } from './supabase'
 import { fetchSocialProfiles } from './social'
 
@@ -29,10 +29,16 @@ async function enrich(list: SportSession[], me: string): Promise<SportSession[]>
     .eq('user_id', me)
     .in('session_id', list.map((s) => s.id))
   const joined = new Set(((joins as { session_id: string }[] ?? []).map((j) => j.session_id)))
-  return list.map((s) => ({ ...s, host_profile: hosts.get(s.host) ?? null, joined_by_me: joined.has(s.id) }))
+  return list.map((s) => {
+    const member = s.host === me || joined.has(s.id)
+    // Anonymat des sessions "sur proposition" : l'hôte n'est révélé
+    // qu'aux membres (et à lui-même). Les autres voient "anonyme".
+    const host_profile = s.visibility === 'open' && !member ? null : (hosts.get(s.host) ?? null)
+    return { ...s, host_profile, joined_by_me: joined.has(s.id) }
+  })
 }
 
-/** Sessions visibles à venir (publiques + mes privées/invitées/rejointes via RLS). */
+/** Sessions visibles à venir (open/public + mes invite/rejointes via RLS). */
 export async function listSessions(limit = 200): Promise<SportSession[]> {
   const sb = sbOrThrow()
   const me = await myId()
@@ -56,8 +62,7 @@ export async function createSession(input: {
   spots_total: number
   level?: string
   description?: string
-  visibility: 'public' | 'private'
-  invited?: string[]
+  visibility: SessionVisibility
 }): Promise<SportSession> {
   const sb = sbOrThrow()
   const me = await myId()
@@ -78,7 +83,6 @@ export async function createSession(input: {
       level: input.level ?? 'tous',
       description: (input.description ?? '').slice(0, 500),
       visibility: input.visibility,
-      invited: input.invited ?? [],
     })
     .select('*')
     .single()
@@ -106,13 +110,6 @@ export async function deleteSession(sessionId: string): Promise<void> {
   const sb = sbOrThrow()
   const { error } = await sb.from('sessions').delete().eq('id', sessionId)
   if (error) throw new Error(`Suppression : ${error.message}`)
-}
-
-/** Inviter des abonnés à une session privée (host uniquement). */
-export async function inviteToSession(sessionId: string, userIds: string[]): Promise<void> {
-  const sb = sbOrThrow()
-  const { error } = await sb.from('sessions').update({ invited: userIds }).eq('id', sessionId)
-  if (error) throw new Error(`Invitation : ${error.message}`)
 }
 
 /** Personnes que je suis + qui me suivent (candidats à l'invitation). */

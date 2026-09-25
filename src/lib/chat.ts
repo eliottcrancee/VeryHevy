@@ -111,6 +111,140 @@ export async function declineRequest(sessionId: string, userId: string): Promise
   if (error) throw new Error(`Refus : ${error.message}`)
 }
 
+/* ---------------------------- invitations ---------------------------- */
+/* Sessions privées : l'hôte invite → notif → accept (direct, entre amis) */
+
+export interface SessionInvite {
+  session_id: string
+  user_id: string
+  status: 'pending' | 'accepted' | 'declined'
+  created_at: string
+  author?: SocialProfile | null
+}
+
+/** Inviter (hôte) + notifier l'invité. */
+export async function sendInvite(sessionId: string, userId: string, sessionTitle?: string): Promise<void> {
+  const sb = sbOrThrow()
+  const { error } = await sb.from('session_invites').insert({
+    session_id: sessionId,
+    user_id: userId,
+    status: 'pending',
+  })
+  if (error && !error.message.includes('duplicate')) throw new Error(`Invitation : ${error.message}`)
+  const { myUsername, sendNotification } = await import('./notifications')
+  const mine = await myUsername()
+  await sendNotification(userId, 'session_invite', {
+    session_id: sessionId,
+    session_title: sessionTitle ?? '',
+    from_username: mine,
+  })
+}
+
+export interface MyInvite {
+  invite: SessionInvite
+  session: { id: string; title: string; starts_at: string; gym_name: string }
+  host: SocialProfile | null
+}
+
+/** Mes invitations en attente (sessions privées d'amis). */
+export async function listMyInvites(): Promise<MyInvite[]> {
+  const sb = sbOrThrow()
+  const me = await myId()
+  const { data, error } = await sb
+    .from('session_invites')
+    .select('*')
+    .eq('user_id', me)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false })
+  if (error) throw new Error(`Invitations : ${error.message}`)
+  const invites = (data as SessionInvite[]) ?? []
+  if (!invites.length) return []
+  const { data: sessions } = await sb
+    .from('sessions')
+    .select('id,title,starts_at,gym_name,host')
+    .in('id', invites.map((i) => i.session_id))
+  const list = (sessions as { id: string; title: string; starts_at: string; gym_name: string; host: string }[] ?? [])
+  const hosts = await fetchSocialProfiles([...new Set(list.map((s) => s.host))])
+  const byId = new Map(list.map((s) => [s.id, s]))
+  return invites.flatMap((inv) => {
+    const s = byId.get(inv.session_id)
+    if (!s) return []
+    return [{ invite: inv, session: s, host: hosts.get(s.host) ?? null }]
+  })
+}
+
+/** Invités d'une session (hôte) : pending d'abord, avec profils. */
+export async function listSessionInvites(sessionId: string): Promise<SessionInvite[]> {
+  const sb = sbOrThrow()
+  const { data, error } = await sb
+    .from('session_invites')
+    .select('*')
+    .eq('session_id', sessionId)
+    .order('created_at', { ascending: true })
+  if (error) throw new Error(`Invités : ${error.message}`)
+  const list = (data as SessionInvite[]) ?? []
+  const authors = await fetchSocialProfiles([...new Set(list.map((r) => r.user_id))])
+  return list.map((r) => ({ ...r, author: authors.get(r.user_id) ?? null }))
+}
+
+/** Mon statut d'invitation sur une session (ou null). */
+export async function myInviteStatus(sessionId: string): Promise<SessionInvite | null> {
+  const sb = sbOrThrow()
+  const me = await myId()
+  const { data, error } = await sb
+    .from('session_invites')
+    .select('*')
+    .eq('session_id', sessionId)
+    .eq('user_id', me)
+    .maybeSingle()
+  if (error) throw new Error(`Invitation : ${error.message}`)
+  return (data as SessionInvite | null) ?? null
+}
+
+/** Accepter une invitation : statut + inscription directe. */
+export async function acceptInvite(sessionId: string): Promise<void> {
+  const sb = sbOrThrow()
+  const me = await myId()
+  const { error: uErr } = await sb
+    .from('session_invites')
+    .update({ status: 'accepted' })
+    .eq('session_id', sessionId)
+    .eq('user_id', me)
+  if (uErr) throw new Error(`Acceptation : ${uErr.message}`)
+  const { error: jErr } = await sb.from('session_joins').insert({ session_id: sessionId, user_id: me })
+  if (jErr && !jErr.message.includes('duplicate')) throw new Error(`Inscription : ${jErr.message}`)
+}
+
+/** Refuser une invitation (+ notifie l'hôte). */
+export async function declineInvite(sessionId: string, sessionTitle?: string): Promise<void> {
+  const sb = sbOrThrow()
+  const me = await myId()
+  const { error } = await sb
+    .from('session_invites')
+    .update({ status: 'declined' })
+    .eq('session_id', sessionId)
+    .eq('user_id', me)
+  if (error) throw new Error(`Refus : ${error.message}`)
+  const { data: session } = await sb.from('sessions').select('host').eq('id', sessionId).maybeSingle()
+  const host = (session as { host: string } | null)?.host
+  if (host) {
+    const { myUsername, sendNotification } = await import('./notifications')
+    const mine = await myUsername()
+    await sendNotification(host, 'session_invite_declined', {
+      session_id: sessionId,
+      session_title: sessionTitle ?? '',
+      from_username: mine,
+    })
+  }
+}
+
+/** Retirer une invitation (hôte). */
+export async function cancelInvite(sessionId: string, userId: string): Promise<void> {
+  const sb = sbOrThrow()
+  const { error } = await sb.from('session_invites').delete().eq('session_id', sessionId).eq('user_id', userId)
+  if (error) throw new Error(`Retrait : ${error.message}`)
+}
+
 /* ------------------------------ membres ------------------------------ */
 
 export interface SessionMember {

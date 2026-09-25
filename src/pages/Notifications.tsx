@@ -49,6 +49,10 @@ function describe(n: AppNotification): { text: string; to: string | null } {
       return { text: `${who} te suit`, to: p.from_username ? `/profil/${p.from_username}` : null }
     case 'session_request':
       return { text: `${who} veut rejoindre ta séance`, to: '/explorer' }
+    case 'session_invite':
+      return { text: `${who} t'invite à « ${p.session_title ?? 'une séance'} » 🎉`, to: '/explorer' }
+    case 'session_invite_declined':
+      return { text: `${who} a décliné ton invitation${p.session_title ? ` (« ${p.session_title} »)` : ''}`, to: '/explorer' }
     case 'session_accepted':
       return { text: `Match ! ${who} t'a accepté${p.session_title ? ` : « ${p.session_title} »` : ''} 🤝`, to: '/explorer' }
     default:

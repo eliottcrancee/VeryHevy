@@ -24,6 +24,8 @@ l'app reste 100 % locale et aucune page de login n'est exigée.
    pour la personne bloquée).
 8. Puis exécutez `supabase/schema_post_snapshot.sql` (détail des séances
    publiées visible par les abonnés, sans lecture inter-comptes).
+9. Puis exécutez `supabase/schema_session_types.sql` (3 types de séances
+   invite/open/public + table session_invites ; 'private' → 'open').
 
 ## 2. Activer Google
 

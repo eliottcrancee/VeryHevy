@@ -320,7 +320,8 @@ export interface AppData {
 ------------------------------------------------------------------ */
 
 export type PostVisibility = 'public' | 'followers' | 'private'
-export type SessionVisibility = 'public' | 'private'
+/** invite = privée sur invitation · open = sur proposition (hôte anonyme) · public = demande + validation */
+export type SessionVisibility = 'invite' | 'open' | 'public'
 export type ProfileVisibility = 'private' | 'followers' | 'public'
 
 export interface SocialProfile {
@@ -415,7 +416,6 @@ export interface SportSession {
   level: string
   description: string
   visibility: SessionVisibility
-  invited: string[]
   created_at: string
   joined_by_me?: boolean
   host_profile?: SocialProfile | null

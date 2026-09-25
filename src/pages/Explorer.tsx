@@ -18,12 +18,10 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
 import { useStore } from '@/store/store'
-import type { SocialProfile, SportSession } from '@/types'
+import type { SessionVisibility, SocialProfile, SportSession } from '@/types'
 import {
   createSession,
   deleteSession,
-  inviteToSession,
-  joinSession,
   leaveSession,
   listInviteCandidates,
   listSessions,
@@ -32,19 +30,26 @@ import {
 } from '@/lib/sessions'
 import { listMyFollowIds } from '@/lib/social'
 import {
+  acceptInvite,
   acceptRequest,
+  cancelInvite,
+  declineInvite,
   declineRequest,
   displayNameOf,
   listMembers,
   listMessages,
   listPublicParticipants,
   listRequests,
+  listSessionInvites,
   listThreads,
+  myInviteStatus,
   myRequestStatus,
+  sendInvite,
   sendMessage,
   sendRequest,
   withdrawRequest,
   type ChatMessage,
+  type SessionInvite,
   type SessionMember,
   type SessionRequest,
   type Thread,
@@ -83,7 +88,7 @@ function dayMatches(iso: string, f: DayFilter): boolean {
 function pinIcon(s: SportSession, me: string | undefined, selected: boolean): L.DivIcon {
   const full = s.spots_taken >= s.spots_total
   const mine = s.host === me
-  const bg = mine ? '#4f83ff' : full ? '#ef4444' : s.visibility === 'private' ? '#8b5cf6' : '#16a34a'
+  const bg = mine ? '#4f83ff' : full ? '#ef4444' : s.visibility === 'open' ? '#8b5cf6' : s.visibility === 'invite' ? '#0ea5e9' : '#16a34a'
   return L.divIcon({
     className: '',
     html: `<div style="display:flex;align-items:center;gap:2px;background:${bg};color:#fff;font-weight:800;font-size:11px;border-radius:999px;padding:3px 8px;border:${selected ? '3px solid #fff' : '2px solid rgba(255,255,255,.7)'};box-shadow:0 2px 8px rgba(0,0,0,.4);white-space:nowrap">💪 ${s.spots_taken}/${s.spots_total}</div>`,
@@ -155,7 +160,10 @@ export default function ExplorerPage() {
     if (!cloudEnabled) return
     setLoading(true)
     try {
-      const [list, follows] = await Promise.all([listSessions(), listMyFollowIds().catch(() => new Set<string>())])
+      const [list, follows] = await Promise.all([
+        listSessions(),
+        listMyFollowIds().catch(() => new Set<string>()),
+      ])
       setSessions(list)
       setFollowIds(follows)
     } catch (err) {
@@ -235,13 +243,16 @@ export default function ExplorerPage() {
     () => sessions.filter((s) => dayMatches(s.starts_at, dayFilter)),
     [sessions, dayFilter],
   )
-  const invited = useMemo(() => visible.filter((s) => s.visibility === 'private'), [visible])
+  const invited = useMemo(() => visible.filter((s) => s.visibility === 'invite'), [visible])
+  const listed = useMemo(() => visible.filter((s) => s.visibility !== 'invite'), [visible])
   const selected = sessions.find((s) => s.id === selectedId) ?? null
 
-  /* Recommandations : amis d'abord, puis date ; recherche texte. */
+  /* Recommandations : open + public, amis d'abord (sans badge pour les
+     sessions anonymes), puis date ; recherche texte. */
   const reco = useMemo(() => {
     const needle = recoQuery.trim().toLowerCase()
     return sessions
+      .filter((s) => s.visibility !== 'invite')
       .filter((s) => {
         if (!needle) return true
         return `${s.title} ${s.gym_name} ${s.address_text} ${s.description}`.toLowerCase().includes(needle)
@@ -403,7 +414,7 @@ export default function ExplorerPage() {
                 />
                 <ClickCatcher onPick={(lat, lng) => setPicked({ lat, lng })} />
                 <FlyTo target={flyTo} />
-                {visible.filter((s) => s.visibility === 'public').map((s) => (
+                {visible.filter((s) => s.visibility !== 'invite').map((s) => (
                   <Marker key={s.id} position={[s.lat, s.lng]} icon={pinIcon(s, user?.id, s.id === selectedId)} eventHandlers={{ click: () => setSelectedId(s.id) }} />
                 ))}
                 {userPos && <Marker position={userPos} icon={ME_ICON} interactive={false} />}
@@ -431,7 +442,7 @@ export default function ExplorerPage() {
 
             {invited.length > 0 && (
               <div className="space-y-2">
-                <p className="text-xs font-extrabold tracking-wide text-muted uppercase">🔒 Mes invitations privées ({invited.length})</p>
+                <p className="text-xs font-extrabold tracking-wide text-muted uppercase">📩 Mes invitations ({invited.length})</p>
                 {invited.map((s) => (
                   <div key={s.id} className="space-y-2">
                     <SessionRow s={s} me={user?.id} friend={followIds.has(s.host)} selected={s.id === selectedId} onSelect={() => setSelectedId(s.id === selectedId ? null : s.id)} />
@@ -443,7 +454,7 @@ export default function ExplorerPage() {
               </div>
             )}
 
-            {selected && selected.visibility === 'public' && (
+            {selected && selected.visibility !== 'invite' && (
               <SessionDetail
                 s={selected}
                 me={user?.id}
@@ -457,11 +468,11 @@ export default function ExplorerPage() {
 
             <div className="space-y-2">
               <p className="text-xs font-extrabold tracking-wide text-muted uppercase">
-                À venir ({loading ? '…' : visible.filter((s) => s.visibility === 'public').length})
+                À venir ({loading ? '…' : listed.length})
               </p>
               {loading ? (
                 <p className="text-sm text-muted">Chargement de la carte…</p>
-              ) : visible.filter((s) => s.visibility === 'public').length === 0 ? (
+              ) : listed.length === 0 ? (
                 <Card>
                   <EmptyState
                     icon={<MapPin size={24} />}
@@ -470,7 +481,7 @@ export default function ExplorerPage() {
                   />
                 </Card>
               ) : (
-                visible.filter((s) => s.visibility === 'public').map((s) => (
+                listed.map((s) => (
                   <div key={s.id} className="space-y-2">
                     <SessionRow
                       s={s}
@@ -524,12 +535,13 @@ function SessionRow({ s, me, friend, selected, onSelect }: { s: SportSession; me
       )}
     >
       <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface-2 text-lg">
-        {s.visibility === 'private' ? '🔒' : '💪'}
+        {s.visibility === 'invite' ? '🔒' : s.visibility === 'open' ? '✨' : '💪'}
       </span>
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-1.5">
           <span className="truncate text-sm font-extrabold">{s.title}</span>
-          {friend && <span className="shrink-0 rounded-md bg-accent-soft px-1.5 py-0.5 text-[10px] font-extrabold text-accent">Ami</span>}
+          {/* Pas de badge Ami sur les sessions anonymes (ne pas trahir l'hôte). */}
+          {friend && s.visibility !== 'open' && <span className="shrink-0 rounded-md bg-accent-soft px-1.5 py-0.5 text-[10px] font-extrabold text-accent">Ami</span>}
         </span>
         <span className="block truncate text-[11px] text-muted">
           {fmtDate(s.starts_at)} · {s.gym_name || 'Lieu à préciser'} · {s.spots_taken}/{s.spots_total}
@@ -562,6 +574,8 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
   const [publicOnes, setPublicOnes] = useState<SocialProfile[]>([])
   const [requests, setRequests] = useState<SessionRequest[] | null>(null)
   const [myReq, setMyReq] = useState<SessionRequest | null | undefined>(undefined)
+  const [myInvite, setMyInvite] = useState<SessionInvite | null | undefined>(undefined)
+  const [invites, setInvites] = useState<SessionInvite[] | null>(null)
   const [reqMsg, setReqMsg] = useState('')
   const [reqBusy, setReqBusy] = useState(false)
 
@@ -575,19 +589,31 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
       listPublicParticipants(s.id).then((p) => { if (alive) setPublicOnes(p) }).catch(() => {})
     }
     if (mine) {
-      listRequests(s.id).then((r) => { if (alive) setRequests(r) }).catch(() => {})
-    } else if (s.visibility === 'private') {
+      if (s.visibility === 'invite') {
+        listSessionInvites(s.id).then((l) => { if (alive) setInvites(l) }).catch(() => {})
+      } else {
+        listRequests(s.id).then((r) => { if (alive) setRequests(r) }).catch(() => {})
+      }
+    } else if (s.visibility === 'invite') {
+      myInviteStatus(s.id).then((r) => { if (alive) setMyInvite(r) }).catch(() => { if (alive) setMyInvite(null) })
+    } else {
       myRequestStatus(s.id).then((r) => { if (alive) setMyReq(r) }).catch(() => { if (alive) setMyReq(null) })
     }
     return () => { alive = false }
   }, [s.id, isMember, mine, s.visibility])
 
   const pending = (requests ?? []).filter((r) => r.status === 'pending')
+  const pendingInvites = (invites ?? []).filter((i) => i.status === 'pending')
 
-  const join = () => {
-    if (s.visibility === 'private') return
-    void act(s.id, () => joinSession(s), 'Inscrit ! 🤝 Discute avec l’hôte 💬').then(onChanged)
-  }
+  /* Nom de l'hôte : anonyme pour les sessions "sur proposition"
+     tant qu'on n'est pas membre. */
+  const hostLabel = mine
+    ? 'toi'
+    : s.visibility === 'open' && !isMember
+      ? 'un sportif anonyme 🤫'
+      : s.host_profile?.username
+        ? `@${s.host_profile.username}`
+        : (s.host_profile?.display_name ?? 'un sportif')
 
   const propose = async () => {
     setReqBusy(true)
@@ -596,9 +622,41 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
       await sendRequest(s.id, reqMsg, s.host)
       setMyReq(await myRequestStatus(s.id))
       setReqMsg('')
-      notify('Candidature envoyée — l’hôte va te répondre 💬', 'success')
+      notify(s.visibility === 'open' ? 'Candidature envoyée — l’hôte va te répondre 💬' : 'Demande envoyée — l’hôte va te répondre 💬', 'success')
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Candidature impossible', 'error')
+      notify(err instanceof Error ? err.message : 'Envoi impossible', 'error')
+    } finally {
+      setReqBusy(false)
+    }
+  }
+
+  const acceptMyInvite = async () => {
+    if (full) {
+      notify('Session complète', 'error')
+      return
+    }
+    setReqBusy(true)
+    try {
+      await acceptInvite(s.id)
+      setMyInvite(await myInviteStatus(s.id))
+      notify('Inscrit ! 🎉 Discute avec l’hôte 💬', 'success')
+      onChanged()
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Acceptation impossible', 'error')
+    } finally {
+      setReqBusy(false)
+    }
+  }
+
+  const declineMyInvite = async () => {
+    setReqBusy(true)
+    try {
+      await declineInvite(s.id, s.title)
+      setMyInvite(await myInviteStatus(s.id))
+      notify('Invitation déclinée', 'info')
+      onChanged()
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Action impossible', 'error')
     } finally {
       setReqBusy(false)
     }
@@ -628,6 +686,20 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
     onChat({ sessionId: s.id, title: s.title, otherId, other })
   }
 
+  const uninvite = async (u: SessionInvite) => {
+    setReqBusy(true)
+    try {
+      await cancelInvite(s.id, u.user_id)
+      setInvites(await listSessionInvites(s.id))
+      notify('Invitation retirée', 'info')
+      onChanged()
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Action impossible', 'error')
+    } finally {
+      setReqBusy(false)
+    }
+  }
+
   return (
     <Card className="space-y-2 border-accent-line p-4">
       <div className="flex items-start gap-3">
@@ -640,8 +712,8 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
             <p className="mt-0.5 text-xs text-muted">🗺️ {s.address_text}</p>
           )}
           <p className="mt-0.5 text-xs text-muted">
-            {s.visibility === 'private' ? '🔒 Privée (sur candidature)' : '🌍 Publique'} · Niveau : {s.level} ·{' '}
-            {s.spots_taken}/{s.spots_total} · Par <b>{s.host_profile?.username ? `@${s.host_profile.username}` : s.host_profile?.display_name ?? 'un sportif'}</b>
+            {s.visibility === 'invite' ? '🔒 Privée (sur invitation)' : s.visibility === 'open' ? '✨ Sur proposition (rencontre)' : '🌍 Publique (validation requise)'} · Niveau : {s.level} ·{' '}
+            {s.spots_taken}/{s.spots_total} · Par <b>{hostLabel}</b>
           </p>
           {/* Participants : cachés aux non-membres (sauf profils publics). */}
           {!isMember && publicOnes.length > 0 && (
@@ -679,7 +751,7 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
       <div className="flex flex-wrap gap-2">
         {mine ? (
           <>
-            {s.visibility === 'private' && (
+            {s.visibility === 'invite' && (
               <Button size="sm" variant="secondary" onClick={() => setInviteOpen(true)}>
                 <Users size={14} /> Inviter
               </Button>
@@ -698,38 +770,58 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
               <MessageCircle size={14} /> Discuter avec l’hôte
             </Button>
           </>
-        ) : s.visibility === 'private' ? (
-          myReq === undefined ? (
+        ) : s.visibility === 'invite' ? (
+          myInvite === undefined ? (
             <p className="text-xs text-muted">Chargement…</p>
-          ) : myReq?.status === 'pending' ? (
-            <div className="flex w-full gap-2">
-              <p className="flex-1 rounded-xl bg-surface-2 px-3 py-2 text-xs font-bold text-muted">Candidature envoyée — en attente 💬</p>
-              <Button size="sm" variant="ghost" disabled={reqBusy} onClick={() => { setReqBusy(true); withdrawRequest(s.id).then(() => setMyReq(null)).catch((e) => notify(e instanceof Error ? e.message : 'Impossible', 'error')).finally(() => setReqBusy(false)) }}>
-                Annuler
-              </Button>
-            </div>
-          ) : myReq?.status === 'declined' ? (
-            <div className="w-full space-y-2">
-              <p className="text-xs text-muted">Candidature déclinée — tu peux retenter avec un mot :</p>
-              <ProposeBox msg={reqMsg} setMsg={setReqMsg} busy={reqBusy} onSend={() => void propose()} />
+          ) : myInvite?.status === 'pending' ? (
+            <div className="w-full space-y-2 rounded-xl bg-accent-soft p-3">
+              <p className="text-[13px] font-bold">🎉 {displayNameOf(s.host_profile)} t’a invité !</p>
+              <div className="flex gap-2">
+                <Button size="sm" variant="primary" block disabled={reqBusy || full} onClick={() => void acceptMyInvite()}>
+                  {full ? 'Complet' : 'Accepter 🤝'}
+                </Button>
+                <Button size="sm" variant="ghost" block disabled={reqBusy} onClick={() => void declineMyInvite()}>
+                  Refuser
+                </Button>
+              </div>
             </div>
           ) : (
-            <div className="w-full space-y-2">
-              <ProposeBox msg={reqMsg} setMsg={setReqMsg} busy={reqBusy} onSend={() => void propose()} />
-            </div>
+            <p className="text-xs text-muted">
+              {myInvite?.status === 'declined' ? 'Invitation déclinée.' : 'Invitation traitée.'}
+            </p>
           )
+        ) : myReq === undefined ? (
+          <p className="text-xs text-muted">Chargement…</p>
+        ) : myReq?.status === 'pending' ? (
+          <div className="flex w-full gap-2">
+            <p className="flex-1 rounded-xl bg-surface-2 px-3 py-2 text-xs font-bold text-muted">
+              {s.visibility === 'open' ? 'Candidature envoyée — en attente 💬' : 'Demande envoyée — en attente 💬'}
+            </p>
+            <Button size="sm" variant="ghost" disabled={reqBusy} onClick={() => { setReqBusy(true); withdrawRequest(s.id).then(() => setMyReq(null)).catch((e) => notify(e instanceof Error ? e.message : 'Impossible', 'error')).finally(() => setReqBusy(false)) }}>
+              Annuler
+            </Button>
+          </div>
+        ) : myReq?.status === 'declined' ? (
+          <div className="w-full space-y-2">
+            <p className="text-xs text-muted">Demande déclinée — tu peux retenter avec un mot :</p>
+            <ProposeBox msg={reqMsg} setMsg={setReqMsg} busy={reqBusy} onSend={() => void propose()} action={s.visibility === 'open' ? 'Se proposer 🙋' : 'Demander à rejoindre 🙋'} />
+          </div>
+        ) : s.visibility === 'open' ? (
+          <div className="w-full space-y-2">
+            <ProposeBox msg={reqMsg} setMsg={setReqMsg} busy={reqBusy} onSend={() => void propose()} action="Se proposer 🙋" />
+          </div>
         ) : (
-          <Button size="sm" variant="primary" block disabled={busy || full} onClick={join}>
-            {full ? 'Complet' : 'Rejoindre 🤝'}
-          </Button>
+          <div className="w-full space-y-2">
+            <ProposeBox msg={reqMsg} setMsg={setReqMsg} busy={reqBusy} onSend={() => void propose()} action="Demander à rejoindre 🙋" placeholder="Un mot pour l’hôte (optionnel)…" />
+          </div>
         )}
       </div>
 
-      {/* Candidatures à valider (hôte, sessions privées). */}
-      {mine && s.visibility === 'private' && (
+      {/* Demandes à valider (hôte, sessions open + public). */}
+      {mine && s.visibility !== 'invite' && (
         <div className="space-y-2 rounded-xl bg-surface-2 p-2.5">
           <p className="text-[11px] font-extrabold tracking-wide text-muted uppercase">
-            Candidatures ({pending.length})
+            {s.visibility === 'open' ? 'Candidatures' : 'Demandes'} ({pending.length})
           </p>
           {requests === null ? (
             <p className="text-xs text-muted">Chargement…</p>
@@ -754,12 +846,40 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
         </div>
       )}
 
+      {/* Invités (hôte, session privée). */}
+      {mine && s.visibility === 'invite' && (
+        <div className="space-y-2 rounded-xl bg-surface-2 p-2.5">
+          <p className="text-[11px] font-extrabold tracking-wide text-muted uppercase">
+            Invités ({pendingInvites.length} en attente)
+          </p>
+          {invites === null ? (
+            <p className="text-xs text-muted">Chargement…</p>
+          ) : invites.length === 0 ? (
+            <p className="text-xs text-muted">Personne pour l’instant — invite tes amis.</p>
+          ) : (
+            invites.map((i) => (
+              <div key={i.user_id} className="flex items-center gap-2 rounded-lg bg-surface px-2.5 py-2">
+                <span className="min-w-0 flex-1 truncate text-[13px] font-bold">{displayNameOf(i.author)}</span>
+                <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-extrabold ${i.status === 'pending' ? 'bg-warning/15 text-warning' : i.status === 'accepted' ? 'bg-success/15 text-success' : 'bg-surface-3 text-muted'}`}>
+                  {i.status === 'pending' ? 'En attente' : i.status === 'accepted' ? 'Accepté' : 'Refusé'}
+                </span>
+                {i.status === 'pending' && (
+                  <Button size="sm" variant="ghost" disabled={reqBusy} onClick={() => void uninvite(i)}>
+                    <X size={14} />
+                  </Button>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
       {inviteOpen && (
         <InviteBox
           session={s}
           onDone={() => {
             setInviteOpen(false)
-            notify('Invitations mises à jour', 'success')
+            notify('Invitations envoyées 🎉', 'success')
             onChanged()
           }}
         />
@@ -768,11 +888,18 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
   )
 }
 
-function ProposeBox({ msg, setMsg, busy, onSend }: { msg: string; setMsg: (v: string) => void; busy: boolean; onSend: () => void }) {
+function ProposeBox({ msg, setMsg, busy, onSend, action = 'Se proposer 🙋', placeholder = 'Présente-toi en un mot (optionnel)…' }: {
+  msg: string
+  setMsg: (v: string) => void
+  busy: boolean
+  onSend: () => void
+  action?: string
+  placeholder?: string
+}) {
   return (
     <div className="flex gap-2">
-      <Input value={msg} onChange={(e) => setMsg(e.target.value)} placeholder="Présente-toi en un mot (optionnel)…" maxLength={280} />
-      <Button size="sm" variant="primary" disabled={busy} onClick={onSend}>Se proposer 🙋</Button>
+      <Input value={msg} onChange={(e) => setMsg(e.target.value)} placeholder={placeholder} maxLength={280} />
+      <Button size="sm" variant="primary" disabled={busy} onClick={onSend}>{action}</Button>
     </div>
   )
 }
@@ -826,7 +953,7 @@ function MessagesView({ initial, onConsumeInitial, onBack }: {
           <EmptyState
             icon={<MessageCircle size={24} />}
             title="Aucune discussion"
-            message="Rejoins une séance publique ou fais accepter ta candidature : la discussion s’ouvre ici pour faire connaissance avant le rendez-vous."
+            message="Demande à rejoindre une séance, propose la tienne, ou fais accepter ta proposition : la discussion s’ouvre ici pour faire connaissance avant le rendez-vous."
             action={<Button variant="primary" size="sm" onClick={onBack}>Voir la carte</Button>}
           />
         </Card>
@@ -946,17 +1073,22 @@ function ConversationView({ t, onBack }: { t: ActiveThread; onBack: () => void }
 function InviteBox({ session, onDone }: { session: SportSession; onDone: () => void }) {
   const notify = useStore((s) => s.notify)
   const [candidates, setCandidates] = useState<SocialProfile[]>([])
+  const [current, setCurrent] = useState<SessionInvite[]>([])
   const [loading, setLoading] = useState(true)
-  const [picked, setPicked] = useState<string[]>(session.invited ?? [])
+  const [picked, setPicked] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    listInviteCandidates()
-      .then(setCandidates)
+    Promise.all([listInviteCandidates(), listSessionInvites(session.id)])
+      .then(([c, l]) => {
+        setCandidates(c)
+        setCurrent(l)
+        setPicked(l.filter((i) => i.status === 'pending').map((i) => i.user_id))
+      })
       .catch((err) => notify(err instanceof Error ? err.message : 'Contacts illisibles', 'error'))
       .finally(() => setLoading(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [session.id])
 
   const toggle = (id: string) =>
     setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]))
@@ -964,7 +1096,13 @@ function InviteBox({ session, onDone }: { session: SportSession; onDone: () => v
   const save = async () => {
     setSaving(true)
     try {
-      await inviteToSession(session.id, picked)
+      const already = new Set(current.map((i) => i.user_id))
+      const fresh = picked.filter((id) => !already.has(id))
+      const removed = current.filter((i) => i.status === 'pending' && !picked.includes(i.user_id))
+      await Promise.all([
+        ...fresh.map((id) => sendInvite(session.id, id, session.title)),
+        ...removed.map((i) => cancelInvite(session.id, i.user_id)),
+      ])
       onDone()
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Invitation impossible', 'error')
@@ -978,7 +1116,7 @@ function InviteBox({ session, onDone }: { session: SportSession; onDone: () => v
 
   return (
     <div className="space-y-2 rounded-xl bg-surface-2 p-3">
-      <p className="text-xs font-extrabold">Inviter (session privée)</p>
+      <p className="text-xs font-extrabold">Inviter (session privée — direct, sans validation)</p>
       <div className="flex max-h-40 flex-col gap-1 overflow-y-auto">
         {candidates.map((c) => (
           <label key={c.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-surface">
@@ -988,7 +1126,7 @@ function InviteBox({ session, onDone }: { session: SportSession; onDone: () => v
         ))}
       </div>
       <Button size="sm" variant="primary" disabled={saving} onClick={() => void save()}>
-        {saving ? 'Enregistrement…' : `Inviter (${picked.length})`}
+        {saving ? 'Envoi…' : `Inviter (${picked.length})`}
       </Button>
     </div>
   )
@@ -1008,7 +1146,7 @@ function CreateSessionModal({ open, picked, onClose, onCreated }: {
   const [hour, setHour] = useState('19:00')
   const [spots, setSpots] = useState('3')
   const [level, setLevel] = useState('tous')
-  const [visibility, setVisibility] = useState<'public' | 'private'>('public')
+  const [visibility, setVisibility] = useState<SessionVisibility>('open')
   const [desc, setDesc] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -1016,7 +1154,7 @@ function CreateSessionModal({ open, picked, onClose, onCreated }: {
   const [invited, setInvited] = useState<string[]>([])
 
   useEffect(() => {
-    if (open && visibility === 'private' && candidates.length === 0) {
+    if (open && visibility === 'invite' && candidates.length === 0) {
       listInviteCandidates().then(setCandidates).catch(() => {})
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1050,9 +1188,18 @@ function CreateSessionModal({ open, picked, onClose, onCreated }: {
         level,
         description: desc.trim(),
         visibility,
-        invited: visibility === 'private' ? invited : [],
       })
-      notify(visibility === 'public' ? 'Session publiée sur la carte 🎉' : 'Session privée créée 🔒', 'success')
+      if (visibility === 'invite' && invited.length > 0) {
+        await Promise.all(invited.map((id) => sendInvite(s.id, id, s.title).catch(() => {})))
+      }
+      notify(
+        visibility === 'invite'
+          ? `Session privée créée 🔒 ${invited.length} invitation(s) envoyée(s)`
+          : visibility === 'open'
+            ? 'Proposition publiée — ton identité reste anonyme ✨'
+            : 'Session publiée sur la carte 🎉',
+        'success',
+      )
       onCreated(s)
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Création impossible', 'error')
@@ -1105,19 +1252,22 @@ function CreateSessionModal({ open, picked, onClose, onCreated }: {
               <option value="confirmé">Confirmé</option>
             </Select>
           </Field>
-          <Field label="Visibilité">
-            <Select value={visibility} onChange={(e) => setVisibility(e.target.value as 'public' | 'private')}>
-              <option value="public">🌍 Publique (direct)</option>
-              <option value="private">🔒 Privée (candidature)</option>
+          <Field label="Type de séance">
+            <Select value={visibility} onChange={(e) => setVisibility(e.target.value as SessionVisibility)}>
+              <option value="invite">🔒 Privée (invités seuls)</option>
+              <option value="open">✨ Sur proposition (anonyme)</option>
+              <option value="public">🌍 Publique (validation requise)</option>
             </Select>
           </Field>
         </div>
         <p className="text-[11px] text-muted">
-          {visibility === 'public'
-            ? 'Inscription directe, sans validation.'
-            : 'Les sportifs se proposent, tu acceptes → match + discussion privée.'}
+          {visibility === 'invite'
+            ? 'Seuls tes invités la voient et rejoignent direct en acceptant. Entre amis, pas de vérification.'
+            : visibility === 'open'
+              ? 'Visible par tous, sans ton pseudo. On se propose, tu acceptes → match + discussion.'
+              : 'Visible par tous avec ton pseudo, mais tu valides chaque demande.'}
         </p>
-        {visibility === 'private' && (
+        {visibility === 'invite' && (
           <Field label="Invités">
             {candidates.length === 0 ? (
               <p className="text-xs text-muted">Suis des sportifs pour les inviter.</p>
