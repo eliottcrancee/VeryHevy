@@ -302,12 +302,31 @@ export async function isBlockedByMe(targetId: string): Promise<boolean> {
 }
 
 /** Comptes que j'ai bloqués, plus récents d'abord. */
-export async function listMyBlocks(): Promise<SocialProfile[]> {
-  const sb = sbOrThrow()
+export async function listMyBlocks(): Promise<SocialProfile[]> {  const sb = sbOrThrow()
   const me = await myId()
   const { data, error } = await sb.from('blocks').select('blocked').eq('blocker', me)
   if (error) throw new Error(`Bloqués : ${error.message}`)
   const ids = ((data as { blocked: string }[] ?? []).map((b) => b.blocked))
   const map = await fetchSocialProfiles(ids)
   return ids.map((id) => map.get(id)).filter((p): p is SocialProfile => Boolean(p))
+}
+
+/* --------------------------- photo de profil --------------------------- */
+
+/** Upload d'une photo de profil (carré 512px, bucket avatars). Retourne l'URL publique. */
+export async function uploadAvatar(file: File): Promise<string> {
+  const sb = sbOrThrow()
+  const me = await myId()
+  if (!file.type.startsWith('image/')) throw new Error('Fichier image requis')
+  if (file.size > 8 * 1024 * 1024) throw new Error('Photo trop lourde (max 8 Mo)')
+  const { compressImage } = await import('./posts')
+  const blob = await compressImage(file, 512, 0.85)
+  const path = `${me}/avatar.jpg`
+  const { error } = await sb.storage.from('avatars').upload(path, blob, {
+    contentType: 'image/jpeg',
+    upsert: true,
+  })
+  if (error) throw new Error(`Upload : ${error.message}`)
+  const url = sb.storage.from('avatars').getPublicUrl(path).data.publicUrl
+  return `${url}?v=${Date.now()}`
 }

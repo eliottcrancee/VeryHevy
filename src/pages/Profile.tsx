@@ -25,6 +25,7 @@ import {
   unblockUser,
   unfollowUser,
   updateMyProfile,
+  uploadAvatar,
   type FollowState,
 } from '@/lib/social'
 import { cancelFollowRequest } from '@/lib/notifications'
@@ -491,6 +492,7 @@ export default function ProfilePage() {
         open={editOpen}
         initial={myProfile}
         defaultVisibility={settings.defaultPostVisibility}
+        googleAvatar={(meta.avatar_url as string | undefined) ?? (meta.picture as string | undefined) ?? null}
         onClose={() => setEditOpen(false)}
         onSaved={(p, vis) => {
           setMyProfile(p)
@@ -660,18 +662,22 @@ function EditProfileModal({
   open,
   initial,
   defaultVisibility,
+  googleAvatar,
   onClose,
   onSaved,
 }: {
   open: boolean
   initial: SocialProfile | null
   defaultVisibility: PostVisibility
+  googleAvatar?: string | null
   onClose: () => void
   onSaved: (p: SocialProfile, vis: PostVisibility | null) => void
 }) {
   const notify = useStore((s) => s.notify)
   const [username, setUsername] = useState(initial?.username ?? '')
   const [name, setName] = useState(initial?.display_name ?? '')
+  const [avatar, setAvatar] = useState<string | null>(initial?.avatar_url ?? null)
+  const [uploading, setUploading] = useState(false)
   const [bio, setBio] = useState(initial?.bio ?? '')
   const [city, setCity] = useState(initial?.city ?? '')
   const [account, setAccount] = useState<'public' | 'private'>(initial?.visibility === 'private' ? 'private' : 'public')
@@ -684,6 +690,7 @@ function EditProfileModal({
     if (open) {
       setUsername(initial?.username ?? '')
       setName(initial?.display_name ?? '')
+      setAvatar(initial?.avatar_url ?? null)
       setBio(initial?.bio ?? '')
       setCity(initial?.city ?? '')
       setAccount(initial?.visibility === 'private' ? 'private' : 'public')
@@ -693,6 +700,19 @@ function EditProfileModal({
   }, [open, initial, defaultVisibility])
 
   if (!open) return null
+
+  const pickPhoto = async (file: File) => {
+    setUploading(true)
+    try {
+      const url = await uploadAvatar(file)
+      setAvatar(url)
+      notify('Photo mise à jour 📸', 'success')
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Upload impossible', 'error')
+    } finally {
+      setUploading(false)
+    }
+  }
 
   const clean = normalizeUsername(username)
   const usernameChanged = clean !== (initial?.username ?? '')
@@ -724,6 +744,7 @@ function EditProfileModal({
       const p = await updateMyProfile({
         username: clean,
         display_name: name.trim() ? name.trim() : null,
+        avatar_url: avatar,
         bio,
         city,
         visibility: account,
@@ -740,6 +761,35 @@ function EditProfileModal({
   return (
     <Modal open={open} onClose={onClose} title="Modifier le profil">
       <div className="space-y-3">
+        <div className="flex items-center gap-3">
+          <ProfileAvatar url={avatar ?? googleAvatar} name={name || username || '?'} size={64} />
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-surface-2 px-2.5 py-1.5 text-xs font-bold hover:brightness-105">
+              {uploading ? 'Envoi…' : '📸 Choisir une photo'}
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                disabled={uploading}
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) void pickPhoto(file)
+                  e.target.value = ''
+                }}
+              />
+            </label>
+            {googleAvatar && avatar !== googleAvatar && (
+              <button
+                type="button"
+                disabled={uploading}
+                onClick={() => setAvatar(googleAvatar)}
+                className="block text-[11px] font-semibold text-muted underline decoration-dotted underline-offset-2"
+              >
+                Reprendre la photo Google
+              </button>
+            )}
+          </div>
+        </div>
         <Field label="Pseudo" hint="Unique, 3-20 caractères">
           <Input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="ton.pseudo" autoComplete="off" />
         </Field>
