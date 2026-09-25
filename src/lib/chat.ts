@@ -317,10 +317,13 @@ export async function listPublicParticipants(sessionId: string): Promise<SocialP
 }
 
 /* ------------------------------- chat ------------------------------- */
+/* Conversations par paire d'utilisateurs : la session n'est qu'un
+   contexte d'ouverture (titre affiché). Supprimer une session ne
+   supprime plus la discussion (session_id SET NULL). */
 
 export interface ChatMessage {
   id: string
-  session_id: string
+  session_id: string | null
   from_id: string
   to_id: string
   text: string
@@ -328,7 +331,7 @@ export interface ChatMessage {
 }
 
 export interface Thread {
-  session_id: string
+  session_id: string | null
   session_title: string
   other_id: string
   other: SocialProfile | null
@@ -336,7 +339,7 @@ export interface Thread {
   count: number
 }
 
-/** Mes threads (sessions avec ≥1 message où je suis expéditeur/destinataire). */
+/** Mes conversations (1 par correspondant, dernier message d'abord). */
 export async function listThreads(): Promise<Thread[]> {
   const sb = sbOrThrow()
   const me = await myId()
@@ -348,26 +351,26 @@ export async function listThreads(): Promise<Thread[]> {
     .limit(200)
   if (error) throw new Error(`Messages : ${error.message}`)
   const all = (data as ChatMessage[]) ?? []
-  const byKey = new Map<string, { msgs: ChatMessage[] }>()
+  const byOther = new Map<string, ChatMessage[]>()
   for (const m of all) {
     const other = m.from_id === me ? m.to_id : m.from_id
-    const key = `${m.session_id}:${other}`
-    const entry = byKey.get(key) ?? { msgs: [] }
-    entry.msgs.push(m)
-    byKey.set(key, entry)
+    const entry = byOther.get(other) ?? []
+    entry.push(m)
+    byOther.set(other, entry)
   }
-  const sessionIds = [...new Set(all.map((m) => m.session_id))]
-  const otherIds = [...new Set(all.map((m) => (m.from_id === me ? m.to_id : m.from_id)))]
+  const sessionIds = [...new Set(all.map((m) => m.session_id).filter((s): s is string => Boolean(s)))]
   const [{ data: sess }, profiles] = await Promise.all([
-    sb.from('sessions').select('id,title').in('id', sessionIds.length ? sessionIds : ['00000000-0000-0000-0000-000000000000']),
-    fetchSocialProfiles(otherIds),
+    sessionIds.length
+      ? sb.from('sessions').select('id,title').in('id', sessionIds)
+      : Promise.resolve({ data: [] }),
+    fetchSocialProfiles([...byOther.keys()]),
   ])
   const titles = new Map(((sess as { id: string; title: string }[] ?? []).map((s) => [s.id, s.title])))
-  return [...byKey.entries()].map(([key, { msgs }]) => {
-    const [sid, other] = key.split(':')
+  return [...byOther.entries()].map(([other, msgs]) => {
+    const sid = msgs[0]?.session_id ?? null
     return {
       session_id: sid,
-      session_title: titles.get(sid) ?? 'Séance',
+      session_title: sid ? (titles.get(sid) ?? 'Séance supprimée') : 'Message direct',
       other_id: other,
       other: profiles.get(other) ?? null,
       last: msgs[0],
@@ -376,13 +379,13 @@ export async function listThreads(): Promise<Thread[]> {
   })
 }
 
-export async function listMessages(sessionId: string, otherId: string): Promise<ChatMessage[]> {
+/** Discussion avec un correspondant (toutes sessions confondues). */
+export async function listMessages(otherId: string): Promise<ChatMessage[]> {
   const sb = sbOrThrow()
   const me = await myId()
   const { data, error } = await sb
     .from('messages')
     .select('*')
-    .eq('session_id', sessionId)
     .or(`and(from_id.eq.${me},to_id.eq.${otherId}),and(from_id.eq.${otherId},to_id.eq.${me})`)
     .order('created_at', { ascending: true })
     .limit(200)
@@ -390,18 +393,35 @@ export async function listMessages(sessionId: string, otherId: string): Promise<
   return (data as ChatMessage[]) ?? []
 }
 
-export async function sendMessage(sessionId: string, toId: string, text: string): Promise<ChatMessage> {
+/** Envoyer (sessionId optionnel : simple contexte). Repli sans session
+ *  si celle-ci a été supprimée entre-temps (FK). */
+export async function sendMessage(toId: string, text: string, sessionId?: string | null): Promise<ChatMessage> {
   const sb = sbOrThrow()
   const me = await myId()
   const clean = text.trim().slice(0, 1000)
   if (!clean) throw new Error('Message vide')
-  const { data, error } = await sb
-    .from('messages')
-    .insert({ session_id: sessionId, from_id: me, to_id: toId, text: clean })
-    .select('*')
-    .single()
-  if (error) throw new Error(`Envoi : ${error.message}`)
-  return data as ChatMessage
+  const attempt = async (sid: string | null) => {
+    const { data, error } = await sb
+      .from('messages')
+      .insert({ session_id: sid, from_id: me, to_id: toId, text: clean })
+      .select('*')
+      .single()
+    if (error) throw error
+    return data as ChatMessage
+  }
+  try {
+    return await attempt(sessionId ?? null)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : ''
+    if (sessionId && /foreign key|violates|session/i.test(msg)) {
+      try {
+        return await attempt(null)
+      } catch {
+        /* fallthrough : erreur d'origine ci-dessous */
+      }
+    }
+    throw new Error(`Envoi : ${msg || 'impossible'}`)
+  }
 }
 
 export function displayNameOf(p?: SocialProfile | null, fallback = 'Sportif'): string {

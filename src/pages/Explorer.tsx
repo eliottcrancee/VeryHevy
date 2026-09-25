@@ -193,7 +193,7 @@ function BoundsTracker({ onChange }: { onChange: (v: MapViewport) => void }) {
 }
 
 export interface ActiveThread {
-  sessionId: string
+  sessionId: string | null
   title: string
   otherId: string
   other: SocialProfile | null
@@ -1135,6 +1135,7 @@ function MessagesView({ initial, onConsumeInitial, onBack }: {
   const [threads, setThreads] = useState<Thread[]>([])
   const [loading, setLoading] = useState(true)
   const [active, setActive] = useState<ActiveThread | null>(null)
+  const [composeOpen, setComposeOpen] = useState(false)
 
   const reload = async () => {
     try {
@@ -1165,7 +1166,12 @@ function MessagesView({ initial, onConsumeInitial, onBack }: {
 
   return (
     <div className="space-y-2">
-      <p className="text-xs font-extrabold tracking-wide text-muted uppercase">Discussions ({loading ? '…' : threads.length})</p>
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-extrabold tracking-wide text-muted uppercase">Discussions ({loading ? '…' : threads.length})</p>
+        <Button size="sm" variant="ghost" onClick={() => setComposeOpen(true)}>
+          <Plus size={14} /> Nouveau
+        </Button>
+      </div>
       {loading ? (
         <p className="text-sm text-muted">Chargement…</p>
       ) : threads.length === 0 ? (
@@ -1173,14 +1179,14 @@ function MessagesView({ initial, onConsumeInitial, onBack }: {
           <EmptyState
             icon={<MessageCircle size={24} />}
             title="Aucune discussion"
-            message="Demande à rejoindre une séance, propose la tienne, ou fais accepter ta proposition : la discussion s’ouvre ici pour faire connaissance avant le rendez-vous."
+            message="Écris à tes abonnés et abonnements, ou discute depuis une séance : la conversation survit même si la séance est supprimée."
             action={<Button variant="primary" size="sm" onClick={onBack}>Voir la carte</Button>}
           />
         </Card>
       ) : (
         threads.map((t) => (
           <button
-            key={`${t.session_id}:${t.other_id}`}
+            key={t.other_id}
             type="button"
             onClick={() => setActive({ sessionId: t.session_id, title: t.session_title, otherId: t.other_id, other: t.other })}
             className="flex w-full items-center gap-3 rounded-xl border border-line bg-surface p-3 text-left transition-colors hover:bg-surface-2"
@@ -1198,7 +1204,86 @@ function MessagesView({ initial, onConsumeInitial, onBack }: {
           </button>
         ))
       )}
+      <NewMessageModal
+        open={composeOpen}
+        onClose={() => setComposeOpen(false)}
+        onPick={(p) => {
+          setComposeOpen(false)
+          setActive({ sessionId: null, title: 'Message direct', otherId: p.id, other: p })
+        }}
+      />
     </div>
+  )
+}
+
+/** Nouveau message : choisir parmi abonnés + abonnements. */
+function NewMessageModal({ open, onClose, onPick }: {
+  open: boolean
+  onClose: () => void
+  onPick: (p: SocialProfile) => void
+}) {
+  const notify = useStore((s) => s.notify)
+  const [friends, setFriends] = useState<SocialProfile[]>([])
+  const [q, setQ] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!open) return
+    setQ('')
+    setLoading(true)
+    listInviteCandidates()
+      .then(setFriends)
+      .catch((err) => notify(err instanceof Error ? err.message : 'Contacts illisibles', 'error'))
+      .finally(() => setLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open ])
+
+  if (!open) return null
+
+  const needle = q.trim().toLowerCase()
+  const list = friends.filter((f) =>
+    !needle ||
+    (f.username ?? '').toLowerCase().includes(needle) ||
+    (f.display_name ?? '').toLowerCase().includes(needle),
+  )
+
+  return (
+    <Modal open={open} onClose={onClose} title="Nouveau message">
+      <div className="space-y-2">
+        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher un ami…" autoComplete="off" />
+        {loading ? (
+          <p className="py-4 text-center text-sm text-muted">Chargement…</p>
+        ) : list.length === 0 ? (
+          <p className="py-4 text-center text-sm text-muted">
+            {friends.length === 0 ? 'Suis des sportifs pour pouvoir leur écrire.' : 'Aucun ami avec ce nom.'}
+          </p>
+        ) : (
+          <div className="max-h-80 space-y-1 overflow-y-auto">
+            {list.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => onPick(f)}
+                className="flex w-full items-center gap-3 rounded-xl bg-surface-2 p-2 text-left hover:brightness-105"
+              >
+                {f.avatar_url ? (
+                  <img src={f.avatar_url} alt="" className="h-9 w-9 shrink-0 rounded-lg object-cover" referrerPolicy="no-referrer" />
+                ) : (
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-soft font-extrabold text-accent">
+                    {(f.display_name ?? f.username ?? '?').slice(0, 1).toUpperCase()}
+                  </span>
+                )}
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-bold">@{f.username ?? '?'}</span>
+                  {f.display_name && <span className="block truncate text-xs text-muted">{f.display_name}</span>}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+        <p className="text-[11px] text-muted">Messages possibles avec tes abonnés et abonnements.</p>
+      </div>
+    </Modal>
   )
 }
 
@@ -1212,7 +1297,7 @@ function ConversationView({ t, onBack }: { t: ActiveThread; onBack: () => void }
 
   const load = async (silent = false) => {
     try {
-      const list = await listMessages(t.sessionId, t.otherId)
+      const list = await listMessages(t.otherId)
       setMsgs(list)
       if (!silent) bottom.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
     } catch (err) {
@@ -1225,13 +1310,13 @@ function ConversationView({ t, onBack }: { t: ActiveThread; onBack: () => void }
     const id = setInterval(() => void load(true), 5000)
     return () => clearInterval(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [t.sessionId, t.otherId])
+  }, [t.otherId])
 
   const send = async () => {
     if (!draft.trim() || sending) return
     setSending(true)
     try {
-      const m = await sendMessage(t.sessionId, t.otherId, draft)
+      const m = await sendMessage(t.otherId, draft, t.sessionId)
       setMsgs((l) => [...l, m])
       setDraft('')
       bottom.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })

@@ -26,6 +26,8 @@ l'app reste 100 % locale et aucune page de login n'est exigée.
    publiées visible par les abonnés, sans lecture inter-comptes).
 9. Puis exécutez `supabase/schema_session_types.sql` (3 types de séances
    invite/open/public + table session_invites ; 'private' → 'open').
+10. Puis exécutez `supabase/schema_dm.sql` (DM par paire : la discussion
+    survit à la suppression de la séance + messages directs entre amis).
 
 ## 2. Activer Google
 
