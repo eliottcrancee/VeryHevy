@@ -121,7 +121,7 @@ export default function CalendarPage() {
                         navigate('/seance')
                       }}
                     >
-                      <Plus size={14} /> S’entraîner
+                      <Plus size={14} /> Démarrer une séance
                     </Button>
                   }
                 />

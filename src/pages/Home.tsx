@@ -98,7 +98,7 @@ export default function HomePage() {
           className="h-14 text-base"
           onClick={() => navigate('/seance')}
         >
-          <Play size={20} /> {active ? 'Reprendre la séance' : "S'entraîner"}
+          <Play size={20} /> {active ? 'Reprendre la séance' : 'Démarrer une séance'}
         </Button>
 
         {/* Objectif hebdo (compact) */}
