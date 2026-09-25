@@ -251,3 +251,63 @@ export async function listFollowing(userId: string): Promise<SocialProfile[]> {
   const map = await fetchSocialProfiles(ids)
   return ids.map((id) => map.get(id)).filter((p): p is SocialProfile => Boolean(p))
 }
+
+/* ------------------------------ blocage ------------------------------ */
+
+/** Retirer un abonné (il ne me suit plus). */
+export async function removeFollower(userId: string): Promise<void> {
+  const sb = sbOrThrow()
+  const me = await myId()
+  const { error } = await sb.from('follows').delete().eq('follower', userId).eq('followed', me)
+  if (error) throw new Error(`Retrait : ${error.message}`)
+}
+
+/**
+ * Bloquer : coupe follows + demandes dans les 2 sens, puis bloque.
+ * Sens unique : je continue de voir son profil (pour débloquer),
+ * lui ne me voit plus (profil, recherche, listes, posts, séances).
+ */
+export async function blockUser(targetId: string): Promise<void> {
+  const sb = sbOrThrow()
+  const me = await myId()
+  if (targetId === me) throw new Error('Impossible de se bloquer soi-même')
+  await sb.from('follows').delete().eq('follower', me).eq('followed', targetId)
+  await sb.from('follows').delete().eq('follower', targetId).eq('followed', me)
+  await sb.from('follow_requests').delete().eq('requester', me).eq('target', targetId)
+  await sb.from('follow_requests').delete().eq('requester', targetId).eq('target', me)
+  const { error } = await sb.from('blocks').insert({ blocker: me, blocked: targetId })
+  if (error && !error.message.includes('duplicate')) throw new Error(`Blocage : ${error.message}`)
+}
+
+/** Débloquer. */
+export async function unblockUser(targetId: string): Promise<void> {
+  const sb = sbOrThrow()
+  const me = await myId()
+  const { error } = await sb.from('blocks').delete().eq('blocker', me).eq('blocked', targetId)
+  if (error) throw new Error(`Déblocage : ${error.message}`)
+}
+
+/** Ai-je bloqué target ? */
+export async function isBlockedByMe(targetId: string): Promise<boolean> {
+  const sb = sbOrThrow()
+  const me = await myId()
+  const { data, error } = await sb
+    .from('blocks')
+    .select('blocked')
+    .eq('blocker', me)
+    .eq('blocked', targetId)
+    .maybeSingle()
+  if (error) throw new Error(`Blocage : ${error.message}`)
+  return Boolean(data)
+}
+
+/** Comptes que j'ai bloqués, plus récents d'abord. */
+export async function listMyBlocks(): Promise<SocialProfile[]> {
+  const sb = sbOrThrow()
+  const me = await myId()
+  const { data, error } = await sb.from('blocks').select('blocked').eq('blocker', me)
+  if (error) throw new Error(`Bloqués : ${error.message}`)
+  const ids = ((data as { blocked: string }[] ?? []).map((b) => b.blocked))
+  const map = await fetchSocialProfiles(ids)
+  return ids.map((id) => map.get(id)).filter((p): p is SocialProfile => Boolean(p))
+}

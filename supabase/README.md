@@ -19,6 +19,9 @@ l'app reste 100 % locale et aucune page de login n'est exigée.
    d'accepter les candidatures).
 6. Puis exécutez `supabase/schema_follow_requests.sql` (demandes d'amis
    pour comptes privés + notifications entre utilisateurs).
+7. Puis exécutez `supabase/schema_blocks.sql` (blocage à sens unique +
+   retirer un abonné : masquage profil/recherche/listes/posts/séances
+   pour la personne bloquée).
 
 ## 2. Activer Google
 

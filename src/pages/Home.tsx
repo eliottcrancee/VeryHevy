@@ -8,7 +8,7 @@ import type { Post, SocialProfile } from '@/types'
 import { listFeed } from '@/lib/posts'
 import { cancelFollowRequest } from '@/lib/notifications'
 import { countUnread } from '@/lib/notifications'
-import { followStatus, requestFollow, searchProfiles } from '@/lib/social'
+import { followStatus, isBlockedByMe, requestFollow, searchProfiles } from '@/lib/social'
 import { Page, PageHeader } from '@/components/PageHeader'
 import { Button, Card, EmptyState, Input } from '@/components/ui'
 import { IconButton } from '@/components/ui'
@@ -177,6 +177,10 @@ export default function HomePage() {
     if (st === 'following') return
     setFollowBusy(p.id)
     try {
+      if (await isBlockedByMe(p.id)) {
+        notify(`@${p.username} est bloqué — débloque-le depuis son profil`, 'info')
+        return
+      }
       if (st === 'requested') {
         await cancelFollowRequest(p.id)
         setStatuses((s) => ({ ...s, [p.id]: 'none' }))

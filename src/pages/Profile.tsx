@@ -12,13 +12,17 @@ import {
 import { useAuth } from '@/lib/auth'
 import { useStore } from '@/store/store'
 import {
+  blockUser,
   fetchProfileByUsername,
   followStatus,
   getMyProfile,
+  isBlockedByMe,
   isUsernameAvailable,
   listFollowers,
   listFollowing,
+  removeFollower,
   requestFollow,
+  unblockUser,
   unfollowUser,
   updateMyProfile,
   type FollowState,
@@ -32,6 +36,7 @@ import { Page, PageHeader } from '@/components/PageHeader'
 import {
   Button,
   Card,
+  ConfirmDialog,
   EmptyState,
   Field,
   Input,
@@ -83,6 +88,8 @@ export default function ProfilePage() {
   const [publicProfile, setPublicProfile] = useState<SocialProfile | null | undefined>(undefined)
   const [loadingProfile, setLoadingProfile] = useState(true)
   const [following, setFollowing] = useState<FollowState>('none')
+  const [blockedByMe, setBlockedByMe] = useState(false)
+  const [confirmBlock, setConfirmBlock] = useState(false)
   const [followBusy, setFollowBusy] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [followList, setFollowList] = useState<{ tab: 'followers' | 'following'; userId: string; title: string } | null>(null)
@@ -118,9 +125,12 @@ export default function ProfilePage() {
           setPublicProfile(p)
           if (p && user && p.id !== user.id) {
             try {
-              setFollowing(await followStatus(p.id))
+              const [st, bl] = await Promise.all([followStatus(p.id), isBlockedByMe(p.id)])
+              setFollowing(st)
+              setBlockedByMe(bl)
             } catch {
               setFollowing('none')
+              setBlockedByMe(false)
             }
           }
           setLoadingProfile(false)
@@ -197,6 +207,36 @@ export default function ProfilePage() {
   /* ------------------------- vue profil public ------------------------- */
   if (isPublicView) {
     const p = publicProfile
+
+    const doBlock = async () => {
+      if (!p) return
+      setFollowBusy(true)
+      try {
+        await blockUser(p.id)
+        setBlockedByMe(true)
+        setFollowing('none')
+        notify(`@${p.username} bloqué : il ne te voit plus`, 'success')
+      } catch (err) {
+        notify(err instanceof Error ? err.message : 'Blocage impossible', 'error')
+      } finally {
+        setFollowBusy(false)
+        setConfirmBlock(false)
+      }
+    }
+
+    const doUnblock = async () => {
+      if (!p) return
+      setFollowBusy(true)
+      try {
+        await unblockUser(p.id)
+        setBlockedByMe(false)
+        notify(`@${p.username} débloqué`, 'success')
+      } catch (err) {
+        notify(err instanceof Error ? err.message : 'Déblocage impossible', 'error')
+      } finally {
+        setFollowBusy(false)
+      }
+    }
     return (
       <div>
         <PageHeader title={p ? `@${p.username}` : 'Profil'} back subtitle="Profil public" />
@@ -239,15 +279,39 @@ export default function ProfilePage() {
                 </div>
               </Card>
               {user && p.id !== user.id && (
-                <Button
-                  variant={following === 'none' ? 'primary' : 'secondary'}
-                  block
-                  disabled={followBusy}
-                  onClick={() => void toggleFollow()}
-                >
-                  {following === 'following' ? <UserMinus size={16} /> : <UserPlus size={16} />}
-                  {following === 'following' ? 'Ne plus suivre' : following === 'requested' ? 'Demandé — annuler' : p.visibility === 'private' ? 'Demander à suivre 🔒' : 'Suivre'}
-                </Button>
+                blockedByMe ? (
+                  <Card className="border-danger/40 bg-danger/10 p-3 text-center">
+                    <p className="text-sm font-bold">Profil bloqué 🚫</p>
+                    <p className="mt-0.5 text-xs text-muted">
+                      @{p.username} ne te voit plus. Tu le vois encore pour pouvoir le débloquer.
+                    </p>
+                    <div className="mt-2.5">
+                      <Button size="sm" disabled={followBusy} onClick={() => void doUnblock()}>
+                        Débloquer
+                      </Button>
+                    </div>
+                  </Card>
+                ) : (
+                  <>
+                    <Button
+                      variant={following === 'none' ? 'primary' : 'secondary'}
+                      block
+                      disabled={followBusy}
+                      onClick={() => void toggleFollow()}
+                    >
+                      {following === 'following' ? <UserMinus size={16} /> : <UserPlus size={16} />}
+                      {following === 'following' ? 'Ne plus suivre' : following === 'requested' ? 'Demandé — annuler' : p.visibility === 'private' ? 'Demander à suivre 🔒' : 'Suivre'}
+                    </Button>
+                    <button
+                      type="button"
+                      disabled={followBusy}
+                      onClick={() => setConfirmBlock(true)}
+                      className="mx-auto block text-xs font-semibold text-danger/80 underline decoration-dotted underline-offset-2"
+                    >
+                      Bloquer ce profil
+                    </button>
+                  </>
+                )
               )}
               <Card>
                 <EmptyState
@@ -268,6 +332,22 @@ export default function ProfilePage() {
                 .catch(() => {})
             }
           }}
+        />
+        <ConfirmDialog
+          open={confirmBlock}
+          title={`Bloquer @${publicProfile?.username} ?`}
+          message={
+            <>
+              Ce profil ne te verra plus : ni ton profil, ni tes posts, ni tes séances,
+              ni ta présence dans ses listes. Il ne pourra plus te suivre.
+              <br />
+              Toi, tu continueras de le voir pour pouvoir le débloquer (Réglages → Comptes bloqués).
+            </>
+          }
+          confirmLabel="Bloquer"
+          danger
+          onCancel={() => setConfirmBlock(false)}
+          onConfirm={() => void doBlock()}
         />
       </div>
     )
@@ -454,6 +534,19 @@ function FollowListModal({ info, onClose }: { info: FollowListInfo | null; onClo
     }
   }
 
+  const kick = async (id: string) => {
+    setBusyId(id)
+    try {
+      await removeFollower(id)
+      setLists((prev) => ({ ...prev, followers: (prev.followers ?? []).filter((p) => p.id !== id) }))
+      notify('Abonné retiré : il ne te suit plus', 'info')
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Action impossible', 'error')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
   return (
     <Modal open onClose={onClose} title={info.title}>
       <Tabs<'followers' | 'following'>
@@ -483,6 +576,11 @@ function FollowListModal({ info, onClose }: { info: FollowListInfo | null; onClo
               </button>
               {mine && tab === 'following' && (
                 <Button size="sm" variant="ghost" disabled={busyId === p.id} onClick={() => void remove(p.id)}>
+                  <UserMinus size={14} /> Retirer
+                </Button>
+              )}
+              {mine && tab === 'followers' && (
+                <Button size="sm" variant="ghost" disabled={busyId === p.id} onClick={() => void kick(p.id)}>
                   <UserMinus size={14} /> Retirer
                 </Button>
               )}

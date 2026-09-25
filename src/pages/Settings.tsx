@@ -1,6 +1,7 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
+  Ban,
   CloudDownload,
   Database,
   Download,
@@ -15,9 +16,10 @@ import {
   Trophy,
   Upload,
 } from 'lucide-react'
-import type { AppData } from '@/types'
+import type { AppData, SocialProfile } from '@/types'
 import { useStore } from '@/store/store'
 import { deleteCloudData } from '@/lib/cloudSync'
+import { listMyBlocks, unblockUser } from '@/lib/social'
 import { useAuth } from '@/lib/auth'
 import { isCloudEnabled } from '@/lib/supabase'
 import { Page, PageHeader } from '@/components/PageHeader'
@@ -71,6 +73,26 @@ export default function SettingsPage() {
   } | null>(null)
   const [busy, setBusy] = useState(false)
   const [confirmDeleteCloud, setConfirmDeleteCloud] = useState(false)
+  const [blocks, setBlocks] = useState<SocialProfile[]>([])
+  const [blocksLoaded, setBlocksLoaded] = useState(false)
+
+  useEffect(() => {
+    if (!cloudEnabled || !user) return
+    listMyBlocks().then((l) => { setBlocks(l); setBlocksLoaded(true) }).catch(() => setBlocksLoaded(true))
+  }, [cloudEnabled, user])
+
+  const doUnblock = async (id: string) => {
+    setBusy(true)
+    try {
+      await unblockUser(id)
+      setBlocks((prev) => prev.filter((p) => p.id !== id))
+      notify('Profil débloqué', 'success')
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Déblocage impossible', 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
   const [notifPerm, setNotifPerm] = useState<NotificationPermission | 'unsupported'>(() =>
     notificationPermission(),
   )
@@ -487,6 +509,40 @@ export default function SettingsPage() {
             </div>
           )}
         </Card>
+
+        {/* Comptes bloqués */}
+        {cloudEnabled && user && (
+          <Card className="space-y-3 p-4">
+            <SectionTitle className="mb-0">
+              <span className="inline-flex items-center gap-1.5">
+                <Ban size={13} /> Comptes bloqués
+              </span>
+            </SectionTitle>
+            <p className="text-xs text-muted">
+              Un profil bloqué ne te voit plus (profil, recherche, listes, posts, séances)
+              et ne peut plus te suivre. Toi, tu continues de le voir pour pouvoir le débloquer.
+            </p>
+            {!blocksLoaded ? (
+              <p className="text-sm text-muted">Chargement…</p>
+            ) : blocks.length === 0 ? (
+              <p className="text-sm text-muted">Aucun compte bloqué.</p>
+            ) : (
+              <div className="space-y-1.5">
+                {blocks.map((p) => (
+                  <div key={p.id} className="flex items-center gap-3 rounded-xl bg-surface-2 p-2">
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-bold">@{p.username ?? '?'}</span>
+                      {p.display_name && <span className="block truncate text-xs text-muted">{p.display_name}</span>}
+                    </span>
+                    <Button size="sm" variant="ghost" disabled={busy} onClick={() => void doUnblock(p.id)}>
+                      Débloquer
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        )}
 
         {/* À propos */}
         <Card className="space-y-2 p-4">
