@@ -24,8 +24,10 @@ import type { SessionVisibility, SocialProfile, SportSession } from '@/types'
 import {
   createSession,
   deleteSession,
+  isSessionPast,
   leaveSession,
   listInviteCandidates,
+  listPastSessions,
   listSessions,
   searchPlaces,
   type PlaceResult,
@@ -707,6 +709,7 @@ function SessionRow({ s, me, friend, selected, onSelect, distanceKm }: {
   distanceKm?: number | null
 }) {
   const full = s.spots_taken >= s.spots_total
+  const past = isSessionPast(s)
   return (
     <button
       type="button"
@@ -731,8 +734,8 @@ function SessionRow({ s, me, friend, selected, onSelect, distanceKm }: {
           {distanceKm != null ? ` · ${fmtDistance(distanceKm)}` : ''}
         </span>
       </span>
-      <span className={cn('shrink-0 rounded-lg px-2 py-1 text-[11px] font-extrabold', full ? 'bg-danger/10 text-danger' : 'bg-success/10 text-success')}>
-        {full ? 'Complet' : `${s.spots_total - s.spots_taken} place(s)`}
+      <span className={cn('shrink-0 rounded-lg px-2 py-1 text-[11px] font-extrabold', past ? 'bg-surface-3 text-muted' : full ? 'bg-danger/10 text-danger' : 'bg-success/10 text-success')}>
+        {past ? 'Terminée' : full ? 'Complet' : `${s.spots_total - s.spots_taken} place(s)`}
       </span>
     </button>
   )
@@ -751,6 +754,7 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
 }) {
   const notify = useStore((st) => st.notify)
   const full = s.spots_taken >= s.spots_total
+  const past = isSessionPast(s)
   const mine = s.host === me
   const [inviteOpen, setInviteOpen] = useState(false)
   const [members, setMembers] = useState<SessionMember[] | null>(null)
@@ -941,7 +945,20 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
       )}
 
       <div className="flex flex-wrap gap-2">
-        {mine ? (
+        {past ? (
+          mine ? (
+            <Button size="sm" variant="danger" disabled={busy} onClick={() => {
+              if (!window.confirm('Supprimer cette session ?')) return
+              void act(s.id, () => deleteSession(s.id), 'Session supprimée')
+            }}>Supprimer</Button>
+          ) : isMember ? (
+            <Button size="sm" variant="primary" block onClick={() => chatWith(s.host, s.host_profile ?? null)}>
+              <MessageCircle size={14} /> Discuter avec l’hôte
+            </Button>
+          ) : (
+            <p className="text-xs text-muted">Session terminée 🕓 — inscriptions closes.</p>
+          )
+        ) : mine ? (
           <>
             {s.visibility === 'invite' && (
               <Button size="sm" variant="secondary" onClick={() => setInviteOpen(true)}>
@@ -1009,8 +1026,8 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
         )}
       </div>
 
-      {/* Demandes à valider (hôte, sessions open + public). */}
-      {mine && s.visibility !== 'invite' && (
+      {/* Demandes à valider (hôte, sessions open + public, à venir uniquement). */}
+      {mine && !past && s.visibility !== 'invite' && (
         <div className="space-y-2 rounded-xl bg-surface-2 p-2.5">
           <p className="text-[11px] font-extrabold tracking-wide text-muted uppercase">
             {s.visibility === 'open' ? 'Candidatures' : 'Demandes'} ({pending.length})
@@ -1111,16 +1128,20 @@ function MySessionsView({ sessions, followIds, busyId, onChanged, onChat, act }:
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [pendingReqs, setPendingReqs] = useState<MyPendingRequest[]>([])
   const [invites, setInvites] = useState<MyInvite[]>([])
+  const [pastOnes, setPastOnes] = useState<SportSession[]>([])
   const [loading, setLoading] = useState(true)
 
   const refreshLocal = async () => {
     try {
-      const [r, i] = await Promise.all([
+      const [r, i, p] = await Promise.all([
         listMyPendingRequests().catch(() => [] as MyPendingRequest[]),
         listMyInvites().catch(() => [] as MyInvite[]),
+        listPastSessions().catch(() => [] as SportSession[]),
       ])
       setPendingReqs(r)
       setInvites(i)
+      // Historique : seulement celles où je suis concerné (créées/rejointes).
+      setPastOnes(p.filter((s) => s.host === user?.id || s.joined_by_me))
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Chargement impossible', 'error')
     }
@@ -1187,7 +1208,7 @@ function MySessionsView({ sessions, followIds, busyId, onChanged, onChat, act }:
 
   if (loading) return <p className="py-6 text-center text-sm text-muted">Chargement de tes séances…</p>
 
-  if (mine.length === 0 && joined.length === 0 && requested.length === 0 && invitedOnes.length === 0) {
+  if (mine.length === 0 && joined.length === 0 && requested.length === 0 && invitedOnes.length === 0 && pastOnes.length === 0) {
     return (
       <Card>
         <EmptyState
@@ -1209,6 +1230,7 @@ function MySessionsView({ sessions, followIds, busyId, onChanged, onChat, act }:
       )}
       {section('🤝 Où je suis inscrit', joined, 'Aucune inscription pour l’instant.')}
       {section('📣 Créées par moi', mine, 'Aucune séance créée pour l’instant.')}
+      {pastOnes.length > 0 && section('🕓 Terminées', pastOnes, '')}
     </div>
   )
 }

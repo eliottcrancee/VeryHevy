@@ -19,6 +19,13 @@ async function myId(): Promise<string> {
   return session.user.id
 }
 
+/** Une séance est "passée" 3 h après son début (fin de la découverte). */
+export const SESSION_PAST_AFTER_MS = 3 * 3600 * 1000
+
+export function isSessionPast(s: Pick<SportSession, 'starts_at'>): boolean {
+  return new Date(s.starts_at).getTime() < Date.now() - SESSION_PAST_AFTER_MS
+}
+
 async function enrich(list: SportSession[], me: string): Promise<SportSession[]> {
   if (!list.length) return list
   const hosts = await fetchSocialProfiles([...new Set(list.map((s) => s.host))])
@@ -45,8 +52,22 @@ export async function listSessions(limit = 200): Promise<SportSession[]> {
   const { data, error } = await sb
     .from('sessions')
     .select('*')
-    .gte('starts_at', new Date(Date.now() - 3 * 3600 * 1000).toISOString())
+    .gte('starts_at', new Date(Date.now() - SESSION_PAST_AFTER_MS).toISOString())
     .order('starts_at', { ascending: true })
+    .limit(limit)
+  if (error) throw new Error(`Sessions : ${error.message}`)
+  return enrich((data as SportSession[]) ?? [], me)
+}
+
+/** Séances passées me concernant (créées ou rejointes) : historique. */
+export async function listPastSessions(limit = 50): Promise<SportSession[]> {
+  const sb = sbOrThrow()
+  const me = await myId()
+  const { data, error } = await sb
+    .from('sessions')
+    .select('*')
+    .lt('starts_at', new Date(Date.now() - SESSION_PAST_AFTER_MS).toISOString())
+    .order('starts_at', { ascending: false })
     .limit(limit)
   if (error) throw new Error(`Sessions : ${error.message}`)
   return enrich((data as SportSession[]) ?? [], me)
