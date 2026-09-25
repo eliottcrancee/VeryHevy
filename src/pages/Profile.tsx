@@ -28,10 +28,11 @@ import {
   type FollowState,
 } from '@/lib/social'
 import { cancelFollowRequest } from '@/lib/notifications'
-import { listMyPosts } from '@/lib/posts'
+import { listMyPosts, listUserPosts } from '@/lib/posts'
 import { PostCard } from '@/components/PostCard'
 import type { Post, PostVisibility, SocialProfile } from '@/types'
 import { normalizeUsername } from '@/types'
+import { formatDuration, formatVolume } from '@/lib/utils'
 import { Page, PageHeader } from '@/components/PageHeader'
 import {
   Button,
@@ -95,8 +96,22 @@ export default function ProfilePage() {
   const [followList, setFollowList] = useState<{ tab: 'followers' | 'following'; userId: string; title: string } | null>(null)
   const [myPosts, setMyPosts] = useState<Post[]>([])
   const [loadingPosts, setLoadingPosts] = useState(false)
+  const [userPosts, setUserPosts] = useState<Post[]>([])
+  const [loadingUserPosts, setLoadingUserPosts] = useState(false)
 
   const isPublicView = Boolean(routeUsername)
+
+  const refreshUserPosts = useCallback(async (uid: string) => {
+    if (!cloudEnabled) return
+    setLoadingUserPosts(true)
+    try {
+      setUserPosts(await listUserPosts(uid, 20, 0))
+    } catch {
+      setUserPosts([])
+    } finally {
+      setLoadingUserPosts(false)
+    }
+  }, [cloudEnabled])
 
   const refreshMine = useCallback(async () => {
     if (!cloudEnabled || !user) {
@@ -123,6 +138,7 @@ export default function ProfilePage() {
       fetchProfileByUsername(routeUsername)
         .then(async (p) => {
           setPublicProfile(p)
+          if (p) void refreshUserPosts(p.id)
           if (p && user && p.id !== user.id) {
             try {
               const [st, bl] = await Promise.all([followStatus(p.id), isBlockedByMe(p.id)])
@@ -143,7 +159,7 @@ export default function ProfilePage() {
     } else {
       void refreshMine()
     }
-  }, [routeUsername, cloudEnabled, user, refreshMine])
+  }, [routeUsername, cloudEnabled, user, refreshMine, refreshUserPosts])
 
   const done = completedWorkouts(workouts)
 
@@ -256,6 +272,7 @@ export default function ProfilePage() {
                     {p.display_name ?? `@${p.username}`}
                     {p.visibility === 'private' && <span className="ml-1.5 text-sm" title="Compte privé">🔒</span>}
                   </p>
+                  {p.display_name && <p className="truncate text-sm text-muted">@{p.username}</p>}
                   {p.bio && <p className="mt-1 text-sm">{p.bio}</p>}
                   {p.city && <p className="mt-0.5 text-xs text-muted">📍 {p.city}</p>}
                   <p className="mt-1.5 text-xs font-semibold text-muted">
@@ -313,12 +330,27 @@ export default function ProfilePage() {
                   </>
                 )
               )}
-              <Card>
-                <EmptyState
-                  title="Ses séances partagées arrivent ici"
-                  message="Les posts (Étape C) afficheront ses séances publiques ou followers."
-                />
-              </Card>
+              <PublicMiniStats posts={userPosts} />
+              {loadingUserPosts ? (
+                <p className="py-4 text-center text-sm text-muted">Chargement des séances…</p>
+              ) : userPosts.length === 0 ? (
+                <Card>
+                  <EmptyState
+                    title="Aucune séance visible"
+                    message={
+                      following === 'following' || user?.id === p.id
+                        ? `@${p.username} n'a pas encore publié de séance.`
+                        : `Suis @${p.username} pour voir ses séances réservées aux abonnés.`
+                    }
+                  />
+                </Card>
+              ) : (
+                <div className="space-y-3">
+                  {userPosts.map((post) => (
+                    <PostCard key={post.id} post={post} onChanged={() => void refreshUserPosts(p.id)} />
+                  ))}
+                </div>
+              )}
             </>
           )}
         </Page>
@@ -477,7 +509,33 @@ export default function ProfilePage() {
 
 /* ------------------------- listes abonnés/abonnements ------------------------- */
 
-export interface FollowListInfo {
+/** Quelques chiffres d'après ses posts visibles (snapshots). */
+function PublicMiniStats({ posts }: { posts: Post[] }) {
+  const snaps = posts.map((p) => p.workout_snapshot).filter((s): s is NonNullable<typeof s> => Boolean(s))
+  if (snaps.length === 0) return null
+  const sets = snaps.reduce((n, s) => n + s.sets, 0)
+  const volume = snaps.reduce((n, s) => n + s.volume, 0)
+  const seconds = snaps.reduce((n, s) => n + s.seconds, 0)
+  const cells: { value: string; label: string }[] = [
+    { value: String(posts.length), label: 'Séances' },
+    { value: String(sets), label: 'Séries' },
+    { value: formatVolume(volume, 'kg'), label: 'Volume' },
+    { value: formatDuration(seconds, 'compact'), label: 'Temps' },
+  ]
+  return (
+    <div>
+      <div className="grid grid-cols-4 gap-2">
+        {cells.map((c) => (
+          <div key={c.label} className="rounded-xl bg-surface-2 px-1 py-2 text-center">
+            <p className="tabular truncate text-sm font-extrabold">{c.value}</p>
+            <p className="text-[10px] font-semibold text-muted uppercase">{c.label}</p>
+          </div>
+        ))}
+      </div>
+      <p className="mt-1 text-center text-[10px] text-muted">D'après ses {posts.length} post(s) visible(s)</p>
+    </div>
+  )
+}export interface FollowListInfo {
   tab: 'followers' | 'following'
   userId: string
   title: string

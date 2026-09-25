@@ -141,6 +141,33 @@ export async function listFeed(limit = 20, offset = 0): Promise<Post[]> {
   }))
 }
 
+/** Posts d'un utilisateur (profil public) : RLS filtre selon visibilité. */
+export async function listUserPosts(userId: string, limit = 20, offset = 0): Promise<Post[]> {
+  const sb = sbOrThrow()
+  const me = await myId()
+  const { data, error } = await sb
+    .from('posts')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .range(offset, offset + limit - 1)
+  if (error) throw new Error(`Posts : ${error.message}`)
+  const posts = (data as Post[]) ?? []
+  if (!posts.length) return posts
+  const authors = await fetchSocialProfiles([userId])
+  const { data: likes } = await sb
+    .from('post_likes')
+    .select('post_id')
+    .eq('user_id', me)
+    .in('post_id', posts.map((p) => p.id))
+  const liked = new Set(((likes as { post_id: string }[] ?? []).map((l) => l.post_id)))
+  return posts.map((p) => ({
+    ...p,
+    author: authors.get(p.user_id) ?? null,
+    liked_by_me: liked.has(p.id),
+  }))
+}
+
 /** Mes posts (onglet Séances du Profil, Étape C+). */
 export async function listMyPosts(limit = 20, offset = 0): Promise<Post[]> {
   const sb = sbOrThrow()

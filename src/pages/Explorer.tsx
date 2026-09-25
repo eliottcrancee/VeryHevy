@@ -3,7 +3,6 @@ import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from 'react-lea
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import {
-  CalendarPlus,
   Check,
   CloudOff,
   LocateFixed,
@@ -295,16 +294,11 @@ export default function ExplorerPage() {
     <div>
       <PageHeader
         title="Explorer"
-        subtitle="Séances autour de toi — rejoins ou propose"
+        subtitle="Touche la carte pour proposer une séance"
         actions={
-          <>
-            <IconButton label="Me localiser" onClick={locate}>
-              <LocateFixed size={20} />
-            </IconButton>
-            <IconButton label="Proposer une séance" onClick={() => setCreateOpen(true)}>
-              <Plus size={22} />
-            </IconButton>
-          </>
+          <IconButton label="Me localiser" onClick={locate}>
+            <LocateFixed size={20} />
+          </IconButton>
         }
       >
         <div className="mx-auto w-full max-w-5xl space-y-2 px-4 pb-3">
@@ -364,14 +358,14 @@ export default function ExplorerPage() {
             {loading ? (
               <p className="text-sm text-muted">Chargement…</p>
             ) : reco.length === 0 ? (
-              <Card>
-                <EmptyState
-                  icon={<MapPin size={24} />}
-                  title="Rien pour l'instant"
-                  message="Suis des sportifs pour voir leurs séances ici en premier, ou propose la tienne."
-                  action={<Button variant="primary" onClick={() => setCreateOpen(true)}><CalendarPlus size={16} /> Proposer une séance</Button>}
-                />
-              </Card>
+                <Card>
+                  <EmptyState
+                    icon={<MapPin size={24} />}
+                    title="Rien pour l'instant"
+                    message="Suis des sportifs pour voir leurs séances ici en premier, ou place un point sur la carte."
+                    action={<Button variant="primary" onClick={() => setView('carte')}><MapPin size={16} /> Choisir un point sur la carte</Button>}
+                  />
+                </Card>
             ) : (
               reco.map((s) => (
                 <div key={s.id} className="space-y-2">
@@ -472,8 +466,7 @@ export default function ExplorerPage() {
                   <EmptyState
                     icon={<MapPin size={24} />}
                     title="Aucune séance ici pour l'instant"
-                    message="Touche la carte pour choisir un point, ou propose la tienne."
-                    action={<Button variant="primary" onClick={() => setCreateOpen(true)}><CalendarPlus size={16} /> Proposer une séance</Button>}
+                    message="Touche la carte pour choisir un point, puis « Proposer ici »."
                   />
                 </Card>
               ) : (
