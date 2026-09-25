@@ -1006,7 +1006,7 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
                 </IconButton>
               )}
               items={[
-                { label: t('session.edit'), icon: <Pencil size={15} />, hidden: !mine, onClick: () => setEditOpen(true) },
+                { label: t('session.edit'), icon: <Pencil size={15} />, hidden: !mine || past, onClick: () => setEditOpen(true) },
                 {
                   label: t('common.delete'),
                   icon: <Trash2 size={15} />,
