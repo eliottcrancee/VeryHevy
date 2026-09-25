@@ -8,13 +8,11 @@ import {
   Check,
   CloudOff,
   LocateFixed,
-  Map as MapIcon,
   MapPin,
   MessageCircle,
   Plus,
   Search,
   Send,
-  Sparkles,
   Users,
   X,
 } from 'lucide-react'
@@ -28,7 +26,6 @@ import {
   leaveSession,
   listInviteCandidates,
   listPastSessions,
-  listSessions,
   searchPlaces,
   updateSession,
   type PlaceResult,
@@ -69,6 +66,7 @@ import { ProfileAvatar, ProfileLine, profileLinkOf, profileNameOf } from '@/comp
 import { Button, Card, Chip, EmptyState, Field, Input, Modal, Select, Tabs, Textarea } from '@/components/ui'
 import { IconButton } from '@/components/ui'
 import { ReportDialog } from '@/components/ReportDialog'
+import { loadSessions, peekSessions } from '@/lib/pagePreload'
 import { cn } from '@/lib/utils'
 
 const FRANCE: [number, number] = [46.603354, 1.888334]
@@ -245,9 +243,9 @@ export default function ExplorerPage() {
   const notify = useStore((s) => s.notify)
 
   const [view, setView] = useState<View>('carte')
-  const [sessions, setSessions] = useState<SportSession[]>([])
+  const [sessions, setSessions] = useState<SportSession[]>(() => user ? (peekSessions(user.id) ?? []) : [])
   const [followIds, setFollowIds] = useState<Set<string>>(new Set())
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(() => !user || !peekSessions(user.id))
   const [dayFilter, setDayFilter] = useState<DayFilter>('all')
   const [recoQuery, setRecoQuery] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -269,11 +267,11 @@ export default function ExplorerPage() {
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const reload = async () => {
-    if (!cloudEnabled) return
-    setLoading(true)
+    if (!cloudEnabled || !user) return
+    if (!peekSessions(user.id)) setLoading(true)
     try {
       const [list, follows] = await Promise.all([
-        listSessions(),
+        loadSessions(user.id, true),
         listMyFollowIds().catch(() => new Set<string>()),
       ])
       setSessions(list)
@@ -288,7 +286,7 @@ export default function ExplorerPage() {
   useEffect(() => {
     void reload()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cloudEnabled])
+  }, [cloudEnabled, user?.id])
 
   useEffect(() => {
     if (!cloudEnabled || !user) return
@@ -296,7 +294,7 @@ export default function ExplorerPage() {
     refresh()
     const id = setInterval(refresh, 30_000)
     return () => clearInterval(id)
-  }, [cloudEnabled, user])
+  }, [cloudEnabled, user?.id])
 
   useEffect(() => {
     const messageId = searchParams.get('message')
@@ -489,38 +487,14 @@ export default function ExplorerPage() {
           <Tabs<View>
             value={view}
             onChange={setView}
-            className="grid grid-cols-2 sm:grid-cols-4"
+            className="w-full [&>button]:shrink-0 [&>button]:whitespace-nowrap [&>button]:px-2"
             tabs={[
-              { value: 'carte', label: 'Carte', icon: <MapIcon size={14} /> },
-              { value: 'reco', label: 'Recommandations', icon: <Sparkles size={14} /> },
-              { value: 'mine', label: 'Mes séances', icon: <CalendarCheck size={14} /> },
-              { value: 'messages', label: unreadMessages ? `Messages (${unreadMessages})` : 'Messages', icon: <MessageCircle size={14} /> },
+              { value: 'carte', label: 'Carte' },
+              { value: 'reco', label: 'Pour toi' },
+              { value: 'mine', label: 'Mes séances' },
+              { value: 'messages', label: unreadMessages ? `Messages · ${unreadMessages}` : 'Messages' },
             ]}
           />
-          {view === 'carte' && (
-            <>
-              <div className="relative">
-                <Search size={15} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted" />
-                <Input aria-label="Rechercher une ville ou une salle" value={q} onChange={(e) => onQuery(e.target.value)} placeholder="Ville, salle… (ex. Basic-Fit Lyon)" className="pl-9" />
-                {(searching || results.length > 0) && (
-                  <div className="absolute inset-x-0 top-full z-50 mt-1 overflow-hidden rounded-xl border border-line bg-surface shadow-xl">
-                    {searching && <p className="px-3 py-2 text-xs text-muted">Recherche…</p>}
-                    {results.map((r, i) => (
-                      <button key={i} type="button" onClick={() => goPlace(r)} className="block w-full truncate px-3 py-2 text-left text-[13px] hover:bg-surface-2">
-                        📍 {r.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1">
-                <Chip active={dayFilter === 'all'} onClick={() => setDayFilter('all')}>Tout</Chip>
-                <Chip active={dayFilter === 'today'} onClick={() => setDayFilter('today')}>Aujourd’hui</Chip>
-                <Chip active={dayFilter === 'tomorrow'} onClick={() => setDayFilter('tomorrow')}>Demain</Chip>
-                <Chip active={dayFilter === 'weekend'} onClick={() => setDayFilter('weekend')}>Ce week-end</Chip>
-              </div>
-            </>
-          )}
         </div>
       </PageHeader>
 
@@ -630,6 +604,28 @@ export default function ExplorerPage() {
           </div>
         ) : (
           <>
+            <div className="space-y-2">
+              <div className="relative">
+                <Search size={15} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted" />
+                <Input aria-label="Rechercher une ville ou une salle" value={q} onChange={(e) => onQuery(e.target.value)} placeholder="Ville, salle… (ex. Basic-Fit Lyon)" className="pl-9" />
+                {(searching || results.length > 0) && (
+                  <div className="absolute inset-x-0 top-full z-50 mt-1 overflow-hidden rounded-xl border border-line bg-surface shadow-xl">
+                    {searching && <p className="px-3 py-2 text-xs text-muted">Recherche…</p>}
+                    {results.map((r, i) => (
+                      <button key={i} type="button" onClick={() => goPlace(r)} className="block w-full truncate px-3 py-2 text-left text-[13px] hover:bg-surface-2">
+                        📍 {r.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1">
+                <Chip active={dayFilter === 'all'} onClick={() => setDayFilter('all')}>Tout</Chip>
+                <Chip active={dayFilter === 'today'} onClick={() => setDayFilter('today')}>Aujourd’hui</Chip>
+                <Chip active={dayFilter === 'tomorrow'} onClick={() => setDayFilter('tomorrow')}>Demain</Chip>
+                <Chip active={dayFilter === 'weekend'} onClick={() => setDayFilter('weekend')}>Ce week-end</Chip>
+              </div>
+            </div>
             {/* relative z-0 : contexte d'empilement pour que les panneaux
                 Leaflet (z-index internes élevés) restent SOUS les modales. */}
             <div className="relative z-0 overflow-hidden rounded-2xl border border-line">

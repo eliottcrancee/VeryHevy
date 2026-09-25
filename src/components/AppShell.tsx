@@ -18,6 +18,8 @@ import { selectActiveWorkout, useStore } from '@/store/store'
 import { Button, IconButton, Toaster } from '@/components/ui'
 import { ScrollTargetProvider } from '@/components/ui'
 import { Logo } from '@/components/Logo'
+import { useAuth } from '@/lib/auth'
+import { loadHome, loadMyPosts, loadMyProfile, loadSessions } from '@/lib/pagePreload'
 
 const NAV = [
   { to: '/', label: 'Accueil', icon: House, end: true },
@@ -186,11 +188,24 @@ function ActiveWorkoutPill({ compact }: { compact?: boolean }) {
 /* ------------------------------------------------------------------ */
 
 export function AppShell() {
+  const { cloudEnabled, user } = useAuth()
   const toasts = useStore((s) => s.toasts)
   const location = useLocation()
   const [scrollEl, setScrollEl] = useState<HTMLElement | null>(null)
   const activeWorkout = useStore(selectActiveWorkout)
   const bottomStackRef = useRef<HTMLDivElement>(null)
+
+  // Prépare les écrans principaux dès l'entrée dans l'app. Les pages affichent
+  // ces données immédiatement, puis les rafraîchissent sans écran vide.
+  useEffect(() => {
+    if (!cloudEnabled || !user) return
+    void Promise.allSettled([
+      loadHome(user.id),
+      loadSessions(user.id),
+      loadMyProfile(user.id),
+      loadMyPosts(user.id),
+    ])
+  }, [cloudEnabled, user?.id])
 
   // remonte en haut à chaque navigation
   useEffect(() => {

@@ -5,7 +5,8 @@ import { useAuth } from '@/lib/auth'
 import { useStore } from '@/store/store'
 import type { FollowState } from '@/lib/social'
 import type { Post, SocialProfile } from '@/types'
-import { listDiscoverPosts, listFeed } from '@/lib/posts'
+import { listFeed } from '@/lib/posts'
+import { loadHome, peekHome } from '@/lib/pagePreload'
 import { cancelFollowRequest } from '@/lib/notifications'
 import { countUnread } from '@/lib/notifications'
 import { followStatus, isBlockedByMe, requestFollow, searchProfiles } from '@/lib/social'
@@ -24,16 +25,17 @@ const PAGE_SIZE = 20
 export default function HomePage() {
   const navigate = useNavigate()
   const { cloudEnabled, user } = useAuth()
+  const userId = user?.id
   const notify = useStore((s) => s.notify)
   const startWorkout = useStore((s) => s.startWorkout)
   const activeId = useStore((s) => s.activeWorkoutId)
   const workouts = useStore((s) => s.workouts)
 
-  const [posts, setPosts] = useState<Post[]>([])
-  const [loading, setLoading] = useState(true)
+  const [posts, setPosts] = useState<Post[]>(() => user ? (peekHome(user.id)?.posts ?? []) : [])
+  const [loading, setLoading] = useState(() => !user || !peekHome(user.id))
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(true)
-  const [discover, setDiscover] = useState<Post[]>([])
+  const [discover, setDiscover] = useState<Post[]>(() => user ? (peekHome(user.id)?.discover ?? []) : [])
   const [feedError, setFeedError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
 
@@ -51,17 +53,16 @@ export default function HomePage() {
   const pullDist = useRef(0)
 
   const load = useCallback(async (offset: number, append: boolean) => {
-    if (!cloudEnabled || !user) return
+    if (!cloudEnabled || !userId) return
     if (append) setLoadingMore(true)
-    else setLoading(true)
+    else if (!peekHome(userId)) setLoading(true)
     try {
-      const page = await listFeed(PAGE_SIZE, offset)
+      const first = append ? null : await loadHome(userId, true)
+      const page = first?.posts ?? await listFeed(PAGE_SIZE, offset)
       setFeedError(null)
       setPosts((prev) => (append ? [...prev, ...page] : page))
       setHasMore(page.length === PAGE_SIZE)
-      if (!append && page.length === 0) {
-        setDiscover(await listDiscoverPosts())
-      } else if (!append) setDiscover([])
+      if (!append) setDiscover(first?.discover ?? [])
     } catch (err) {
       setFeedError(err instanceof Error ? err.message : 'Feed illisible')
     } finally {
@@ -69,7 +70,7 @@ export default function HomePage() {
       setLoadingMore(false)
       setRefreshing(false)
     }
-  }, [cloudEnabled, user, notify])
+  }, [cloudEnabled, userId])
 
   useEffect(() => {
     void load(0, false)
@@ -89,7 +90,7 @@ export default function HomePage() {
     fetch()
     const id = setInterval(fetch, 30_000)
     return () => clearInterval(id)
-  }, [cloudEnabled, user])
+  }, [cloudEnabled, userId])
 
   /* Recherche floue : suggestions dès 2 lettres (débounce 300 ms). */
   useEffect(() => {

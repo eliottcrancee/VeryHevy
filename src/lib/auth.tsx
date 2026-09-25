@@ -36,17 +36,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let alive = true
     let revision = 0
     let receivedAuthEvent = false
+    let activeUserId: string | null | undefined
     const applySession = async (next: Session | null) => {
       const current = ++revision
-      setLoading(true)
+      const nextUserId = next?.user.id ?? null
+      const changedAccount = activeUserId === undefined || activeUserId !== nextUserId
+      if (changedAccount) setLoading(true)
       try {
-        await activateAccount(next?.user.id ?? null)
+        if (changedAccount) await activateAccount(nextUserId)
         if (alive && current === revision) {
+          activeUserId = nextUserId
           setSession(next)
-          if (next?.user) syncAccountAfterSwitch(next.user.id)
+          if (changedAccount && next?.user) syncAccountAfterSwitch(next.user.id)
         }
       } finally {
-        if (alive && current === revision) setLoading(false)
+        if (changedAccount && alive && current === revision) setLoading(false)
       }
     }
     void supabase.auth.getSession().then(({ data }) => {

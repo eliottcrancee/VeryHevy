@@ -15,7 +15,6 @@ import {
   blockUser,
   fetchProfileByUsername,
   followStatus,
-  getMyProfile,
   isBlockedByMe,
   isUsernameAvailable,
   listFollowers,
@@ -31,6 +30,7 @@ import {
 } from '@/lib/social'
 import { cancelFollowRequest } from '@/lib/notifications'
 import { listMyPosts, listUserPosts } from '@/lib/posts'
+import { loadMyPosts, loadMyProfile, peekMyPosts, peekMyProfile } from '@/lib/pagePreload'
 import { PostCard } from '@/components/PostCard'
 import { ReportDialog } from '@/components/ReportDialog'
 import { ProfileAvatar } from '@/components/ProfileAvatar'
@@ -82,6 +82,7 @@ function Avatar({ url, name, size = 64 }: { url?: string | null; name: string; s
 export default function ProfilePage() {
   const { username: routeUsername } = useParams()
   const { user, cloudEnabled } = useAuth()
+  const userId = user?.id
   const navigate = useNavigate()
   const workouts = useStore((s) => s.workouts)
   const settings = useStore((s) => s.settings)
@@ -89,9 +90,9 @@ export default function ProfilePage() {
   const notify = useStore((s) => s.notify)
 
   const [tab, setTab] = useState<Tab>('posts')
-  const [myProfile, setMyProfile] = useState<SocialProfile | null>(null)
+  const [myProfile, setMyProfile] = useState<SocialProfile | null>(() => userId ? (peekMyProfile(userId) ?? null) : null)
   const [publicProfile, setPublicProfile] = useState<SocialProfile | null | undefined>(undefined)
-  const [loadingProfile, setLoadingProfile] = useState(true)
+  const [loadingProfile, setLoadingProfile] = useState(() => Boolean(routeUsername) || !userId || peekMyProfile(userId) === undefined)
   const [following, setFollowing] = useState<FollowState>('none')
   const [blockedByMe, setBlockedByMe] = useState(false)
   const [confirmBlock, setConfirmBlock] = useState(false)
@@ -99,7 +100,7 @@ export default function ProfilePage() {
   const [followBusy, setFollowBusy] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [followList, setFollowList] = useState<{ tab: 'followers' | 'following'; userId: string; title: string } | null>(null)
-  const [myPosts, setMyPosts] = useState<Post[]>([])
+  const [myPosts, setMyPosts] = useState<Post[]>(() => userId ? (peekMyPosts(userId) ?? []) : [])
   const [loadingPosts, setLoadingPosts] = useState(false)
   const [myPostsMore, setMyPostsMore] = useState(false)
   const [myPostsError, setMyPostsError] = useState<string | null>(null)
@@ -126,21 +127,21 @@ export default function ProfilePage() {
   }, [cloudEnabled])
 
   const refreshMine = useCallback(async () => {
-    if (!cloudEnabled || !user) {
+    if (!cloudEnabled || !userId) {
       setLoadingProfile(false)
       return
     }
     try {
-      setMyProfile(await getMyProfile())
+      setMyProfile(await loadMyProfile(userId, true))
     } catch {
       setMyProfile(null)
     } finally {
       setLoadingProfile(false)
     }
-  }, [cloudEnabled, user])
+  }, [cloudEnabled, userId])
 
   useEffect(() => {
-    setLoadingProfile(true)
+    setLoadingProfile(Boolean(routeUsername) || !userId || peekMyProfile(userId) === undefined)
     setPublicProfile(undefined)
     if (routeUsername) {
       if (!cloudEnabled) {
@@ -151,7 +152,7 @@ export default function ProfilePage() {
         .then(async (p) => {
           setPublicProfile(p)
           if (p) void refreshUserPosts(p.id)
-          if (p && user && p.id !== user.id) {
+          if (p && userId && p.id !== userId) {
             try {
               const [st, bl] = await Promise.all([followStatus(p.id), isBlockedByMe(p.id)])
               setFollowing(st)
@@ -171,15 +172,15 @@ export default function ProfilePage() {
     } else {
       void refreshMine()
     }
-  }, [routeUsername, cloudEnabled, user, refreshMine, refreshUserPosts])
+  }, [routeUsername, cloudEnabled, userId, refreshMine, refreshUserPosts])
 
   const done = completedWorkouts(workouts)
 
   const refreshPosts = useCallback(async () => {
-    if (!cloudEnabled || !user) return
-    setLoadingPosts(true)
+    if (!cloudEnabled || !userId) return
+    if (!peekMyPosts(userId)) setLoadingPosts(true)
     try {
-      const page = await listMyPosts(20, 0)
+      const page = await loadMyPosts(userId, true)
       setMyPosts(page)
       setMyPostsMore(page.length === 20)
       setMyPostsError(null)
@@ -188,7 +189,7 @@ export default function ProfilePage() {
     } finally {
       setLoadingPosts(false)
     }
-  }, [cloudEnabled, user])
+  }, [cloudEnabled, userId])
 
   const moreUserPosts = async (uid: string) => {
     setLoadingUserPosts(true)

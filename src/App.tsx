@@ -3,8 +3,8 @@ import { Navigate, Outlet, Route, Routes } from 'react-router-dom'
 import { AppShell } from '@/components/AppShell'
 import { Logo } from '@/components/Logo'
 import { useAuth } from '@/lib/auth'
-import { getMyProfile } from '@/lib/social'
 import { useHydrated } from '@/store/store'
+import { loadMyProfile } from '@/lib/pagePreload'
 import { useThemeEffect } from '@/hooks/app'
 import HomePage from '@/pages/Home'
 import ExplorerPage from '@/pages/Explorer'
@@ -47,21 +47,22 @@ function RequireAuth() {
  */
 function RequireUsername() {
   const { cloudEnabled, user, loading } = useAuth()
+  const userId = user?.id
   const [checking, setChecking] = useState(true)
   const [hasUsername, setHasUsername] = useState(true)
 
   useEffect(() => {
-    if (!cloudEnabled || loading || !user) {
+    if (!cloudEnabled || loading || !userId) {
       setChecking(false)
       return
     }
     let alive = true
     setChecking(true)
-    getMyProfile()
+    loadMyProfile(userId)
       .then((p) => { if (alive) { setHasUsername(Boolean(p?.username)); setChecking(false) } })
       .catch(() => { if (alive) setChecking(false) })
     return () => { alive = false }
-  }, [cloudEnabled, user, loading])
+  }, [cloudEnabled, userId, loading])
 
   if (!cloudEnabled || !user) return <Outlet />
   if (loading || checking) {
