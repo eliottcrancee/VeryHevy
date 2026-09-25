@@ -9,6 +9,8 @@ l'app reste 100 % locale et aucune page de login n'est exigée.
 1. https://supabase.com/dashboard → New project.
 2. SQL Editor → collez et exécutez `supabase/schema.sql`
    (tables `profiles`, `workouts`, `routines`, `exercises`, `deleted_items` + RLS + trigger profil auto).
+3. Puis exécutez `supabase/schema_friends.sql` (social : table `friendships`,
+   lecture entre amis acceptés, recherche par email — privé par défaut).
 
 ## 2. Activer Google
 

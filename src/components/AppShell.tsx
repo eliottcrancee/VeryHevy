@@ -270,6 +270,18 @@ export function AppShell() {
 
           <div className="mt-auto flex flex-col gap-1">
             <NavLink
+              to="/amis"
+              className={({ isActive }) =>
+                cn(
+                  'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors',
+                  isActive ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-surface-2 hover:text-ink',
+                )
+              }
+            >
+              <Users size={18} />
+              Amis
+            </NavLink>
+            <NavLink
               to="/calendrier"
               className={({ isActive }) =>
                 cn(

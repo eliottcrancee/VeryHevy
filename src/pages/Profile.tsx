@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { CloudOff, LogOut, RefreshCw, Trash2 } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { CloudOff, LogOut, RefreshCw, Trash2, Users } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
 import { deleteCloudData, syncCloudNow } from '@/lib/cloudSync'
 import { useStore } from '@/store/store'
@@ -118,6 +118,21 @@ export default function ProfilePage() {
             )}
           </div>
         </Card>
+
+        {cloudEnabled && user && (
+          <Card className="flex items-center gap-3 p-4">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent">
+              <Users size={20} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold">Mes amis</p>
+              <p className="truncate text-xs text-muted">Ajoutez des amis par email et voyez leurs séances.</p>
+            </div>
+            <Link to="/amis">
+              <Button size="sm" variant="primary">Voir</Button>
+            </Link>
+          </Card>
+        )}
       </Page>
 
       <ConfirmDialog

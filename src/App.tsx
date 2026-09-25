@@ -14,6 +14,7 @@ import HistoryPage from '@/pages/History'
 import WorkoutReportPage from '@/pages/WorkoutReport'
 import StatsPage from '@/pages/Stats'
 import CalendarPage from '@/pages/Calendar'
+import FriendsPage from '@/pages/Friends'
 import GymBroPage from '@/pages/GymBro'
 import SettingsPage from '@/pages/Settings'
 import LoginPage from '@/pages/Login'
@@ -67,6 +68,7 @@ export default function App() {
           <Route path="historique/:id" element={<WorkoutReportPage />} />
           <Route path="stats" element={<StatsPage />} />
           <Route path="calendrier" element={<CalendarPage />} />
+          <Route path="amis" element={<FriendsPage />} />
           <Route path="gymbro" element={<GymBroPage />} />
           <Route path="profil" element={<ProfilePage />} />
           <Route path="reglages" element={<SettingsPage />} />
