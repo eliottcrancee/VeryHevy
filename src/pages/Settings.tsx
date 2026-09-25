@@ -17,7 +17,6 @@ import {
 } from 'lucide-react'
 import type { AppData } from '@/types'
 import { useStore } from '@/store/store'
-import { syncNow } from '@/lib/sync'
 import { syncCloudNow } from '@/lib/cloudSync'
 import { useAuth } from '@/lib/auth'
 import { isCloudEnabled } from '@/lib/supabase'
@@ -29,7 +28,6 @@ import {
   Checkbox,
   ConfirmDialog,
   Field,
-  Input,
   NumberField,
   SectionTitle,
   Segmented,
@@ -78,7 +76,6 @@ export default function SettingsPage() {
   )
   const fileRef = useRef<HTMLInputElement>(null)
 
-  const syncState = settings.sync.enabled && settings.sync.url.trim() ? 'ready' : 'off'
   const lastSync = settings.lastSyncAt
     ? new Date(settings.lastSyncAt).toLocaleString('fr-FR')
     : 'jamais'
@@ -86,22 +83,13 @@ export default function SettingsPage() {
   const runSync = async () => {
     setSyncing(true)
     try {
-      if (cloudEnabled && user) {
-        const res = await syncCloudNow()
-        if (res.status === 'ok') {
-          notify(`Synchro cloud OK : ${res.pushed ?? 0} envoyé(s), ${res.pulled ?? 0} reçu(s)`, 'success')
-        } else if (res.status === 'error') {
-          notify(res.error ?? 'Échec de synchro', 'error')
-        } else {
-          notify('Rien à synchroniser', 'info')
-        }
-        return
-      }
-      const res = await syncNow()
+      const res = await syncCloudNow()
       if (res.status === 'ok') {
-        notify(`Synchro OK : ${res.pushed ?? 0} envoyé(s), ${res.pulled ?? 0} reçu(s)`, 'success')
+        notify(`Synchro cloud OK : ${res.pushed ?? 0} envoyé(s), ${res.pulled ?? 0} reçu(s)`, 'success')
       } else if (res.status === 'error') {
         notify(res.error ?? 'Échec de synchro', 'error')
+      } else {
+        notify('Rien à synchroniser', 'info')
       }
     } finally {
       setSyncing(false)
@@ -450,11 +438,8 @@ export default function SettingsPage() {
           <SectionTitle className="mb-0">Données</SectionTitle>
           <p className="text-sm text-muted">
             {pluralize(workouts.length, 'séance')} · {pluralize(routines.length, 'programme')} ·{' '}
-            {pluralize(totalSets, 'série')} enregistrées. Tout est stocké localement dans votre navigateur
-            (IndexedDB)
-            {syncState === 'ready'
-              ? ' et synchronisé avec votre serveur quand internet est disponible.'
-              : ' — aucune donnée n’est envoyée ailleurs.'}
+            {pluralize(totalSets, 'série')} enregistrées. Stockées localement (IndexedDB)
+            et synchronisées avec le cloud quand vous êtes connecté.
           </p>
           <div className="flex flex-wrap gap-2">
             <Button size="sm" variant="primary" onClick={exportAll}>
@@ -480,51 +465,19 @@ export default function SettingsPage() {
           </div>
         </Card>
 
-        {/* Synchronisation serveur maison */}
+        {/* Synchronisation cloud */}
         <Card className="space-y-4 p-4">
           <SectionTitle className="mb-0">
             <span className="inline-flex items-center gap-1.5">
-              <CloudDownload size={13} /> {cloudEnabled && user ? 'Synchronisation cloud (Google)' : 'Synchronisation (serveur maison)'}
+              <CloudDownload size={13} /> Synchronisation cloud
             </span>
           </SectionTitle>
           <p className="text-sm text-muted">
-            {cloudEnabled && user ? (
-              <>Vos données sont liées à votre compte Google et isolées par utilisateur : chaque compte ne voit que les siennes. La synchro part automatiquement après chaque modification, toutes les 5 minutes et au retour d’internet.</>
-            ) : (
-              <>Sauvegarde et réconcilie vos données avec votre serveur : automatiquement après
-              chaque modification (fin de séance, programme, exercice…), toutes les 5 minutes et au
-              retour d’internet.
-              100 % local par défaut — rien ne part tant que ce n’est pas configuré. La séance en
-              cours et le chrono ne sont jamais synchronisés.</>
-            )}
+            Vos données sont liées à votre compte Google et synchronisées automatiquement
+            après chaque modification, toutes les 5 minutes et au retour d’internet.
           </p>
-          <Checkbox
-            checked={settings.sync.enabled}
-            onChange={(v) => updateSettings({ sync: { ...settings.sync, enabled: v } })}
-            label="Activer la synchronisation automatique"
-          />
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="URL du serveur" hint="Ex. https://serveur.tailnet.ts.net:8443">
-              <Input
-                value={settings.sync.url}
-                onChange={(e) => updateSettings({ sync: { ...settings.sync, url: e.target.value } })}
-                placeholder="https://…"
-                inputMode="url"
-                autoComplete="off"
-              />
-            </Field>
-            <Field label="Jeton (SYNC_TOKEN)" hint="Défini côté serveur, gardé sur cet appareil">
-              <Input
-                type="password"
-                value={settings.sync.token}
-                onChange={(e) => updateSettings({ sync: { ...settings.sync, token: e.target.value } })}
-                placeholder="••••••••"
-                autoComplete="off"
-              />
-            </Field>
-          </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" variant="primary" disabled={syncing || (syncState === 'off' && !(cloudEnabled && user))} onClick={runSync}>
+            <Button size="sm" variant="primary" disabled={syncing} onClick={runSync}>
               {syncing ? <RefreshCw size={14} className="animate-spin" /> : <RefreshCw size={14} />}
               Synchroniser maintenant
             </Button>

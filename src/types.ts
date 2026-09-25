@@ -257,9 +257,9 @@ export interface SyncTombstone {
 }
 
 export interface SyncSettings {
-  /** URL du serveur maison, ex. https://serveur.tailnet.ts.net:8443 */
+  /** Conservé pour migration des anciennes sauvegardes (serveur maison supprimé). */
   url: string
-  /** Jeton long généré côté serveur (SYNC_TOKEN). */
+  /** Conservé pour migration des anciennes sauvegardes. */
   token: string
   enabled: boolean
 }
@@ -279,8 +279,10 @@ export interface Settings {
   defaultSets: number
   showRpe: boolean
   firstDayOfWeek: 0 | 1
-  /** Synchro serveur maison (désactivée par défaut, 100 % local sinon). */
+  /** Synchro cloud Supabase (le serveur maison est supprimé). Conservé pour migration. */
   sync: SyncSettings
+  /** Visibilité par défaut des nouveaux posts : followers (défaut validé). */
+  defaultPostVisibility: PostVisibility
   /** Horodatage serveur de la dernière synchro réussie (ISO). */
   lastSyncAt: string | null
   /** Dernière erreur de synchro (affichage Réglages). */
@@ -311,4 +313,83 @@ export interface AppData {
   version: number
   /** Traces de suppressions en attente de synchro (anti-résurrection). */
   syncDeleted: SyncTombstone[]
+}
+
+/* ------------------------------------------------------------------
+   VeryHevy V2 — social (follow + posts + carte)
+------------------------------------------------------------------ */
+
+export type PostVisibility = 'public' | 'followers' | 'private'
+export type SessionVisibility = 'public' | 'private'
+
+export interface SocialProfile {
+  id: string
+  username: string | null
+  display_name: string | null
+  avatar_url: string | null
+  bio?: string | null
+  city?: string | null
+  visibility?: string | null
+  followers_count: number
+  following_count: number
+  updated_at?: string
+}
+
+export interface Follow {
+  follower: string
+  followed: string
+  created_at: string
+}
+
+export interface Post {
+  id: string
+  user_id: string
+  workout_id?: string | null
+  photo_url?: string | null
+  caption: string
+  visibility: PostVisibility
+  likes_count: number
+  comments_count: number
+  created_at: string
+  author?: SocialProfile | null
+  liked_by_me?: boolean
+}
+
+export interface PostComment {
+  id: string
+  post_id: string
+  user_id: string
+  text: string
+  created_at: string
+  author?: SocialProfile | null
+}
+
+export interface SportSession {
+  id: string
+  host: string
+  title: string
+  gym_name: string
+  address_text: string
+  lat: number
+  lng: number
+  starts_at: string
+  spots_total: number
+  spots_taken: number
+  level: string
+  description: string
+  visibility: SessionVisibility
+  invited: string[]
+  created_at: string
+  joined_by_me?: boolean
+  host_profile?: SocialProfile | null
+}
+
+/** Valide un pseudo : 3-20 minuscules/chiffres/._ */
+export function isValidUsername(v: string): boolean {
+  return /^[a-z0-9_.]{3,20}$/.test(v.trim().toLowerCase())
+}
+
+/** Normalise un pseudo (minuscules, espaces → .). */
+export function normalizeUsername(v: string): string {
+  return v.trim().toLowerCase().replace(/\s+/g, '.').replace(/[^a-z0-9_.]/g, '').slice(0, 20)
 }

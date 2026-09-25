@@ -53,6 +53,7 @@ export const DEFAULT_SETTINGS: Settings = {
   showRpe: false,
   firstDayOfWeek: 1,
   sync: { url: '', token: '', enabled: false },
+  defaultPostVisibility: 'followers',
   lastSyncAt: null,
   recordsSince: null,
 }
@@ -91,7 +92,7 @@ export interface StoreState extends AppData {
     name?: string
     templateId?: string
     templateName?: string
-    exercises?: { exerciseId: string; setCount?: number; restSeconds?: number }[]
+    exercises?: { exerciseId: string; setCount?: number; restSeconds?: number; exerciseName?: string }[]
   }) => string
   discardWorkout: (id: string) => void
   deleteWorkout: (id: string) => void
@@ -630,7 +631,7 @@ export const useStore = create<StoreState>()(
               item.exerciseId,
               buildSets(ex, history, item.setCount ?? settings.defaultSets),
               item.restSeconds ?? settings.defaultRestSeconds,
-              ex?.name,
+              item.exerciseName ?? ex?.name,
             )
           })
         }

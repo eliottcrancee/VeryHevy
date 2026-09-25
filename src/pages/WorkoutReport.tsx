@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import {
   Bar,
   BarChart,
@@ -19,6 +19,7 @@ import {
   Download,
   Dumbbell,
   Flame,
+  Megaphone,
   Pencil,
   Play,
   Save,
@@ -59,9 +60,12 @@ import {
 import { CATEGORY_META, SET_TYPE_META } from '@/types'
 import { downloadJSON, formatDate, formatDistance, formatDuration, formatTime, formatVolume, formatWeight, kgToDisplay } from '@/lib/utils'
 import { shareWorkout } from '@/lib/share'
+import { SharePostModal } from '@/components/SharePostModal'
+import { useAuth } from '@/lib/auth'
 
 export default function WorkoutReportPage() {
   const { id = '' } = useParams()
+  const location = useLocation()
   const navigate = useNavigate()
   const workout = useStore((s) => s.workouts.find((w) => w.id === id))
   const workouts = useStore((s) => s.workouts)
@@ -78,6 +82,18 @@ export default function WorkoutReportPage() {
   const [saveRoutineOpen, setSaveRoutineOpen] = useState(false)
   const [routineName, setRoutineName] = useState('')
   const [editNotes, setEditNotes] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
+  const { cloudEnabled } = useAuth()
+
+  /* Ouverture auto de la publication juste après « Terminer la séance ». */
+  useEffect(() => {
+    const state = location.state as { openShare?: boolean } | null
+    if (state?.openShare && workout?.status === 'completed') {
+      setShareOpen(true)
+      navigate(location.pathname, { replace: true })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workout?.id])
 
   const exerciseMap = useMemo(() => new Map(exercises.map((e) => [e.id, e])), [exercises])
 
@@ -178,6 +194,11 @@ export default function WorkoutReportPage() {
                 }
               >
                 <Share2 size={17} />
+              </IconButton>
+            )}
+            {!isActive && cloudEnabled && (
+              <IconButton label="Publier dans le feed" onClick={() => setShareOpen(true)}>
+                <Megaphone size={17} />
               </IconButton>
             )}
             <Menu
@@ -526,6 +547,13 @@ export default function WorkoutReportPage() {
           </Button>
         </div>
       </Modal>
+
+      <SharePostModal
+        open={shareOpen}
+        workoutId={workout.id}
+        onClose={() => setShareOpen(false)}
+        onPublished={() => navigate('/')}
+      />
     </div>
   )
 }

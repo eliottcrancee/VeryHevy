@@ -633,7 +633,7 @@ export default function ActiveWorkoutPage() {
           })
           finishWorkout(workout.id)
           setConfirmFinish(false)
-          navigate(`/historique/${workout.id}`)
+          navigate(`/historique/${workout.id}`, { state: { openShare: true } })
         }}
       />
     </div>

@@ -1,18 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
-  BarChart3,
-  CalendarDays,
-  History,
-  LayoutDashboard,
   ListChecks,
+  MapPin,
   Pause,
   Play,
   Plus,
   Settings as SettingsIcon,
   Timer,
   UserRound,
-  Users,
+  House,
   X,
 } from 'lucide-react'
 import { cn, formatDuration, playBeep, showRestNotification, vibrate } from '@/lib/utils'
@@ -23,11 +20,9 @@ import { ScrollTargetProvider } from '@/components/ui'
 import { Logo } from '@/components/Logo'
 
 const NAV = [
-  { to: '/', label: 'Accueil', icon: LayoutDashboard, end: true },
+  { to: '/', label: 'Accueil', icon: House, end: true },
+  { to: '/explorer', label: 'Explorer', icon: MapPin },
   { to: '/programmes', label: 'Programmes', icon: ListChecks },
-  { to: '/historique', label: 'Historique', icon: History },
-  { to: '/gymbro', label: 'GymBro', icon: Users },
-  { to: '/stats', label: 'Stats', icon: BarChart3 },
   { to: '/profil', label: 'Profil', icon: UserRound },
 ]
 
@@ -270,30 +265,6 @@ export function AppShell() {
 
           <div className="mt-auto flex flex-col gap-1">
             <NavLink
-              to="/amis"
-              className={({ isActive }) =>
-                cn(
-                  'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors',
-                  isActive ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-surface-2 hover:text-ink',
-                )
-              }
-            >
-              <Users size={18} />
-              Amis
-            </NavLink>
-            <NavLink
-              to="/calendrier"
-              className={({ isActive }) =>
-                cn(
-                  'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors',
-                  isActive ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-surface-2 hover:text-ink',
-                )
-              }
-            >
-              <CalendarDays size={18} />
-              Calendrier
-            </NavLink>
-            <NavLink
               to="/reglages"
               className={({ isActive }) =>
                 cn(
@@ -331,7 +302,7 @@ export function AppShell() {
             )}
             <nav>
               <div className="flex items-stretch justify-around px-1 pt-1.5 pb-1">
-                {[...navItems, { to: '/reglages', label: 'Réglages', icon: SettingsIcon }].map((item) => (
+                {navItems.map((item) => (
                   <NavLink
                     key={item.to}
                     to={item.to}
