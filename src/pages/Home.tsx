@@ -316,7 +316,6 @@ export default function HomePage() {
     <div>
       <PageHeader
         title={t('nav.home')}
-        subtitle={t('home.pullSubtitle')}
         actions={
           <>
             <IconButton label={t('home.notifLabel')} onClick={() => navigate('/notifications')}>
@@ -341,15 +340,11 @@ export default function HomePage() {
           <Button size="sm" variant="primary" onClick={startEmpty}>{activeId ? t('home.resume') : t('home.start')}</Button>
         </Card>
         {searchBlock}
-        <div
-          className={cn(
-            'flex items-center justify-center gap-2 overflow-hidden text-xs font-bold text-muted transition-all',
-            pull > 0 || refreshing ? 'h-8 opacity-100' : 'h-0 opacity-0',
-          )}
-        >
-          <span className={cn('inline-block h-4 w-4 rounded-full border-2 border-accent border-t-transparent', (refreshing || pull >= 64) && 'animate-spin')} />
-          {refreshing ? t('home.refreshing') : pull >= 64 ? t('home.releaseToRefresh') : t('home.pullToRefresh')}
-        </div>
+        {pull > 0 || refreshing ? (
+          <div className="flex h-8 items-center justify-center transition-all">
+            <span className={cn('inline-block h-4 w-4 rounded-full border-2 border-accent border-t-transparent', (refreshing || pull >= 64) && 'animate-spin')} />
+          </div>
+        ) : null}
         {feedError ? (
           <Card className="p-4">
             <EmptyState title={t('home.feedErrorTitle')} message={feedError}

@@ -7,12 +7,16 @@ import {
   CalendarCheck,
   Check,
   CloudOff,
+  Flag,
   LocateFixed,
   MapPin,
   MessageCircle,
+  MoreVertical,
+  Pencil,
   Plus,
   Search,
   Send,
+  Trash2,
   Users,
   UserX,
   X,
@@ -66,7 +70,7 @@ import {
 } from '@/lib/chat'
 import { Page, PageHeader } from '@/components/PageHeader'
 import { ProfileAvatar, ProfileLine } from '@/components/ProfileAvatar'
-import { Button, Card, Chip, EmptyState, Field, Input, Modal, Select, Tabs, Textarea } from '@/components/ui'
+import { Button, Card, Chip, EmptyState, Field, Input, Menu, Modal, Select, Tabs, Textarea } from '@/components/ui'
 import { IconButton } from '@/components/ui'
 import { ReportDialog } from '@/components/ReportDialog'
 import { loadSessions, peekSessions } from '@/lib/pagePreload'
@@ -120,6 +124,33 @@ function fmtDate(iso: string): string {
 
 function fmtTime(iso: string): string {
   return new Intl.DateTimeFormat(intlLocale(), { hour: '2-digit', minute: '2-digit' }).format(new Date(iso))
+}
+
+/** Liste des discussions : heure si aujourd'hui, « Hier », sinon la date. */
+function fmtThreadTime(iso: string): string {
+  const d = new Date(iso)
+  const now = new Date()
+  const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString()
+  if (sameDay(d, now)) return fmtTime(iso)
+  const yesterday = new Date(now)
+  yesterday.setDate(now.getDate() - 1)
+  if (sameDay(d, yesterday)) return t('chat.yesterday')
+  return new Intl.DateTimeFormat(
+    intlLocale(),
+    d.getFullYear() === now.getFullYear()
+      ? { day: '2-digit', month: '2-digit' }
+      : { day: '2-digit', month: '2-digit', year: '2-digit' },
+  ).format(d)
+}
+
+/** Découpe une date ISO en champs locaux date/heure (formulaires). */
+function localDateParts(iso: string): { date: string; hour: string } {
+  const d = new Date(iso)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return {
+    date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+    hour: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
+  }
 }
 
 /** Distance vol d'oiseau en km. */
@@ -539,7 +570,7 @@ export default function ExplorerPage() {
               <>
                 <div className="space-y-2">
                   <p className="text-xs font-extrabold tracking-wide text-muted uppercase">
-                    {t('explorer.recoFriendsTitle', { n: recoFriends.length })}
+                    {t('explorer.recoFriendsTitle')}
                   </p>
                   {recoFriends.length === 0 ? (
                     <p className="text-xs text-muted">
@@ -573,10 +604,12 @@ export default function ExplorerPage() {
                 </div>
                 <div className="space-y-2">
                   <p className="text-xs font-extrabold tracking-wide text-muted uppercase">
-                    {userPos ? t('explorer.nearbyTitle', { n: recoNear.length }) : t('explorer.otherTitle', { n: recoNear.length })}
+                    {userPos ? t('explorer.nearbyTitle') : t('explorer.otherTitle')}
                   </p>
                   {!userPos && recoNear.length > 0 && (
-                    <p className="text-[11px] text-muted">{t('explorer.enableLocationHint')}</p>
+                    <p className="flex items-center gap-1 text-[11px] text-muted">
+                      <LocateFixed size={12} /> {t('explorer.enableLocationHint')}
+                    </p>
                   )}
                   {recoNear.map(({ s, d }) => (
                     <div key={s.id} className="space-y-2">
@@ -845,10 +878,6 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
 
   const pending = (requests ?? []).filter((r) => r.status === 'pending')
   const pendingInvites = (invites ?? []).filter((i) => i.status === 'pending')
-  /* L'organisateur en tête de liste des inscrits. */
-  const orderedMembers = [...(members ?? [])].sort((a, b) =>
-    a.user_id === s.host ? -1 : b.user_id === s.host ? 1 : 0,
-  )
 
   const propose = async () => {
     setReqBusy(true)
@@ -965,61 +994,86 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
             {s.visibility === 'invite' ? t('session.visInvite') : s.visibility === 'open' ? t('session.visOpen') : t('session.visPublic')} · {t('session.levelLabel')} {s.level === 'tous' ? t('session.levelAny') : tx('level', s.level)} ·{' '}
             {s.spots_taken}/{s.spots_total}
           </p>
-          {/* Participants : cachés aux non-membres (sauf profils publics). */}
-          {!isMember && publicOnes.length > 0 && (
-            <p className="mt-1 text-[11px] text-muted">
-              {t('session.alreadyThere')} {publicOnes.map((p) => displayNameOf(p)).join(', ')}
-              {s.spots_taken - 1 - publicOnes.length > 0 && ` ${t('session.othersMore', { n: s.spots_taken - 1 - publicOnes.length })}`}
-            </p>
-          )}
         </div>
-        <div className="flex gap-1">
-          {mine && <Button size="sm" variant="ghost" onClick={() => setEditOpen(true)}>{t('session.edit')}</Button>}
-          {mine && (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="hover:text-danger"
-              disabled={busy}
-              onClick={() => {
-                if (!window.confirm(t('session.deleteConfirm'))) return
-                void act(s.id, () => deleteSession(s.id), t('session.deleted'))
-              }}
-            >
-              {t('common.delete')}
-            </Button>
+        {/* Actions regroupées dans un menu : le titre et la date gardent toute la largeur. */}
+        <div className="flex shrink-0 items-center gap-0.5">
+          {(mine || !isMember) && (
+            <Menu
+              align="right"
+              trigger={({ toggle }) => (
+                <IconButton label={t('workout.optionsMenu')} onClick={toggle}>
+                  <MoreVertical size={18} />
+                </IconButton>
+              )}
+              items={[
+                { label: t('session.edit'), icon: <Pencil size={15} />, hidden: !mine, onClick: () => setEditOpen(true) },
+                {
+                  label: t('common.delete'),
+                  icon: <Trash2 size={15} />,
+                  danger: true,
+                  hidden: !mine || busy,
+                  onClick: () => {
+                    if (!window.confirm(t('session.deleteConfirm'))) return
+                    void act(s.id, () => deleteSession(s.id), t('session.deleted'))
+                  },
+                },
+                { label: t('session.report'), icon: <Flag size={15} />, hidden: mine, onClick: () => setReportOpen(true) },
+              ]}
+            />
           )}
-          {!mine && <Button size="sm" variant="ghost" onClick={() => setReportOpen(true)}>{t('session.report')}</Button>}
-          <Button size="sm" variant="ghost" onClick={onClose}>{t('common.close')}</Button>
+          <IconButton label={t('common.close')} onClick={onClose}>
+            <X size={18} />
+          </IconButton>
         </div>
       </div>
       {s.description && <p className="text-sm text-muted">{s.description}</p>}
 
-      {/* Hôte visible hors liste des inscrits : anonyme pour les sessions open. */}
+      {/* Participants (teaser non-membre) : l'organisateur en tête de liste,
+          puis les profils publics — les autres restent anonymes. */}
       {!isMember && (
-        <div className="flex items-center gap-2 rounded-xl bg-surface-2 p-2.5">
-          {s.visibility === 'open' ? (
-            <span className="text-[13px] font-bold">{t('explorer.anonymous')}</span>
-          ) : s.host_profile ? (
-            <>
-              <ProfileLine profile={s.host_profile} size={28} />
-              <span className="shrink-0 rounded-md bg-accent-soft px-1.5 py-0.5 text-[10px] font-extrabold text-accent">{t('session.hostTag')}</span>
-            </>
-          ) : (
-            <span className="text-[13px] font-bold">{t('explorer.aSportif')}</span>
+        <div className="space-y-1 rounded-xl bg-surface-2 p-2.5">
+          <p className="text-[11px] font-extrabold tracking-wide text-muted uppercase">
+            {t('session.membersTitle', { n: s.spots_taken })}
+          </p>
+          <div className="flex items-center gap-2">
+            {s.visibility === 'open' ? (
+              <span className="text-[13px] font-bold">{t('explorer.anonymous')}</span>
+            ) : s.host_profile ? (
+              <>
+                <ProfileLine profile={s.host_profile} size={28} />
+                <span className="shrink-0 rounded-md bg-accent-soft px-1.5 py-0.5 text-[10px] font-extrabold text-accent">{t('session.hostTag')}</span>
+              </>
+            ) : (
+              <span className="text-[13px] font-bold">{t('explorer.aSportif')}</span>
+            )}
+          </div>
+          {publicOnes.map((p) => (
+            <ProfileLine key={p.id} profile={p} size={28} />
+          ))}
+          {s.spots_taken > 1 + publicOnes.length && (
+            <p className="pl-1 text-[11px] text-muted">{t('session.othersMore', { n: s.spots_taken - 1 - publicOnes.length })}</p>
           )}
         </div>
       )}
 
-      {/* Membres visibles : hôte + inscrits uniquement. */}
-      {isMember && members !== null && members.length > 0 && (
+      {/* Inscrits : l'organisateur occupe la 1re place (il n'est pas dans session_joins). */}
+      {isMember && members !== null && (
         <div className="space-y-1 rounded-xl bg-surface-2 p-2.5">
-          <p className="text-[11px] font-extrabold tracking-wide text-muted uppercase">{t('session.membersTitle', { n: members.length })}</p>
-          {orderedMembers.map((m) => (
+          <p className="text-[11px] font-extrabold tracking-wide text-muted uppercase">
+            {t('session.membersTitle', { n: 1 + members.length })}
+          </p>
+          <div className="flex items-center gap-2">
+            {s.host_profile ? (
+              <ProfileLine profile={s.host_profile} size={28} />
+            ) : (
+              <span className="text-[13px] font-bold">{t('explorer.aSportif')}</span>
+            )}
+            <span className="shrink-0 rounded-md bg-accent-soft px-1.5 py-0.5 text-[10px] font-extrabold text-accent">{t('session.hostTag')}</span>
+          </div>
+          {members.map((m) => (
             <div key={m.user_id} className="space-y-0.5">
               <div className="flex items-center gap-2">
                 <ProfileLine profile={m.profile} size={28} />
-                {m.user_id === s.host && <span className="shrink-0 rounded-md bg-accent-soft px-1.5 py-0.5 text-[10px] font-extrabold text-accent">{t('session.hostTag')}</span>}
                 {mine && m.user_id !== me && (
                   <Button size="sm" variant="ghost" onClick={() => chatWith(m.user_id, m.profile)}>
                     <MessageCircle size={14} />
@@ -1328,6 +1382,7 @@ function MessagesView({ initial, onConsumeInitial, onBack }: {
   onBack: () => void
 }) {
   useLang()
+  const { user } = useAuth()
   const notify = useStore((s) => s.notify)
   const [threads, setThreads] = useState<Thread[]>([])
   const [loading, setLoading] = useState(true)
@@ -1381,25 +1436,28 @@ function MessagesView({ initial, onConsumeInitial, onBack }: {
           />
         </Card>
       ) : (
-        threads.map((t) => (
+        threads.map((th) => (
           <button
-            key={t.other_id}
+            key={th.other_id}
             type="button"
-            onClick={() => setActive({ sessionId: t.session_id, title: t.session_title, otherId: t.other_id, other: t.other })}
+            onClick={() => setActive({ sessionId: th.session_id, title: th.session_title, otherId: th.other_id, other: th.other })}
             className="flex w-full items-center gap-3 rounded-xl border border-line bg-surface p-3 text-left transition-colors hover:bg-surface-2"
           >
             <ProfileAvatar
-              url={t.other?.avatar_url}
-              name={t.other?.display_name ?? t.other?.username ?? '?'}
+              url={th.other?.avatar_url}
+              name={th.other?.display_name ?? th.other?.username ?? '?'}
               size={40}
             />
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-extrabold">{displayNameOf(t.other)}</span>
+              <span className="block truncate text-sm font-extrabold">{displayNameOf(th.other)}</span>
               <span className="block truncate text-[11px] text-muted">
-                {t.session_title} · {t.last.text}
+                {th.last.from_id === user?.id ? `${t('chat.you')} : ` : ''}
+                {th.last.text}
               </span>
+              {/* Contexte de la discussion (séance) : masqué pour un message direct. */}
+              {th.session_id && <span className="block truncate text-[10px] text-muted">📍 {th.session_title}</span>}
             </span>
-            <span className="shrink-0 text-[10px] text-muted">{fmtTime(t.last.created_at)}</span>
+            <span className="shrink-0 text-[10px] text-muted">{fmtThreadTime(th.last.created_at)}</span>
           </button>
         ))
       )}
@@ -1659,25 +1717,40 @@ function EditSessionModal({ session, open, onClose, onSaved }: {
   const [title, setTitle] = useState(session.title)
   const [gym, setGym] = useState(session.gym_name)
   const [address, setAddress] = useState(session.address_text)
-  const [starts, setStarts] = useState(() => {
-    const d = new Date(session.starts_at)
-    return new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 16)
-  })
+  const [startsDate, setStartsDate] = useState(() => localDateParts(session.starts_at).date)
+  const [startsHour, setStartsHour] = useState(() => localDateParts(session.starts_at).hour)
   const [spots, setSpots] = useState(session.spots_total)
   const [level, setLevel] = useState(session.level)
   const [visibility, setVisibility] = useState<SessionVisibility>(session.visibility)
   const [description, setDescription] = useState(session.description)
   const [saving, setSaving] = useState(false)
+  /* Même recherche de lieu que « Proposer » : déplacer la séance. */
+  const [placeQuery, setPlaceQuery] = useState('')
+  const [places, setPlaces] = useState<PlaceResult[]>([])
+  const [placeBusy, setPlaceBusy] = useState(false)
+  const [chosenPlace, setChosenPlace] = useState<PlaceResult | null>(null)
+
+  useEffect(() => {
+    if (!open) { setChosenPlace(null); setPlaces([]); setPlaceQuery('') }
+  }, [open])
+
+  const findPlace = async () => {
+    setPlaceBusy(true)
+    try { setPlaces(await searchPlaces(placeQuery)) }
+    catch (err) { notify(err instanceof Error ? err.message : t('session.errPlaceNotFound'), 'error') }
+    finally { setPlaceBusy(false) }
+  }
 
   const save = async () => {
-    const date = new Date(starts)
-    if (!title.trim() || !Number.isFinite(date.getTime()) || date.getTime() < Date.now()) {
+    const date = new Date(`${startsDate}T${startsHour}`)
+    if (!title.trim() || !startsDate || !startsHour || !Number.isFinite(date.getTime()) || date.getTime() < Date.now()) {
       notify(t('session.editInvalid'), 'error')
       return
     }
     setSaving(true)
     try {
       await updateSession(session.id, { title, gym_name: gym, address_text: address,
+        lat: chosenPlace?.lat ?? session.lat, lng: chosenPlace?.lng ?? session.lng,
         starts_at: date.toISOString(), spots_total: spots, level, description, visibility })
       notify(t('session.updated'), 'success')
       onClose()
@@ -1688,11 +1761,32 @@ function EditSessionModal({ session, open, onClose, onSaved }: {
 
   return <Modal open={open} onClose={onClose} title={t('session.editTitle')}>
     <div className="space-y-3">
+      <Field label={t('session.createPlaceLabel')} hint={t('session.createPlaceHint')}>
+        <div className="flex gap-2">
+          <Input value={placeQuery} onChange={(e) => setPlaceQuery(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void findPlace() } }}
+            placeholder={t('session.createPlacePlaceholder')} />
+          <Button size="sm" disabled={placeBusy || placeQuery.trim().length < 3} onClick={() => void findPlace()}>
+            <Search size={15} /> {t('session.searchBtn')}
+          </Button>
+        </div>
+      </Field>
+      {places.length > 0 && <div className="max-h-36 space-y-1 overflow-y-auto">
+        {places.map((place, i) => <button key={i} type="button"
+          className="block w-full rounded-lg bg-surface-2 p-2 text-left text-xs hover:bg-accent-soft"
+          onClick={() => { setChosenPlace(place); setPlaceQuery(place.label); setPlaces([]) }}>
+          📍 {place.label}
+        </button>)}
+      </div>}
+      <p className="text-xs text-muted">
+        📍 {chosenPlace?.label ?? `${(chosenPlace?.lat ?? session.lat).toFixed(4)}, ${(chosenPlace?.lng ?? session.lng).toFixed(4)}`}
+      </p>
       <Field label={t('session.fieldTitle')}><Input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={80} /></Field>
-      <Field label={t('session.fieldVenue')}><Input value={gym} onChange={(e) => setGym(e.target.value)} maxLength={120} /></Field>
-      <Field label={t('session.fieldAddress')}><Input value={address} onChange={(e) => setAddress(e.target.value)} maxLength={200} /></Field>
-      <div className="grid grid-cols-2 gap-2">
-        <Field label={t('session.fieldDateTime')}><Input type="datetime-local" value={starts} onChange={(e) => setStarts(e.target.value)} /></Field>
+      <Field label={t('session.fieldVenue')} hint={t('session.venueHint')}><Input value={gym} onChange={(e) => setGym(e.target.value)} maxLength={120} /></Field>
+      <Field label={t('session.fieldAddress')} hint={t('session.addressHint')}><Input value={address} onChange={(e) => setAddress(e.target.value)} maxLength={200} /></Field>
+      <div className="grid grid-cols-3 gap-2">
+        <Field label={t('session.fieldDate')}><Input type="date" value={startsDate} onChange={(e) => setStartsDate(e.target.value)} /></Field>
+        <Field label={t('session.fieldHour')}><Input type="time" value={startsHour} onChange={(e) => setStartsHour(e.target.value)} /></Field>
         <Field label={t('session.fieldSpots')}><Select value={spots} onChange={(e) => setSpots(Number(e.target.value))}>
           {[2, 3, 4, 5, 6, 7, 8].map((n) => <option key={n} value={n}>{n}</option>)}
         </Select></Field>
@@ -1702,11 +1796,19 @@ function EditSessionModal({ session, open, onClose, onSaved }: {
           <option value="tous">{t('session.levelAll')}</option><option value="débutant">{tx('level', 'débutant')}</option>
           <option value="intermédiaire">{tx('level', 'intermédiaire')}</option><option value="confirmé">{t('session.levelConfirmed')}</option>
         </Select></Field>
-        <Field label={t('session.fieldType')}><Select value={visibility} onChange={(e) => setVisibility(e.target.value as SessionVisibility)}>
-          <option value="invite">{t('session.typeInvite')}</option><option value="open">{t('session.typeOpen')}</option>
-          <option value="public">{t('session.typePublic')}</option>
+        <Field label={t('session.fieldWho')}><Select value={visibility} onChange={(e) => setVisibility(e.target.value as SessionVisibility)}>
+          <option value="invite">{t('session.typeInviteLong')}</option>
+          <option value="open">{t('session.typeOpenLong')}</option>
+          <option value="public">{t('session.typePublicLong')}</option>
         </Select></Field>
       </div>
+      <p className="text-[11px] text-muted">
+        {visibility === 'invite'
+          ? t('session.inviteHint')
+          : visibility === 'open'
+            ? t('session.openHint')
+            : t('session.publicHint')}
+      </p>
       <Field label={t('session.fieldDescription')}><Textarea value={description} onChange={(e) => setDescription(e.target.value)} maxLength={500} rows={3} /></Field>
       <Button variant="primary" block disabled={saving} onClick={() => void save()}>
         {saving ? t('session.saving') : t('session.saveChanges')}

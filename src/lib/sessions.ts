@@ -116,12 +116,14 @@ export async function leaveSession(sessionId: string): Promise<void> {
 }
 
 export async function updateSession(sessionId: string, input: Pick<SportSession,
-  'title' | 'gym_name' | 'address_text' | 'starts_at' | 'spots_total' | 'level' | 'description' | 'visibility'>): Promise<void> {
+  'title' | 'gym_name' | 'address_text' | 'lat' | 'lng' | 'starts_at' | 'spots_total' | 'level' | 'description' | 'visibility'>): Promise<void> {
   const sb = sbOrThrow()
   const { error } = await sb.from('sessions').update({
     title: input.title.trim().slice(0, 80),
     gym_name: input.gym_name.trim().slice(0, 120),
     address_text: input.address_text.trim().slice(0, 200),
+    lat: input.lat,
+    lng: input.lng,
     starts_at: input.starts_at,
     spots_total: input.spots_total,
     level: input.level,
