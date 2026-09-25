@@ -11,6 +11,8 @@ import {
   Plus,
   Settings as SettingsIcon,
   Timer,
+  UserRound,
+  Users,
   X,
 } from 'lucide-react'
 import { cn, formatDuration, playBeep, showRestNotification, vibrate } from '@/lib/utils'
@@ -24,7 +26,9 @@ const NAV = [
   { to: '/', label: 'Accueil', icon: LayoutDashboard, end: true },
   { to: '/programmes', label: 'Programmes', icon: ListChecks },
   { to: '/historique', label: 'Historique', icon: History },
+  { to: '/gymbro', label: 'GymBro', icon: Users },
   { to: '/stats', label: 'Stats', icon: BarChart3 },
+  { to: '/profil', label: 'Profil', icon: UserRound },
 ]
 
 /* ------------------------------------------------------------------ */

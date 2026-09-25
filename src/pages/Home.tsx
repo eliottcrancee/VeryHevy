@@ -101,6 +101,24 @@ export default function HomePage() {
           <Play size={20} /> {active ? 'Reprendre la séance' : 'Démarrer une séance'}
         </Button>
 
+        {/* GymBro : trouver un partenaire */}
+        <button
+          type="button"
+          onClick={() => navigate('/gymbro')}
+          className="flex w-full items-center gap-3 rounded-2xl border border-accent-line bg-accent-soft p-4 text-left transition-transform active:scale-[0.99]"
+        >
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-accent-solid text-xl">
+            🤝
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-extrabold">GymBro — trouve ton partenaire</span>
+            <span className="block truncate text-xs text-muted">
+              Séances lourdes en sécurité, pareur, motivation…
+            </span>
+          </span>
+          <ChevronRight size={18} className="shrink-0 text-muted" />
+        </button>
+
         {/* Objectif hebdo (compact) */}
         <Card className="flex items-center gap-3 p-3">
           <ProgressRing progress={goalPct} size={52} stroke={5}>
