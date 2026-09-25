@@ -14,11 +14,13 @@
 -- La colonne sessions.invited[] est remplacée par session_invites.
 
 -- Anciennes privées → sur proposition ---------------------------------
-update public.sessions set visibility = 'open' where visibility = 'private';
-
+-- Ordre impératif : DROP l'ancien check AVANT l'UPDATE, sinon
+-- 'open' est rejeté par l'ancien check ('public','private') → 23514.
 do $$ begin
   alter table public.sessions drop constraint sessions_visibility_check;
 exception when undefined_object then null; end $$;
+
+update public.sessions set visibility = 'open' where visibility = 'private';
 
 do $$ begin
   alter table public.sessions
