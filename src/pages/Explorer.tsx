@@ -9,6 +9,7 @@ import {
   CloudOff,
   Flag,
   LocateFixed,
+  Mail,
   MapPin,
   MessageCircle,
   MoreVertical,
@@ -16,6 +17,7 @@ import {
   Plus,
   Search,
   Send,
+  Sparkles,
   Trash2,
   Users,
   UserX,
@@ -187,7 +189,7 @@ function pinIcon(s: SportSession, me: string | undefined, selected: boolean): L.
   const bg = mine ? '#4f83ff' : full ? '#ef4444' : s.visibility === 'open' ? '#8b5cf6' : s.visibility === 'invite' ? '#0ea5e9' : '#16a34a'
   return L.divIcon({
     className: '',
-    html: `<div style="display:flex;align-items:center;gap:2px;background:${bg};color:#fff;font-weight:800;font-size:11px;border-radius:999px;padding:3px 8px;border:${selected ? '3px solid #fff' : '2px solid rgba(255,255,255,.7)'};box-shadow:0 2px 8px rgba(0,0,0,.4);white-space:nowrap">💪 ${s.spots_taken}/${s.spots_total}</div>`,
+    html: `<div style="display:flex;align-items:center;gap:2px;background:${bg};color:#fff;font-weight:800;font-size:11px;border-radius:999px;padding:3px 8px;border:${selected ? '3px solid #fff' : '2px solid rgba(255,255,255,.7)'};box-shadow:0 2px 8px rgba(0,0,0,.4);white-space:nowrap">${s.spots_taken}/${s.spots_total}</div>`,
     iconSize: [0, 0],
     iconAnchor: [0, 0],
   })
@@ -648,8 +650,9 @@ export default function ExplorerPage() {
                   <div className="absolute inset-x-0 top-full z-50 mt-1 overflow-hidden rounded-xl border border-line bg-surface shadow-xl">
                     {searching && <p className="px-3 py-2 text-xs text-muted">{t('explorer.searching')}</p>}
                     {results.map((r, i) => (
-                      <button key={i} type="button" onClick={() => goPlace(r)} className="block w-full truncate px-3 py-2 text-left text-[13px] hover:bg-surface-2">
-                        📍 {r.label}
+                      <button key={i} type="button" onClick={() => goPlace(r)} className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-surface-2">
+                        <MapPin size={13} className="shrink-0 text-muted" />
+                        <span className="truncate">{r.label}</span>
                       </button>
                     ))}
                   </div>
@@ -697,7 +700,7 @@ export default function ExplorerPage() {
                 {picked && (
                   <Marker
                     position={[picked.lat, picked.lng]}
-                    icon={L.divIcon({ className: '', html: '<div style="font-size:22px">📍</div>', iconSize: [24, 24], iconAnchor: [12, 22] })}
+                    icon={L.divIcon({ className: '', html: '<div style="width:14px;height:14px;border-radius:50%;background:#f97316;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.5)"></div>', iconSize: [20, 20], iconAnchor: [10, 10] })}
                   />
                 )}
               </MapContainer>
@@ -705,7 +708,9 @@ export default function ExplorerPage() {
 
             {picked && (
               <Card className="flex items-center gap-3 p-3">
-                <span className="text-xl">📍</span>
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface-2 text-muted">
+                  <MapPin size={17} />
+                </span>
                 <p className="min-w-0 flex-1 text-xs text-muted">
                   {t('explorer.pickedPoint', { lat: picked.lat, lng: picked.lng })}
                 </p>
@@ -800,8 +805,8 @@ function SessionRow({ s, me, friend, selected, onSelect, distanceKm }: {
         selected ? 'border-accent-solid bg-accent-soft' : 'border-line bg-surface hover:bg-surface-2',
       )}
     >
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface-2 text-lg">
-        {s.visibility === 'invite' ? '📩' : s.visibility === 'open' ? '✨' : '💪'}
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface-2 text-muted">
+        {s.visibility === 'invite' ? <Mail size={18} /> : s.visibility === 'open' ? <Sparkles size={18} /> : <Users size={18} />}
       </span>
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-1.5">
@@ -980,15 +985,18 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
   }
 
   return (
-    <Card className="space-y-2 border-accent-line p-4">
+    <Card className="space-y-3 border-accent-line p-4">
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
           <p className="text-base font-extrabold">{s.title}</p>
           <p className="text-xs font-semibold text-accent">{fmtDate(s.starts_at)}</p>
-          <p className="mt-0.5 text-xs text-muted">📍 {s.gym_name || t('explorer.venueTbd')}</p>
+          <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted">
+            <MapPin size={12} className="shrink-0" />
+            <span className="truncate">{s.gym_name || t('explorer.venueTbd')}</span>
+          </p>
           {/* Adresse exacte : membres uniquement (teaser public). */}
           {isMember && s.address_text && (
-            <p className="mt-0.5 text-xs text-muted">🗺️ {s.address_text}</p>
+            <p className="mt-0.5 text-xs text-muted">{s.address_text}</p>
           )}
           <p className="mt-0.5 text-xs text-muted">
             {s.visibility === 'invite' ? t('session.visInvite') : s.visibility === 'open' ? t('session.visOpen') : t('session.visPublic')} · {t('session.levelLabel')} {s.level === 'tous' ? t('session.levelAny') : tx('level', s.level)} ·{' '}
@@ -1455,7 +1463,7 @@ function MessagesView({ initial, onConsumeInitial, onBack }: {
                 {th.last.text}
               </span>
               {/* Contexte de la discussion (séance) : masqué pour un message direct. */}
-              {th.session_id && <span className="block truncate text-[10px] text-muted">📍 {th.session_title}</span>}
+              {th.session_id && <span className="block truncate text-[10px] text-muted">{th.session_title}</span>}
             </span>
             <span className="shrink-0 text-[10px] text-muted">{fmtThreadTime(th.last.created_at)}</span>
           </button>
@@ -1589,8 +1597,8 @@ function ConversationView({ t: thread, onBack }: { t: ActiveThread; onBack: () =
   }
 
   return (
-    <div className="fixed inset-x-0 top-0 bottom-[var(--bottom-stack,0px)] z-40 flex flex-col bg-canvas lg:left-64">
-      <header className="glass safe-t flex items-center gap-2 border-b border-line px-2 py-2">
+    <div className="fixed inset-x-0 top-0 bottom-[var(--bottom-stack,0px)] z-40 flex flex-col bg-bg lg:left-64">
+      <header className="glass safe-t flex shrink-0 items-center gap-2 border-b border-line px-3 py-2.5">
         <Button size="sm" variant="ghost" onClick={onBack}>{t('common.back')}</Button>
         <ProfileAvatar url={thread.other?.avatar_url} name={displayNameOf(thread.other)} size={32} />
         <div className="min-w-0 flex-1">
@@ -1598,7 +1606,7 @@ function ConversationView({ t: thread, onBack }: { t: ActiveThread; onBack: () =
           <p className="truncate text-[11px] text-muted">{thread.title}</p>
         </div>
       </header>
-      <div className="flex-1 space-y-2 overflow-y-auto overscroll-contain px-3 py-2">
+      <div className="flex-1 space-y-2 overflow-y-auto overscroll-contain px-3 py-3">
         {msgs.length >= messageLimit && (
           <Button size="sm" variant="ghost" block onClick={() => setMessageLimit((n) => n + 200)}>
             {t('chat.loadMore')}
@@ -1614,7 +1622,7 @@ function ConversationView({ t: thread, onBack }: { t: ActiveThread; onBack: () =
           return (
             <div key={m.id} className={cn('flex', mine ? 'justify-end' : 'justify-start')}>
               <div className={cn(
-                'max-w-[80%] rounded-2xl px-3 py-2 text-[13px]',
+                'max-w-[80%] rounded-2xl px-3 py-2 text-[13px] break-words whitespace-pre-wrap',
                 mine ? 'bg-accent-solid text-accent-contrast' : 'bg-surface-2 text-ink',
               )}>
                 {m.text}
@@ -1624,18 +1632,22 @@ function ConversationView({ t: thread, onBack }: { t: ActiveThread; onBack: () =
         })}
         <div ref={bottom} />
       </div>
-      <div className="safe-b flex items-end gap-2 border-t border-line px-2 py-2">
-        <Input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') void send() }}
-          placeholder={t('chat.composePlaceholder')}
-          maxLength={1000}
-          className="rounded-full"
-        />
-        <Button variant="primary" size="icon" className="shrink-0 rounded-full" disabled={sending || !draft.trim()} onClick={() => void send()}>
-          <Send size={16} />
-        </Button>
+      {/* Composeur : posé au-dessus de la navigation mobile, avec une marge
+          basse pour que le champ ne colle pas à la barre. */}
+      <div className="shrink-0 border-t border-line bg-surface px-3 pt-2 pb-2.5">
+        <div className="flex items-end gap-2">
+          <Input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') void send() }}
+            placeholder={t('chat.composePlaceholder')}
+            maxLength={1000}
+            className="rounded-full"
+          />
+          <Button variant="primary" size="icon" className="shrink-0 rounded-full" disabled={sending || !draft.trim()} onClick={() => void send()}>
+            <Send size={16} />
+          </Button>
+        </div>
       </div>
     </div>
   )
@@ -1773,13 +1785,17 @@ function EditSessionModal({ session, open, onClose, onSaved }: {
       </Field>
       {places.length > 0 && <div className="max-h-36 space-y-1 overflow-y-auto">
         {places.map((place, i) => <button key={i} type="button"
-          className="block w-full rounded-lg bg-surface-2 p-2 text-left text-xs hover:bg-accent-soft"
+          className="flex w-full items-center gap-2 rounded-lg bg-surface-2 p-2 text-left text-xs hover:bg-accent-soft"
           onClick={() => { setChosenPlace(place); setPlaceQuery(place.label); setPlaces([]) }}>
-          📍 {place.label}
+          <MapPin size={13} className="shrink-0 text-muted" />
+          <span className="truncate">{place.label}</span>
         </button>)}
       </div>}
-      <p className="text-xs text-muted">
-        📍 {chosenPlace?.label ?? `${(chosenPlace?.lat ?? session.lat).toFixed(4)}, ${(chosenPlace?.lng ?? session.lng).toFixed(4)}`}
+      <p className="flex items-center gap-1.5 text-xs text-muted">
+        <MapPin size={12} className="shrink-0" />
+        <span className="truncate">
+          {chosenPlace?.label ?? `${(chosenPlace?.lat ?? session.lat).toFixed(4)}, ${(chosenPlace?.lng ?? session.lng).toFixed(4)}`}
+        </span>
       </p>
       <Field label={t('session.fieldTitle')}><Input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={80} /></Field>
       <Field label={t('session.fieldVenue')} hint={t('session.venueHint')}><Input value={gym} onChange={(e) => setGym(e.target.value)} maxLength={120} /></Field>
@@ -1925,12 +1941,18 @@ function CreateSessionModal({ open, picked, onClose, onCreated }: {
         </Field>
         {places.length > 0 && <div className="max-h-36 space-y-1 overflow-y-auto">
           {places.map((place, i) => <button key={i} type="button"
-            className="block w-full rounded-lg bg-surface-2 p-2 text-left text-xs hover:bg-accent-soft"
+            className="flex w-full items-center gap-2 rounded-lg bg-surface-2 p-2 text-left text-xs hover:bg-accent-soft"
             onClick={() => { setChosenPlace(place); setPlaceQuery(place.label); setPlaces([]) }}>
-            📍 {place.label}
+            <MapPin size={13} className="shrink-0 text-muted" />
+            <span className="truncate">{place.label}</span>
           </button>)}
         </div>}
-        {location && <p className="text-xs text-muted">📍 {chosenPlace?.label ?? `${location.lat}, ${location.lng}`}</p>}
+        {location && (
+          <p className="flex items-center gap-1.5 text-xs text-muted">
+            <MapPin size={12} className="shrink-0" />
+            <span className="truncate">{chosenPlace?.label ?? `${location.lat}, ${location.lng}`}</span>
+          </p>
+        )}
         <Field label={t('session.fieldTitle')}><Input value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
         <Field label={t('session.fieldVenue')} hint={t('session.venueHint')}>
           <Input value={gym} onChange={(e) => setGym(e.target.value)} placeholder={t('session.venuePlaceholder')} />

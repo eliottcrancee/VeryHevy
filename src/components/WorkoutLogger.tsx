@@ -3,6 +3,7 @@ import {
   ArrowDown,
   ArrowUp,
   Copy,
+  Dumbbell,
   GripVertical,
   Link2,
   Link2Off,
@@ -14,7 +15,8 @@ import {
 } from 'lucide-react'
 import type { Exercise, SetType, Workout, WorkoutExercise, WorkoutSet } from '@/types'
 import { SET_TYPE_META } from '@/types'
-import { Button, CheckBadge, DurationField, IconButton, Menu, Modal, NumberField, Textarea } from '@/components/ui'
+import { Button, CheckBadge, DurationField, IconButton, Menu, NumberField, Textarea } from '@/components/ui'
+import { RestTimeChip, RestTimeModal } from '@/components/RestTimeEditor'
 import { CategoryBadge } from '@/components/ExerciseFormModal'
 import { ExerciseAvatar } from '@/components/ExercisePicker'
 import { t, useLang } from '@/lib/i18n'
@@ -311,6 +313,8 @@ interface CardProps {
   exercise: Exercise | undefined
   dragHandleProps?: React.HTMLAttributes<HTMLElement>
   onReplace: () => void
+  /** Ouvre la fiche de l'exercice (nom / icône) au lieu de le remplacer. */
+  onOpenExercise?: () => void
   onMoveUp?: () => void
   onMoveDown?: () => void
   onSuperset?: () => void
@@ -324,6 +328,7 @@ export function WorkoutExerciseCard({
   exercise,
   dragHandleProps,
   onReplace,
+  onOpenExercise,
   onMoveUp,
   onMoveDown,
   onSuperset,
@@ -340,7 +345,6 @@ export function WorkoutExerciseCard({
   const startRest = useStore((s) => s.startRest)
   const [showNotes, setShowNotes] = useState(Boolean(we.notes))
   const [restEditOpen, setRestEditOpen] = useState(false)
-  const [restDraft, setRestDraft] = useState(we.restSeconds)
 
   // Rappel « précédent » : en priorité la dernière fois DANS CE programme,
   // sinon la dernière performance globale.
@@ -374,7 +378,7 @@ export function WorkoutExerciseCard({
           <GripVertical size={16} />
         </button>
 
-        <button type="button" onClick={onReplace} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
+        <button type="button" onClick={onOpenExercise ?? onReplace} title={t('logger.viewExercise')} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
           {exercise && <ExerciseAvatar exercise={exercise} size={36} />}
           <span className="min-w-0 flex-1">
             <span className="flex items-center gap-1.5">
@@ -408,6 +412,7 @@ export function WorkoutExerciseCard({
             </IconButton>
           )}
           items={[
+            { label: t('logger.viewExercise'), icon: <Dumbbell size={14} />, onClick: () => onOpenExercise?.(), hidden: !onOpenExercise },
             { label: t('logger.replaceExercise'), icon: <Replace size={14} />, onClick: onReplace },
             { label: t('logger.moveUp'), icon: <ArrowUp size={14} />, onClick: () => onMoveUp?.(), hidden: !onMoveUp },
             { label: t('logger.moveDown'), icon: <ArrowDown size={14} />, onClick: () => onMoveDown?.(), hidden: !onMoveDown },
@@ -494,26 +499,11 @@ export function WorkoutExerciseCard({
           {allDone ? t('logger.uncheckAll') : t('logger.checkAll')}
         </Button>
         <div className="ml-auto flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => {
-              setRestDraft(we.restSeconds)
-              setRestEditOpen(true)
-            }}
-            className="tabular rounded-lg bg-surface-2 px-2 py-1 text-[11px] font-semibold text-muted transition-colors hover:text-ink"
-            title={t('logger.restEdit')}
-          >
-            ⏱ {we.restSeconds}s
-          </button>
-          <button
-            type="button"
-            onClick={() => startRest(we.restSeconds, { label: exercise?.name, exerciseId: exercise?.id })}
-            className="tabular flex h-7 min-w-7 items-center justify-center rounded-lg bg-surface-2 px-2 text-[11px] font-semibold text-accent transition-colors hover:brightness-110"
-            title={t('logger.restStart')}
-            aria-label={t('logger.restStart')}
-          >
-            ▶
-          </button>
+          <RestTimeChip
+            seconds={we.restSeconds}
+            onEdit={() => setRestEditOpen(true)}
+            onStart={() => startRest(we.restSeconds, { label: exercise?.name, exerciseId: exercise?.id })}
+          />
           {volume > 0 && <span className="tabular text-[11px] text-muted">{formatVolume(volume, settings.unit)}</span>}
           {bestE1rm > 0 && (
             <span className="tabular text-[11px] font-semibold text-accent" title="1RM estimé de la séance">
@@ -524,67 +514,14 @@ export function WorkoutExerciseCard({
       </footer>
 
       {/* Édition du temps de repos (le ▶ lance le chrono sans ouvrir) */}
-      <Modal
+      <RestTimeModal
         open={restEditOpen}
         onClose={() => setRestEditOpen(false)}
-        title={`Repos — ${exercise?.name ?? 'exercice'}`}
-        size="sm"
-      >
-        <p className="mb-2 text-xs font-semibold text-muted">Temps de repos par défaut pour cet exercice</p>
-        <NumberField
-          value={restDraft}
-          onChange={(v) => setRestDraft(v ?? 0)}
-          step={15}
-          min={0}
-          max={600}
-          decimals={0}
-          suffix="s"
-          ariaLabel={t('logger.restAria')}
-        />
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {[30, 60, 90, 120, 180].map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setRestDraft(s)}
-              className={cn(
-                'tabular rounded-lg border px-2.5 py-1.5 text-xs font-bold transition-colors',
-                restDraft === s
-                  ? 'border-accent-solid bg-accent-solid text-accent-contrast'
-                  : 'border-line bg-surface-2 text-muted hover:text-ink',
-              )}
-            >
-              {s}s
-            </button>
-          ))}
-        </div>
-        <div className="mt-4 flex gap-2">
-          <Button block onClick={() => setRestEditOpen(false)}>
-            Annuler
-          </Button>
-          <Button
-            block
-            onClick={() => {
-              updateWorkoutExercise(workout.id, we.id, { restSeconds: Math.max(0, Math.round(restDraft)) })
-              setRestEditOpen(false)
-            }}
-          >
-            Enregistrer
-          </Button>
-          <Button
-            block
-            variant="primary"
-            onClick={() => {
-              const secs = Math.max(0, Math.round(restDraft))
-              updateWorkoutExercise(workout.id, we.id, { restSeconds: secs })
-              setRestEditOpen(false)
-              if (secs > 0) startRest(secs, { label: exercise?.name, exerciseId: exercise?.id })
-            }}
-          >
-            ▶ Lancer
-          </Button>
-        </div>
-      </Modal>
+        exerciseName={exercise?.name ?? we.exerciseName}
+        value={we.restSeconds}
+        onSave={(secs) => updateWorkoutExercise(workout.id, we.id, { restSeconds: secs })}
+        onStart={(secs) => startRest(secs, { label: exercise?.name, exerciseId: exercise?.id })}
+      />
     </section>
   )
 }

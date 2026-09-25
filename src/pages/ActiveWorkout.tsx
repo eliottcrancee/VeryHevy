@@ -22,6 +22,7 @@ import {
   Check,
   Dumbbell,
   Flag,
+  HeartPulse,
   Link2,
   ListChecks,
   MoreVertical,
@@ -51,10 +52,11 @@ import {
   Textarea,
 } from '@/components/ui'
 import { ExercisePicker } from '@/components/ExercisePicker'
+import { ExerciseSheet } from '@/components/ExerciseSheet'
 import { WorkoutExerciseCard } from '@/components/WorkoutLogger'
 import { useStore, selectActiveWorkout } from '@/store/store'
 import { workoutDurationSeconds, workoutSets, workoutVolume } from '@/lib/calc'
-import { cn, formatDuration, formatVolume, inputToKg, kgToInput } from '@/lib/utils'
+import { cn, formatDuration, formatVolume } from '@/lib/utils'
 import { useBottomBar, useInterval } from '@/hooks/app'
 import { t, useLang } from '@/lib/i18n'
 
@@ -144,10 +146,10 @@ function StartScreen() {
                 className="flex w-full items-center gap-3 rounded-2xl border border-line bg-surface p-3 text-left transition-colors hover:bg-surface-2"
               >
                 <span
-                  className="flex h-10 w-10 items-center justify-center rounded-xl text-lg"
+                  className="flex h-10 w-10 items-center justify-center rounded-xl text-accent"
                   style={{ background: `color-mix(in srgb, ${r.color} 20%, transparent)` }}
                 >
-                  {r.folder === 'Cardio' ? '🏃' : '🏋️'}
+                  {r.folder === 'Cardio' ? <HeartPulse size={18} /> : <Dumbbell size={18} />}
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-bold">{r.name}</span>
@@ -220,6 +222,7 @@ export default function ActiveWorkoutPage() {
   const [confirmDiscard, setConfirmDiscard] = useState(false)
   const [confirmFinish, setConfirmFinish] = useState(false)
   const [linkAnchor, setLinkAnchor] = useState<string | null>(null)
+  const [sheetExerciseId, setSheetExerciseId] = useState<string | null>(null)
   const [durationOpen, setDurationOpen] = useState(false)
   const [durationDraft, setDurationDraft] = useState(0)
   const [, force] = useState(0)
@@ -371,6 +374,7 @@ export default function ActiveWorkoutPage() {
                         we={we}
                         exercise={exerciseMap.get(we.exerciseId)}
                         dragHandleProps={handle}
+                        onOpenExercise={() => setSheetExerciseId(we.exerciseId)}
                         onReplace={() => setReplaceTarget(we.id)}
                         onMoveUp={index > 0 ? () => moveWorkoutExercise(workout.id, we.id, index - 1) : undefined}
                         onMoveDown={
@@ -413,21 +417,6 @@ export default function ActiveWorkoutPage() {
             value={workout.notes ?? ''}
             onChange={(e) => updateWorkout(workout.id, { notes: e.target.value })}
             placeholder={t('workout.notesHint')}
-          />
-        </Card>
-
-        <Card className="p-4">
-          <p className="mb-2 text-xs font-bold tracking-widest text-muted uppercase">{t('workout.bodyweightOpt')}</p>
-          <Input
-            type="number"
-            inputMode="decimal"
-            value={kgToInput(workout.bodyweightKg, settings.unit) ?? ''}
-            onChange={(e) =>
-              updateWorkout(workout.id, {
-                bodyweightKg: e.target.value === '' ? undefined : inputToKg(Number(e.target.value), settings.unit),
-              })
-            }
-            placeholder={settings.unit === 'kg' ? t('workout.bodyweightEx') : t('workout.bodyweightExLb')}
           />
         </Card>
 
@@ -501,6 +490,9 @@ export default function ActiveWorkoutPage() {
       </div>
 
       {/* Modales */}
+      {/* Fiche exercice : ouverte en tapant le nom / l'icône d'un exo. */}
+      <ExerciseSheet exerciseId={sheetExerciseId} onClose={() => setSheetExerciseId(null)} />
+
       <ExercisePicker
         open={picker}
         onClose={() => setPicker(false)}

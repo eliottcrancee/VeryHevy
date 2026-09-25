@@ -210,7 +210,6 @@ export interface Workout {
   rating?: number
   templateId?: string
   templateName?: string
-  bodyweightKg?: number
   /** durée totale du repos cumulé (secondes) */
   restSeconds?: number
   createdAt: string
@@ -274,6 +273,8 @@ export interface Settings {
   restSoundEnabled: boolean
   /** Notification système (téléphone/PC) à la fin du chrono de repos. */
   restNotifyEnabled: boolean
+  /** Vibration du téléphone à la fin du chrono de repos (mobile uniquement). */
+  restVibrateEnabled: boolean
   keepAwake: boolean
   weeklyGoal: number
   defaultSets: number

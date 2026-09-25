@@ -51,6 +51,8 @@ export function RestTimerBar() {
   const resumeRest = useStore((s) => s.resumeRest)
   const soundEnabled = useStore((s) => s.settings.restSoundEnabled)
   const notifyEnabled = useStore((s) => s.settings.restNotifyEnabled)
+  // `!== false` : les réglages enregistrés avant cette option restent vibrants.
+  const vibrateEnabled = useStore((s) => s.settings.restVibrateEnabled !== false)
   const [fired, setFired] = useState(false)
 
   const paused = restTimer.pausedSeconds != null
@@ -72,10 +74,10 @@ export function RestTimerBar() {
     if (active && finished && !fired) {
       setFired(true)
       if (soundEnabled) playBeep(2)
-      vibrate([120, 60, 120])
+      if (vibrateEnabled) vibrate([120, 60, 120])
       if (notifyEnabled) showRestNotification(restTimer.label ?? undefined)
     }
-  }, [active, finished, fired, soundEnabled, notifyEnabled, restTimer.label])
+  }, [active, finished, fired, soundEnabled, notifyEnabled, vibrateEnabled, restTimer.label])
 
   if (!active) return null
 

@@ -49,7 +49,7 @@ export default function WelcomePage() {
     setHint(null)
     try {
       const ok = await isUsernameAvailable(clean)
-      setHint(ok ? `@${clean} est disponible 🎉` : `@${clean} est déjà pris`)
+      setHint(ok ? `@${clean} est disponible` : `@${clean} est déjà pris`)
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Vérification impossible', 'error')
     } finally {
@@ -62,7 +62,7 @@ export default function WelcomePage() {
     setSaving(true)
     try {
       await claimUsername(clean)
-      notify(`Bienvenue @${clean} 💪`, 'success')
+      notify(`Bienvenue @${clean}`, 'success')
       navigate('/', { replace: true })
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Pseudo impossible', 'error')

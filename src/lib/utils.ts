@@ -283,7 +283,7 @@ export function notificationPermission(): NotificationPermission | 'unsupported'
 export function showRestNotification(label?: string) {
   try {
     if (!('Notification' in window) || Notification.permission !== 'granted') return
-    new Notification('Repos terminé 💪', {
+    new Notification('Repos terminé', {
       body: label ? `${label} — à vous !` : 'À vous !',
       tag: 'veryhevy-rest',
       icon: './icon.svg',

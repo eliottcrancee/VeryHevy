@@ -8,11 +8,13 @@
     "build": "tsc -b && vite build --configLoader runner",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
+    "test:typecheck": "tsc -b --noEmit",
+    "test:i18n": "node scripts/check-i18n.mjs",
     "test:smoke": "node scripts/smoke.mjs",
     "test:audit": "node scripts/audit.mjs",
     "test:regress": "node scripts/regress.mjs",
     "test:pages": "node scripts/check-pages.mjs",
-    "test:all": "npm run build && node scripts/smoke.mjs && node scripts/audit.mjs && node scripts/regress.mjs && node scripts/check-pages.mjs"
+    "test:all": "npm run test:i18n && npm run build && node scripts/smoke.mjs && node scripts/audit.mjs && node scripts/regress.mjs && node scripts/check-pages.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

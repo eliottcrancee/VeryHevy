@@ -321,11 +321,6 @@ export default function WorkoutReportPage() {
               {workout.notes || t('workout.noNotes')}
             </p>
           )}
-          {workout.bodyweightKg !== undefined && (
-            <p className="mt-3 text-xs text-muted">
-              {t('workout.bodyweightIs', { w: formatWeight(workout.bodyweightKg, settings.unit) })}
-            </p>
-          )}
         </Card>
 
         {previousSame && (

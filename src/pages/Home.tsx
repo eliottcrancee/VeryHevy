@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Bell, Check, CloudOff, Plus, Search, UserPlus } from 'lucide-react'
+import { Bell, Check, CloudOff, Plus, Search, UserPlus, X } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
 import { useStore } from '@/store/store'
 import type { FollowState } from '@/lib/social'
@@ -230,7 +230,7 @@ export default function HomePage() {
               onClick={() => { setQuery(''); setResults(null) }}
               className="absolute top-1/2 right-2 -translate-y-1/2 rounded-full p-1 text-muted hover:text-ink"
             >
-              ✕
+              <X size={14} />
             </button>
           )}
         </div>

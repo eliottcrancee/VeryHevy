@@ -15,6 +15,7 @@ import {
   ChevronRight,
   Copy,
   Dumbbell,
+  Lightbulb,
   Pencil,
   Play,
   Plus,
@@ -25,6 +26,7 @@ import { useStore, selectActiveWorkout } from '@/store/store'
 import { Page, PageHeader } from '@/components/PageHeader'
 import { ChartTooltipContent, chartLineCursor, chartTooltipWrapper } from '@/components/charts'
 import { Button, Card, Chip, EmptyState, IconButton, SectionTitle, Stat, Tabs } from '@/components/ui'
+import { RECORD_LABEL_KEYS } from '@/components/ExerciseSheet'
 import { ExerciseFormModal } from '@/components/ExerciseFormModal'
 import { CATEGORY_META, TRACKING_TYPES } from '@/types'
 import { arcWorkouts, getExerciseProgress, getExerciseSessions, getPersonalRecords } from '@/lib/calc'
@@ -32,16 +34,6 @@ import { cn, formatDate, formatDistance, formatDuration, formatVolume, formatWei
 import { t, tx, useLang } from '@/lib/i18n'
 
 type Tab = 'progression' | 'historique' | 'infos'
-
-/** Libellés de records traduisibles (clé i18n par type de record). */
-const RECORD_KEYS = {
-  weight: 'workout.recWeight',
-  e1rm: 'workout.recE1rm',
-  reps: 'workout.recReps',
-  volume: 'workout.recVolume',
-  duration: 'workout.recDuration',
-  distance: 'workout.recDistance',
-} as const
 
 export default function ExerciseDetailPage() {
   const { id = '' } = useParams()
@@ -193,15 +185,6 @@ export default function ExerciseDetailPage() {
       />
 
       <Page className="max-w-3xl space-y-4">
-        {/* Filtre de période (30j / 90j / 6m / tout) */}
-        <div className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1">
-          {RANGE_LABEL_KEYS.map(([value, key]) => (
-            <Chip key={value} size="sm" active={range === value} onClick={() => setRange(value)}>
-              {t(key)}
-            </Chip>
-          ))}
-        </div>
-
         {/* Photos */}
         {exercise.images.length > 0 && (
           <Card className="relative overflow-hidden">
@@ -288,8 +271,9 @@ export default function ExerciseDetailPage() {
         </div>
 
         {exercise.tips && (
-          <Card className="border-accent-line bg-accent-soft p-3.5">
-            <p className="text-[13px] font-medium">💡 {exercise.tips}</p>
+          <Card className="flex items-start gap-2 border-accent-line bg-accent-soft p-3.5">
+            <Lightbulb size={15} className="mt-0.5 shrink-0 text-accent" />
+            <p className="text-[13px] font-medium">{exercise.tips}</p>
           </Card>
         )}
 
@@ -329,7 +313,7 @@ export default function ExerciseDetailPage() {
                 <Stat
                   key={r.kind}
                   compact
-                  label={t(RECORD_KEYS[r.kind])}
+                  label={t(RECORD_LABEL_KEYS[r.kind])}
                   icon={<Trophy size={11} />}
                   value={
                     r.kind === 'weight' || r.kind === 'e1rm'
@@ -361,7 +345,16 @@ export default function ExerciseDetailPage() {
         />
 
         {tab === 'progression' && (
-          <Card className="p-4">
+          <Card className="space-y-3 p-4">
+            {/* Filtre de période (30j / 90j / 6m / tout) : rattaché à la
+                progression, pas perché en haut de la fiche. */}
+            <div className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1">
+              {RANGE_LABEL_KEYS.map(([value, key]) => (
+                <Chip key={value} size="sm" active={range === value} onClick={() => setRange(value)}>
+                  {t(key)}
+                </Chip>
+              ))}
+            </div>
             {progress.length < 2 ? (
               <EmptyState
                 icon={<Play size={22} />}

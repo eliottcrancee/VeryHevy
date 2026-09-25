@@ -5,7 +5,9 @@ import {
   CloudDownload,
   Database,
   Download,
+  Dumbbell,
   Info,
+  Languages,
   LogOut,
   Moon,
   Monitor,
@@ -271,7 +273,7 @@ export default function SettingsPage() {
             <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent-soft text-lg font-extrabold text-accent">
               {(user?.user_metadata?.full_name as string | undefined)?.slice(0, 1).toUpperCase()
                 ?? user?.email?.slice(0, 1).toUpperCase()
-                ?? '🏋️'}
+                ?? <Dumbbell size={18} />}
             </span>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-bold">
@@ -279,13 +281,17 @@ export default function SettingsPage() {
                   ? ((user.user_metadata?.full_name as string | undefined) ?? user.email)
                   : t('settings.accountLocal')}
               </p>
-              <p className="truncate text-xs text-muted">
-                {cloudEnabled && user
-                  ? t('settings.accountGoogle', { email: user.email })
-                  : isCloudEnabled
-                    ? t('settings.accountOffline')
-                    : t('settings.accountNoCloud')}
-              </p>
+              {/* Fournisseur puis email sur sa propre ligne (l'email est long). */}
+              {cloudEnabled && user ? (
+                <>
+                  <p className="truncate text-xs text-muted">{t('settings.accountGoogle')}</p>
+                  <p className="truncate text-[11px] text-muted">{user.email}</p>
+                </>
+              ) : (
+                <p className="truncate text-xs text-muted">
+                  {isCloudEnabled ? t('settings.accountOffline') : t('settings.accountNoCloud')}
+                </p>
+              )}
             </div>
           </div>
           <div className="flex gap-2">
@@ -313,7 +319,7 @@ export default function SettingsPage() {
         <Card className="space-y-3 p-4">
           <SectionTitle className="mb-0">
             <span className="inline-flex items-center gap-1.5">
-              🌐 {t('lang.title')}
+              <Languages size={13} /> {t('lang.title')}
             </span>
           </SectionTitle>
           <Segmented
@@ -452,6 +458,11 @@ export default function SettingsPage() {
               label={t('settings.restSound')}
             />
             <Checkbox
+              checked={settings.restVibrateEnabled}
+              onChange={(v) => updateSettings({ restVibrateEnabled: v })}
+              label={t('settings.restVibrate')}
+            />
+            <Checkbox
               checked={settings.restNotifyEnabled}
               onChange={(v) => void toggleRestNotify(v)}
               label={t('settings.restNotify')}
@@ -586,7 +597,7 @@ export default function SettingsPage() {
           <p className="text-sm text-muted">{t('settings.syncHint')}</p>
           <p className="text-xs text-muted">
             {t('settings.lastSync', { when: lastSync })}
-            {settings.lastSyncError ? ` · ⚠ ${settings.lastSyncError}` : ''}
+            {settings.lastSyncError ? ` · ${settings.lastSyncError}` : ''}
           </p>
           {cloudEnabled && user && (
             <div>

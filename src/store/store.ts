@@ -49,6 +49,7 @@ export const DEFAULT_SETTINGS: Settings = {
   autoStartRest: true,
   restSoundEnabled: true,
   restNotifyEnabled: true,
+  restVibrateEnabled: true,
   keepAwake: true,
   weeklyGoal: 4,
   defaultSets: 3,
@@ -379,6 +380,10 @@ export const useStore = create<StoreState>()(
         // les réglages enregistrés avant l'existence de cette clé.
         if (get().settings.restNotifyEnabled === undefined) {
           set({ settings: { ...get().settings, restNotifyEnabled: true } })
+        }
+        // Vibration de fin de repos : activée par défaut (même raison).
+        if (get().settings.restVibrateEnabled === undefined) {
+          set({ settings: { ...get().settings, restVibrateEnabled: true } })
         }
         // Records réinitialisables : clé absente des anciennes sauvegardes.
         if (get().settings.recordsSince === undefined) {

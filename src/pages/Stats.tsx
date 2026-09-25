@@ -3,10 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   Bar,
   BarChart,
-  CartesianGrid,
   Cell,
-  Line,
-  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -29,16 +26,16 @@ import {
 } from '@/lib/calc'
 import { CATEGORY_META } from '@/types'
 import CalendarPage from '@/pages/Calendar'
-import { localeOf, t, tx, useLang } from '@/lib/i18n'
-import { ChartTooltipContent, chartCursor, chartLineCursor, chartTooltipWrapper } from '@/components/charts'
+import { t, tx, useLang } from '@/lib/i18n'
+import { ChartTooltipContent, chartCursor, chartTooltipWrapper } from '@/components/charts'
 import { formatDuration, formatVolume, formatWeight, kgToDisplay, RANGE_LABEL_KEYS, rangeSince, type RangeFilter } from '@/lib/utils'
 
 export default function StatsPage({ bare = false }: { bare?: boolean }) {
+  useLang()
   const workouts = useStore((s) => s.workouts)
   const exercises = useStore((s) => s.exercises)
   const settings = useStore((s) => s.settings)
   const [range, setRange] = useState<RangeFilter>('90j')
-  const loc = localeOf(useLang())
 
   const all = completedWorkouts(workouts)
 
@@ -117,19 +114,6 @@ export default function StatsPage({ bare = false }: { bare?: boolean }) {
   }, [filtered, all, exercises, settings.recordsSince])
 
   // Calendrier d'entraînement (le détail par jour vit dans le composant Calendar).
-
-  const bodyweightSeries = useMemo(
-    () =>
-      workouts
-        .filter((w) => w.bodyweightKg !== undefined)
-        .sort((a, b) => +new Date(a.startedAt) - +new Date(b.startedAt))
-        .slice(-20)
-        .map((w) => ({
-          label: new Intl.DateTimeFormat(loc, { day: '2-digit', month: '2-digit' }).format(new Date(w.startedAt)),
-          poids: w.bodyweightKg,
-        })),
-    [workouts],
-  )
 
   if (!all.length) {
     return (
@@ -356,61 +340,7 @@ export default function StatsPage({ bare = false }: { bare?: boolean }) {
           </Card>
         )}
 
-        {/* Poids de corps */}
-        {bodyweightSeries.length > 1 && (
-          <Card className="p-4">
-            <SectionTitle>{t('stats.bodyweight', { unit: settings.unit })}</SectionTitle>
-            <div className="mx-auto h-44 w-full max-w-md">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart
-                  data={bodyweightSeries.map((p) => ({
-                    label: p.label,
-                    poids: Math.round(kgToDisplay(p.poids ?? 0, settings.unit) * 10) / 10,
-                  }))}
-                  margin={{ top: 8, right: 8, left: -8, bottom: 0 }}
-                >
-                  <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
-                  <XAxis
-                    dataKey="label"
-                    tick={{ fontSize: 10, fill: 'var(--muted)' }}
-                    axisLine={false}
-                    tickLine={false}
-                    interval="preserveStartEnd"
-                    minTickGap={32}
-                  />
-                  <YAxis
-                    tick={{ fontSize: 10, fill: 'var(--muted)' }}
-                    axisLine={false}
-                    tickLine={false}
-                    width={44}
-                    domain={['auto', 'auto']}
-                  />
-                  <Tooltip
-                    cursor={chartLineCursor}
-                    wrapperStyle={chartTooltipWrapper}
-                    content={
-                      <ChartTooltipContent format={(p) => `${p.value} ${settings.unit}`} />
-                    }
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="poids"
-                    name={t('stats.chartWeight')}
-                    stroke="var(--accent)"
-                    strokeWidth={2.5}
-                    dot={{ r: 3, fill: 'var(--accent)' }}
-                    activeDot={{ r: 5 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-            <p className="mt-1 text-center text-sm font-bold">
-              {formatWeight(bodyweightSeries.at(-1)?.poids, settings.unit)}
-              <span className="ml-2 text-[11px] font-normal text-muted">{t('stats.latest')}</span>
-            </p>
-          </Card>
-        )}
-      </Page>
+        </Page>
     </div>
   )
 }

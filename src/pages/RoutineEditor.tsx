@@ -18,7 +18,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Copy, GripVertical, MoreVertical, Play, Plus, Replace, Trash2 } from 'lucide-react'
+import { Copy, Dumbbell, GripVertical, MoreVertical, Play, Plus, Replace, Trash2 } from 'lucide-react'
 import type { RoutineExercise, SetType } from '@/types'
 import { SET_TYPE_META } from '@/types'
 import { useStore, trackingFieldsOf } from '@/store/store'
@@ -37,6 +37,8 @@ import {
   Textarea,
 } from '@/components/ui'
 import { ExercisePicker, ExerciseAvatar } from '@/components/ExercisePicker'
+import { ExerciseSheet } from '@/components/ExerciseSheet'
+import { RestTimeChip, RestTimeModal } from '@/components/RestTimeEditor'
 import { CategoryBadge } from '@/components/ExerciseFormModal'
 import { useBottomBar } from '@/hooks/app'
 import { cn, displayToMeters, inputToKg, kgToInput, metersToDisplay } from '@/lib/utils'
@@ -78,6 +80,10 @@ export default function RoutineEditorPage() {
 
   const [pickerOpen, setPickerOpen] = useState(false)
   const [replaceTarget, setReplaceTarget] = useState<string | null>(null)
+  /** Exo dont la fiche est ouverte (nom / icône tapés). */
+  const [sheetExerciseId, setSheetExerciseId] = useState<string | null>(null)
+  /** Exo dont le temps de repos est en cours d'édition. */
+  const [restTarget, setRestTarget] = useState<RoutineExercise | null>(null)
   const bottomBarRef = useBottomBar()
 
   const sensors = useSensors(
@@ -218,27 +224,43 @@ export default function RoutineEditorPage() {
                     <SortableRow key={re.id} id={re.id}>
                       {(handle) => (
                         <Card className="overflow-hidden">
-                          <div className="flex items-center gap-2 border-b border-line px-3 py-2.5">
+                          {/* Même en-tête que la séance en cours : poignée, puis
+                              nom / icône qui ouvrent la fiche de l'exercice. */}
+                          <header className="flex items-start gap-2 px-3 pt-3 pb-2">
                             <button
                               {...handle}
-                              className="-ml-1 flex h-8 w-6 cursor-grab items-center justify-center text-muted/50 touch-none active:cursor-grabbing"
+                              className="mt-1 -ml-1 flex h-8 w-6 shrink-0 cursor-grab items-center justify-center rounded text-muted/50 touch-none hover:text-muted active:cursor-grabbing"
                               aria-label={t('routine.reorder')}
                             >
                               <GripVertical size={16} />
                             </button>
-                            {ex && <ExerciseAvatar exercise={ex} size={32} />}
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-bold">{ex?.name ?? re.exerciseName ?? t('workout.deletedExercise')}</p>
-                              {ex && <CategoryBadge category={ex.category} />}
-                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setSheetExerciseId(re.exerciseId)}
+                              title={t('logger.viewExercise')}
+                              className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+                            >
+                              {ex && <ExerciseAvatar exercise={ex} size={36} />}
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate text-sm font-bold">
+                                  {ex?.name ?? re.exerciseName ?? t('workout.deletedExercise')}
+                                </span>
+                                {ex && (
+                                  <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted">
+                                    <CategoryBadge category={ex.category} />
+                                  </span>
+                                )}
+                              </span>
+                            </button>
                             <Menu
                               align="right"
                               trigger={({ toggle }) => (
                                 <IconButton label={t('workout.optionsMenu')} onClick={toggle}>
-                                  <MoreVertical size={16} />
+                                  <MoreVertical size={17} />
                                 </IconButton>
                               )}
                               items={[
+                                { label: t('logger.viewExercise'), icon: <Dumbbell size={14} />, onClick: () => setSheetExerciseId(re.exerciseId) },
                                 { label: t('routine.replace'), icon: <Replace size={14} />, onClick: () => setReplaceTarget(re.id) },
                                 {
                                   label: t('routine.moveUp'),
@@ -260,11 +282,29 @@ export default function RoutineEditorPage() {
                                 },
                               ]}
                             />
+                          </header>
+
+                          {/* Colonnes : les unités vivent en haut (jamais en
+                              suffixe dans le champ), comme dans la séance. */}
+                          <div className="flex items-center gap-1 px-2 pb-1 text-[10px] font-bold tracking-wide text-muted uppercase">
+                            <span className="w-6 text-center">#</span>
+                            {fields.map((f) => (
+                              <span
+                                key={f}
+                                className={cn(
+                                  'min-w-0 flex-1 text-center',
+                                  f === 'weight' || f === 'distance' ? 'flex-[1.15]' : '',
+                                )}
+                              >
+                                {{ weight: settings.unit, reps: 'reps', duration: 'durée', distance: settings.distanceUnit }[f]}
+                              </span>
+                            ))}
+                            <span className="w-9" />
                           </div>
 
-                          <div className="space-y-1 p-3">
+                          <div className="space-y-0.5 px-2 pb-1">
                             {re.sets.map((set, i) => (
-                              <div key={i} className="flex items-center gap-2">
+                              <div key={i} className="group flex min-w-0 items-center gap-1 rounded-lg px-1 py-1 transition-colors hover:bg-surface-2">
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -275,31 +315,34 @@ export default function RoutineEditorPage() {
                                   style={{ color: SET_TYPE_META[set.type].color }}
                                   title={t('routine.setTypeLabel', { type: tx('set', set.type) })}
                                   aria-label={t('routine.setTypeLabel', { type: tx('set', set.type) })}
-                                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-[11px] font-extrabold transition-colors hover:bg-surface-3"
+                                  className="flex h-7 w-6 shrink-0 items-center justify-center rounded text-[12px] font-extrabold transition-colors hover:bg-surface-3"
                                 >
                                   {SET_TYPE_META[set.type].short || i + 1}
                                 </button>
 
                                 {fields.includes('weight') && (
                                   <NumberField
-                                    className="h-9 flex-1 border-transparent bg-surface-2/60"
+                                    compact
+                                    stepless
+                                    className="h-9 min-w-0 flex-[1.15] border-transparent bg-surface-2/70"
                                     value={kgToInput(set.weight, settings.unit)}
                                     onChange={(v) => updateSets(re, i, { weight: inputToKg(v, settings.unit) })}
                                     step={settings.unit === 'lb' ? 5 : 2.5}
                                     decimals={settings.unit === 'kg' ? 2 : 1}
-                                    placeholder={settings.unit}
-                                    suffix={settings.unit}
+                                    placeholder="0"
                                     ariaLabel={t('routine.loadAria', { n: i + 1 })}
                                   />
                                 )}
                                 {fields.includes('reps') && (
                                   <NumberField
-                                    className="h-9 flex-1 border-transparent bg-surface-2/60"
+                                    compact
+                                    stepless
+                                    className="h-9 min-w-0 flex-1 border-transparent bg-surface-2/70"
                                     value={set.reps}
                                     onChange={(v) => updateSets(re, i, { reps: v })}
                                     step={1}
                                     decimals={0}
-                                    placeholder={t('routine.repsPh')}
+                                    placeholder="0"
                                     ariaLabel={t('routine.repsAria', { n: i + 1 })}
                                   />
                                 )}
@@ -308,73 +351,68 @@ export default function RoutineEditorPage() {
                                     value={set.duration}
                                     onChange={(v) => updateSets(re, i, { duration: v })}
                                     ariaLabel={t('routine.durationAria', { n: i + 1 })}
-                                    className="min-w-0 flex-1 border-transparent bg-surface-2/60"
+                                    className="min-w-0 flex-1 border-transparent bg-surface-2/70"
                                   />
                                 )}
                                 {fields.includes('distance') && (
                                   <NumberField
-                                    className="h-9 flex-1 border-transparent bg-surface-2/60"
+                                    compact
+                                    stepless
+                                    className="h-9 min-w-0 flex-[1.15] border-transparent bg-surface-2/70"
                                     value={metersToDisplay(set.distance, settings.distanceUnit)}
                                     onChange={(v) => updateSets(re, i, { distance: displayToMeters(v, settings.distanceUnit) })}
                                     step={settings.distanceUnit === 'km' ? 0.1 : 0.05}
                                     decimals={2}
-                                    placeholder={settings.distanceUnit}
-                                    suffix={settings.distanceUnit}
+                                    placeholder="0"
                                     ariaLabel={t('routine.distanceAria', { n: i + 1 })}
                                   />
                                 )}
 
-                                <IconButton
-                                  label={t('routine.deleteSet')}
-                                  className="h-8 w-8"
-                                  onClick={() =>
-                                    updateRoutineExercise(routine.id, re.id, {
-                                      sets: re.sets.filter((_, j) => j !== i),
-                                    })
-                                  }
-                                >
-                                  <Trash2 size={14} />
-                                </IconButton>
+                                <span className="ml-auto shrink-0 pl-0.5">
+                                  <IconButton
+                                    label={t('routine.deleteSet')}
+                                    className="h-8 w-8"
+                                    onClick={() =>
+                                      updateRoutineExercise(routine.id, re.id, {
+                                        sets: re.sets.filter((_, j) => j !== i),
+                                      })
+                                    }
+                                  >
+                                    <Trash2 size={15} />
+                                  </IconButton>
+                                </span>
                               </div>
                             ))}
-
-                            <div className="flex items-center gap-2 pt-1">
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="text-accent"
-                                onClick={() =>
-                                  updateRoutineExercise(routine.id, re.id, {
-                                    sets: [
-                                      ...re.sets,
-                                      {
-                                        type: 'normal',
-                                        reps: re.sets.at(-1)?.reps,
-                                        weight: re.sets.at(-1)?.weight,
-                                        duration: re.sets.at(-1)?.duration,
-                                        distance: re.sets.at(-1)?.distance,
-                                      },
-                                    ],
-                                  })
-                                }
-                              >
-                                <Plus size={13} /> {t('routine.addSet')}
-                              </Button>
-                              <div className="ml-auto flex items-center gap-2">
-                                <span className="text-[11px] text-muted">{t('routine.rest')}</span>
-                                <NumberField
-                                  className="h-8 w-24 border-transparent bg-surface-2/60"
-                                  value={re.restSeconds}
-                                  onChange={(v) => updateRoutineExercise(routine.id, re.id, { restSeconds: v ?? 90 })}
-                                  step={15}
-                                  min={0}
-                                  decimals={0}
-                                  suffix="s"
-                                  ariaLabel={t('routine.restAria')}
-                                />
-                              </div>
-                            </div>
                           </div>
+
+                          <footer className="flex items-center gap-2 border-t border-line bg-surface-2/40 px-2 py-2">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-accent"
+                            onClick={() =>
+                              updateRoutineExercise(routine.id, re.id, {
+                                sets: [
+                                  ...re.sets,
+                                  {
+                                    type: 'normal',
+                                    reps: re.sets.at(-1)?.reps,
+                                    weight: re.sets.at(-1)?.weight,
+                                    duration: re.sets.at(-1)?.duration,
+                                    distance: re.sets.at(-1)?.distance,
+                                  },
+                                ],
+                              })
+                            }
+                          >
+                            <Plus size={14} /> {t('routine.addSet')}
+                          </Button>
+                          {/* Temps de repos : même pastille et même modale que
+                              dans la séance en cours. */}
+                          <div className="ml-auto">
+                            <RestTimeChip seconds={re.restSeconds} onEdit={() => setRestTarget(re)} />
+                          </div>
+                          </footer>
                         </Card>
                       )}
                     </SortableRow>
@@ -434,6 +472,20 @@ export default function RoutineEditorPage() {
             updateRoutineExercise(routine.id, replaceTarget, { exerciseId: ids[0], exerciseName: name })
           }
           setReplaceTarget(null)
+        }}
+      />
+
+      {/* Fiche exercice (nom / icône) et temps de repos : mêmes composants que
+          dans la séance en cours. */}
+      <ExerciseSheet exerciseId={sheetExerciseId} onClose={() => setSheetExerciseId(null)} />
+
+      <RestTimeModal
+        open={Boolean(restTarget)}
+        onClose={() => setRestTarget(null)}
+        exerciseName={exerciseMap.get(restTarget?.exerciseId ?? '')?.name ?? restTarget?.exerciseName}
+        value={restTarget?.restSeconds ?? 90}
+        onSave={(seconds) => {
+          if (restTarget) updateRoutineExercise(routine.id, restTarget.id, { restSeconds: seconds })
         }}
       />
     </div>

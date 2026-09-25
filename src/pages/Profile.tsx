@@ -1,10 +1,13 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import {
+  Ban,
   BarChart3,
+  Flag,
   History,
   LayoutGrid,
+  MoreVertical,
   Pencil,
   Settings as SettingsIcon,
   UserPlus,
@@ -49,6 +52,7 @@ import {
   EmptyState,
   Field,
   Input,
+  Menu,
   Modal,
   SectionTitle,
   Select,
@@ -119,6 +123,8 @@ export default function ProfilePage() {
   const [sharedWorkouts, setSharedWorkouts] = useState<Workout[] | null>(null)
   const [sharedLoading, setSharedLoading] = useState(false)
   const [sharedError, setSharedError] = useState<string | null>(null)
+  /** Profil dont l'historique/les stats ont déjà été demandés (garde anti-boucle). */
+  const sharedFetchedFor = useRef<string | null>(null)
 
   const isPublicView = Boolean(routeUsername)
   const trainingTab = tab === 'historique' || tab === 'stats'
@@ -234,21 +240,26 @@ export default function ProfilePage() {
     setSharedWorkouts(null)
     setSharedError(null)
     setSharedLoading(false)
+    sharedFetchedFor.current = null
   }, [routeUsername])
 
   useEffect(() => {
-    if (!isPublicView || !publicProfile || !trainingTab) return
-    if (!canSeeTraining) return
-    if (sharedWorkouts !== null || sharedLoading || sharedError) return
+    if (!isPublicView || !publicProfile || !trainingTab || !canSeeTraining) return
+    // Garde sur une réf (et non sur `sharedLoading`) : dépendre de l'état
+    // annulait la requête en cours et laissait l'onglet bloqué sur
+    // « Chargement… » sans jamais relancer le chargement.
+    if (sharedFetchedFor.current === publicProfile.id) return
+    sharedFetchedFor.current = publicProfile.id
     let alive = true
     setSharedLoading(true)
+    setSharedError(null)
     listUserWorkouts(publicProfile.id)
       .then((list) => { if (alive) setSharedWorkouts(list.filter((w) => w.status === 'completed')) })
       .catch((err) => { if (alive) setSharedError(err instanceof Error ? err.message : t('profile.loadFailed')) })
       .finally(() => { if (alive) setSharedLoading(false) })
     return () => { alive = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPublicView, publicProfile, trainingTab, canSeeTraining, sharedWorkouts, sharedLoading, sharedError])
+  }, [isPublicView, publicProfile, trainingTab, canSeeTraining])
 
   const meta = user?.user_metadata ?? {}
   const displayName =
@@ -351,7 +362,7 @@ export default function ProfilePage() {
                   </p>
                   {p.display_name && <p className="truncate text-sm text-muted">@{p.username}</p>}
                   {p.bio && <p className="mt-1 text-sm">{p.bio}</p>}
-                  {p.city && <p className="mt-0.5 text-xs text-muted">📍 {p.city}</p>}
+                  {p.city && <p className="mt-0.5 text-xs text-muted">{p.city}</p>}
                   <p className="mt-1.5 text-xs font-semibold text-muted">
                     {p.followers_count}{' '}
                     <button
@@ -387,27 +398,32 @@ export default function ProfilePage() {
                   </Card>
                 ) : (
                   <>
-                    <Button
-                      variant={following === 'none' ? 'primary' : 'secondary'}
-                      block
-                      disabled={followBusy}
-                      onClick={() => void toggleFollow()}
-                    >
-                      {following === 'following' ? <UserMinus size={16} /> : <UserPlus size={16} />}
-                      {following === 'following' ? t('profile.unfollow') : following === 'requested' ? t('profile.requestedCancel') : p.visibility === 'private' ? t('profile.askFollow') : t('profile.follow')}
-                    </Button>
-                    <button
-                      type="button"
-                      disabled={followBusy}
-                      onClick={() => setConfirmBlock(true)}
-                      className="mx-auto block text-xs font-semibold text-danger/80 underline decoration-dotted underline-offset-2"
-                    >
-                      {t('profile.block')}
-                    </button>
-                    <button type="button" onClick={() => setReportOpen(true)}
-                      className="mx-auto block text-xs font-semibold text-muted underline decoration-dotted underline-offset-2">
-                      {t('profile.report')}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant={following === 'none' ? 'primary' : 'secondary'}
+                        block
+                        disabled={followBusy}
+                        className="flex-1"
+                        onClick={() => void toggleFollow()}
+                      >
+                        {following === 'following' ? <UserMinus size={16} /> : <UserPlus size={16} />}
+                        {following === 'following' ? t('profile.unfollow') : following === 'requested' ? t('profile.requestedCancel') : p.visibility === 'private' ? t('profile.askFollow') : t('profile.follow')}
+                      </Button>
+                      {/* Bloquer / signaler regroupés dans un menu : plus de
+                          liens soulignés qui alourdissent l'en-tête. */}
+                      <Menu
+                        align="right"
+                        trigger={({ toggle }) => (
+                          <IconButton label={t('profile.moreActions')} onClick={toggle} className="h-10 w-10 border border-line">
+                            <MoreVertical size={18} />
+                          </IconButton>
+                        )}
+                        items={[
+                          { label: t('profile.block'), icon: <Ban size={15} />, danger: true, onClick: () => setConfirmBlock(true) },
+                          { label: t('profile.report'), icon: <Flag size={15} />, onClick: () => setReportOpen(true) },
+                        ]}
+                      />
+                    </div>
                   </>
                 )
               )}
@@ -526,7 +542,7 @@ export default function ProfilePage() {
               )}
             </p>
             {myProfile?.bio && <p className="mt-1 text-sm">{myProfile.bio}</p>}
-            {myProfile?.city && <p className="mt-0.5 text-xs text-muted">📍 {myProfile.city}</p>}
+            {myProfile?.city && <p className="mt-0.5 text-xs text-muted">{myProfile.city}</p>}
             <p className="mt-1.5 text-xs font-semibold text-muted">
               {t('profile.doneCount', { count: done.length })}
               {cloudEnabled && myProfile && user && (
