@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import {
   BarChart3,
   History,
@@ -29,30 +30,34 @@ import {
   type FollowState,
 } from '@/lib/social'
 import { cancelFollowRequest } from '@/lib/notifications'
-import { listMyPosts, listUserPosts } from '@/lib/posts'
+import { listMyPosts, listUserPosts, listUserWorkouts } from '@/lib/posts'
 import { loadMyPosts, loadMyProfile, peekMyPosts, peekMyProfile } from '@/lib/pagePreload'
 import { PostCard } from '@/components/PostCard'
 import { ReportDialog } from '@/components/ReportDialog'
 import { ProfileAvatar } from '@/components/ProfileAvatar'
 import type { Post, PostVisibility, SocialProfile } from '@/types'
 import { normalizeUsername } from '@/types'
-import { formatDuration, formatVolume } from '@/lib/utils'
+import { formatDuration, formatDate, formatVolume, RANGE_LABEL_KEYS, rangeSince, type RangeFilter } from '@/lib/utils'
 import { t, useLang } from '@/lib/i18n'
 import { Page, PageHeader } from '@/components/PageHeader'
+import { ChartTooltipContent, chartCursor, chartTooltipWrapper } from '@/components/charts'
 import {
   Button,
   Card,
+  Chip,
   ConfirmDialog,
   EmptyState,
   Field,
   Input,
   Modal,
+  SectionTitle,
   Select,
   Tabs,
   Textarea,
 } from '@/components/ui'
 import { IconButton } from '@/components/ui'
-import { completedWorkouts } from '@/lib/calc'
+import { completedWorkouts, weeklySeries, workoutDurationSeconds, workoutSets, workoutVolume } from '@/lib/calc'
+import type { Workout } from '@/types'
 import HistoryPage from '@/pages/History'
 import StatsPage from '@/pages/Stats'
 
@@ -110,8 +115,15 @@ export default function ProfilePage() {
   const [loadingUserPosts, setLoadingUserPosts] = useState(false)
   const [userPostsMore, setUserPostsMore] = useState(false)
   const [userPostsError, setUserPostsError] = useState<string | null>(null)
+  /** Séances d'un profil suivi (accès abonné via RPC shared_workouts). */
+  const [sharedWorkouts, setSharedWorkouts] = useState<Workout[] | null>(null)
+  const [sharedLoading, setSharedLoading] = useState(false)
+  const [sharedError, setSharedError] = useState<string | null>(null)
 
   const isPublicView = Boolean(routeUsername)
+  const trainingTab = tab === 'historique' || tab === 'stats'
+  /** Onglets Historique/Stats : réservés à l'abonné (ou à soi-même). */
+  const canSeeTraining = Boolean(publicProfile) && (publicProfile?.id === userId || following === 'following')
 
   const refreshUserPosts = useCallback(async (uid: string) => {
     if (!cloudEnabled) return
@@ -216,6 +228,28 @@ export default function ProfilePage() {
     if (tab === 'posts' && !isPublicView) void refreshPosts()
   }, [tab, isPublicView, refreshPosts])
 
+  /* Historique/Stats d'un profil public : lisibles par l'abonné
+     (RPC shared_workouts) — reset au changement de profil. */
+  useEffect(() => {
+    setSharedWorkouts(null)
+    setSharedError(null)
+    setSharedLoading(false)
+  }, [routeUsername])
+
+  useEffect(() => {
+    if (!isPublicView || !publicProfile || !trainingTab) return
+    if (!canSeeTraining) return
+    if (sharedWorkouts !== null || sharedLoading || sharedError) return
+    let alive = true
+    setSharedLoading(true)
+    listUserWorkouts(publicProfile.id)
+      .then((list) => { if (alive) setSharedWorkouts(list.filter((w) => w.status === 'completed')) })
+      .catch((err) => { if (alive) setSharedError(err instanceof Error ? err.message : t('profile.loadFailed')) })
+      .finally(() => { if (alive) setSharedLoading(false) })
+    return () => { alive = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPublicView, publicProfile, trainingTab, canSeeTraining, sharedWorkouts, sharedLoading, sharedError])
+
   const meta = user?.user_metadata ?? {}
   const displayName =
     myProfile?.display_name ??
@@ -304,7 +338,7 @@ export default function ProfilePage() {
             </Card>
           ) : (
             <>
-              <Card className="flex items-center gap-4 p-4">
+              <div className="flex items-center gap-4 py-2">
                 <Avatar url={p.avatar_url} name={p.display_name ?? p.username ?? '?'} />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-lg font-extrabold">
@@ -337,7 +371,7 @@ export default function ProfilePage() {
                     </button>
                   </p>
                 </div>
-              </Card>
+              </div>
               {user && p.id !== user.id && (
                 blockedByMe ? (
                   <Card className="border-danger/40 bg-danger/10 p-3 text-center">
@@ -378,6 +412,27 @@ export default function ProfilePage() {
                 )
               )}
               <PublicMiniStats posts={userPosts} />
+              {/* Onglets réservés à l'abonné : historique + stats complets. */}
+              {canSeeTraining && (
+                <Tabs<Tab>
+                  value={tab}
+                  onChange={setTab}
+                  tabs={[
+                    { value: 'posts', label: t('profile.tabPosts'), icon: <LayoutGrid size={14} /> },
+                    { value: 'historique', label: t('history.title'), icon: <History size={14} /> },
+                    { value: 'stats', label: t('stats.title'), icon: <BarChart3 size={14} /> },
+                  ]}
+                />
+              )}
+              {!canSeeTraining && (
+                <p className="text-xs text-muted">{t('profile.followToSeeAll', { who: `@${p.username}` })}</p>
+              )}
+              {canSeeTraining && tab === 'historique' ? (
+                <PublicTraining workouts={sharedWorkouts} mode="historique" loading={sharedLoading} error={sharedError} />
+              ) : canSeeTraining && tab === 'stats' ? (
+                <PublicTraining workouts={sharedWorkouts} mode="stats" loading={sharedLoading} error={sharedError} />
+              ) : (
+                <>
               {userPostsError ? (
                 <Card><EmptyState title={t('profile.postsUnavailable')} message={userPostsError}
                   action={<Button onClick={() => void refreshUserPosts(p.id)}>{t('common.retry')}</Button>} /></Card>
@@ -403,6 +458,8 @@ export default function ProfilePage() {
                     {loadingUserPosts ? t('common.loading') : t('profile.loadMore')}
                   </Button>}
                 </div>
+              )}
+                </>
               )}
             </>
           )}
@@ -443,7 +500,7 @@ export default function ProfilePage() {
     <div>
       <PageHeader
         title={myProfile?.username ? `@${myProfile.username}` : t('nav.profile')}
-        subtitle={myProfile?.city || (!cloudEnabled ? t('profile.localAccount') : undefined)}
+        subtitle={!cloudEnabled ? t('profile.localAccount') : undefined}
         actions={
           <IconButton label={t('nav.settings')} onClick={() => navigate('/reglages')}>
             <SettingsIcon size={20} />
@@ -451,7 +508,7 @@ export default function ProfilePage() {
         }
       />
       <Page className="max-w-3xl space-y-4 pb-10">
-        <Card className="flex items-center gap-4 p-4">
+        <div className="flex items-center gap-4 py-2">
           <Avatar url={avatar} name={displayName} />
           <div className="min-w-0 flex-1">
             <p className="flex items-center gap-1.5 text-lg font-extrabold">
@@ -494,7 +551,7 @@ export default function ProfilePage() {
               )}
             </p>
           </div>
-        </Card>
+        </div>
 
         <Tabs<Tab>
           value={tab}
@@ -597,7 +654,177 @@ function PublicMiniStats({ posts }: { posts: Post[] }) {
       </p>
     </div>
   )
-}export interface FollowListInfo {
+}
+
+/**
+ * Historique / Stats complets d'un profil public : lisibles par l'abonné
+ * (RPC `shared_workouts`), avec le même filtre de période que les stats.
+ */
+function PublicTraining({ workouts, mode, loading, error }: {
+  workouts: Workout[] | null
+  mode: 'historique' | 'stats'
+  loading: boolean
+  error: string | null
+}) {
+  useLang()
+  const settings = useStore((s) => s.settings)
+  const [range, setRange] = useState<RangeFilter>('tout')
+
+  if (loading && workouts === null) {
+    return <p className="py-6 text-center text-sm text-muted">{t('common.loading')}</p>
+  }
+  if (error || workouts === null) {
+    return (
+      <Card>
+        <EmptyState title={t('profile.postsUnavailable')} message={error ?? t('profile.secSharedEmpty')} />
+      </Card>
+    )
+  }
+
+  const since = rangeSince(range)
+  const scoped = workouts.filter((w) => since === null || +new Date(w.startedAt) >= since)
+  const filter = (
+    <div className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1">
+      {RANGE_LABEL_KEYS.map(([value, key]) => (
+        <Chip key={value} size="sm" active={range === value} onClick={() => setRange(value)}>
+          {t(key)}
+        </Chip>
+      ))}
+    </div>
+  )
+
+  if (mode === 'historique') {
+    return (
+      <div className="space-y-3">
+        {filter}
+        {scoped.length === 0 ? (
+          <Card>
+            <EmptyState title={t('profile.secShared')} message={t('profile.secSharedEmpty')} />
+          </Card>
+        ) : (
+          scoped.map((w) => (
+            <Card key={w.id} className="p-3.5">
+              <div className="flex items-center justify-between gap-2">
+                <p className="truncate text-sm font-extrabold">{w.name}</p>
+                <span className="shrink-0 text-[11px] text-muted">{formatDate(w.startedAt, 'long')}</span>
+              </div>
+              <p className="mt-1 text-[11px] text-muted">
+                {formatDuration(workoutDurationSeconds(w), 'compact')} · {formatVolume(workoutVolume(w), settings.unit)} · {t('stats.setsCount', { n: workoutSets(w) })}
+              </p>
+              <p className="mt-1 truncate text-xs text-muted">
+                {w.exercises.map((e) => e.exerciseName ?? '').filter(Boolean).join(' · ')}
+              </p>
+            </Card>
+          ))
+        )}
+      </div>
+    )
+  }
+
+  return <PublicTrainingStats scoped={scoped} filter={filter} />
+}
+
+/** Bloc statistiques de l'onglet Stats d'un profil suivi. */
+function PublicTrainingStats({ scoped, filter }: { scoped: Workout[]; filter: React.ReactNode }) {
+  useLang()
+  const settings = useStore((s) => s.settings)
+  const totalVolume = scoped.reduce((n, w) => n + workoutVolume(w), 0)
+  const totalTime = scoped.reduce((n, w) => n + workoutDurationSeconds(w), 0)
+  const totalSets = scoped.reduce((n, w) => n + workoutSets(w), 0)
+  const series = weeklySeries(scoped, 12, settings.firstDayOfWeek)
+
+  const byExercise = new Map<string, { name: string; sets: number; volume: number }>()
+  for (const w of scoped) {
+    for (const we of w.exercises) {
+      const name = we.exerciseName ?? t('lib.exerciseFallback')
+      const entry = byExercise.get(name) ?? { name, sets: 0, volume: 0 }
+      for (const s of we.sets) {
+        if (!s.completed) continue
+        entry.sets += 1
+        entry.volume += (s.weight ?? 0) * (s.reps ?? 0)
+      }
+      byExercise.set(name, entry)
+    }
+  }
+  const top = [...byExercise.values()].sort((a, b) => b.volume - a.volume).slice(0, 6)
+
+  return (
+    <div className="space-y-4">
+      {filter}
+      <div className="grid grid-cols-4 gap-1.5 text-center">
+        {[
+          { label: t('stats.sessions'), value: String(scoped.length) },
+          { label: t('stats.time'), value: formatDuration(totalTime, 'compact') },
+          { label: t('stats.volume'), value: formatVolume(totalVolume, settings.unit) },
+          { label: t('stats.sets'), value: String(totalSets) },
+        ].map((s) => (
+          <div key={s.label} className="rounded-xl border border-line bg-surface px-1 py-2">
+            <p className="tabular truncate text-sm font-extrabold">{s.value}</p>
+            <p className="text-[10px] tracking-wide text-muted uppercase">{s.label}</p>
+          </div>
+        ))}
+      </div>
+      <Card className="p-4">
+        <SectionTitle>{t('stats.durationPerWeek')}</SectionTitle>
+        <div className="mx-auto h-36 w-full max-w-md">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={series} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+              <XAxis
+                dataKey="label"
+                tick={{ fontSize: 10, fill: 'var(--muted)' }}
+                axisLine={false}
+                tickLine={false}
+                interval="preserveStartEnd"
+                minTickGap={24}
+              />
+              <YAxis
+                tick={{ fontSize: 10, fill: 'var(--muted)' }}
+                axisLine={false}
+                tickLine={false}
+                width={44}
+                tickFormatter={(v: number) => (v >= 3600 ? `${Math.round(v / 3600)}h` : v >= 60 ? `${Math.round(v / 60)}m` : `${v}s`)}
+              />
+              <Tooltip
+                cursor={chartCursor}
+                wrapperStyle={chartTooltipWrapper}
+                content={
+                  <ChartTooltipContent
+                    format={(p, datum) =>
+                      p.dataKey === 'duration'
+                        ? t('stats.tipDuration', {
+                            v: formatDuration(Number(p.value), 'compact'),
+                            s: String(datum.sets ?? 0),
+                          })
+                        : null
+                    }
+                  />
+                }
+              />
+              <Bar dataKey="duration" name={t('stats.chartDuration')} radius={[6, 6, 2, 2]} fill="var(--accent)" minPointSize={2} maxBarSize={34} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </Card>
+      {top.length > 0 && (
+        <Card className="p-4">
+          <SectionTitle>{t('stats.topExercises')}</SectionTitle>
+          <div className="space-y-2">
+            {top.map((x) => (
+              <div key={x.name} className="flex items-center justify-between gap-3 rounded-xl bg-surface-2 px-3 py-2">
+                <span className="min-w-0 flex-1 truncate text-[13px] font-semibold">{x.name}</span>
+                <span className="shrink-0 text-[11px] text-muted">
+                  {t('stats.setsCount', { n: x.sets })} · {formatVolume(x.volume, settings.unit)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+    </div>
+  )
+}
+
+export interface FollowListInfo {
   tab: 'followers' | 'following'
   userId: string
   title: string

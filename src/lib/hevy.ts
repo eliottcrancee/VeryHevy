@@ -104,6 +104,216 @@ export function normalizeExerciseName(v: string): string {
     .trim()
 }
 
+/* ----------------------------------------------------------------
+   Correspondance Hevy → VeryHevy pour les exercices par défaut de Hevy.
+   Clé   : titre `exercise_title` de l'export CSV de Hevy (les noms
+           ci-dessous couvrent les déclinaisons courantes).
+   Valeur: nom EXACT d'un exercice de la bibliothèque VeryHevy.
+   L'appariement est insensible à la casse et aux accents.
+   ---------------------------------------------------------------- */
+
+export const HEVY_TO_VERYHEVY: Record<string, string> = {
+  /* Pectoraux */
+  'Bench Press (Barbell)': 'Développé couché',
+  'Bench Press (Dumbbell)': 'Développé couché haltères',
+  'Bench Press (Smith Machine)': 'Développé couché',
+  'Incline Bench Press (Barbell)': 'Développé incliné barre',
+  'Incline Bench Press (Dumbbell)': 'Développé incliné haltères',
+  'Decline Bench Press (Barbell)': 'Développé décliné barre',
+  'Decline Bench Press (Dumbbell)': 'Développé décliné barre',
+  'Chest Fly (Dumbbell)': 'Écarté couché haltères',
+  'Incline Chest Fly (Dumbbell)': 'Écarté incliné haltères',
+  'Decline Chest Fly (Dumbbell)': 'Écarté couché haltères',
+  'Cable Fly': 'Écarté à la poulie vis-à-vis',
+  'Cable Fly (High to Low)': 'Écarté à la poulie vis-à-vis',
+  'Cable Fly (Low to High)': 'Écarté à la poulie vis-à-vis',
+  'Standing Cable Chest Fly': 'Écarté à la poulie vis-à-vis',
+  'Chest Press': 'Développé convergente machine',
+  'Chest Press (Machine)': 'Développé convergente machine',
+  'Pec Deck': 'Pec-deck',
+  'Butterfly': 'Pec-deck',
+  'Push Up': 'Pompes',
+  'Push-Up': 'Pompes',
+  'Weighted Push Up': 'Pompes lestées',
+  'Dip': 'Dips',
+  'Dips': 'Dips',
+  'Weighted Dip': 'Dips lestées',
+  'Bench Dip': 'Dips entre bancs',
+  'Diamond Push Up': 'Pompes diamant',
+  'Dumbbell Pullover': 'Pull-over haltère',
+  /* Dos */
+  'Pull Up': 'Tractions pronation',
+  'Pull-Up': 'Tractions pronation',
+  'Chin Up': 'Tractions supination',
+  'Chin-Up': 'Tractions supination',
+  'Neutral Grip Pull Up': 'Tractions prise neutre',
+  'Weighted Pull Up': 'Tractions lestées',
+  'Lat Pulldown (Cable)': 'Tirage vertical poulie',
+  'Close Grip Lat Pulldown (Cable)': 'Tirage vertical prise serrée',
+  'Bent Over Row (Barbell)': 'Rowing barre',
+  'Bent Over Row (Dumbbell)': 'Rowing haltère unilatéral',
+  'One Arm Dumbbell Row': 'Rowing haltère unilatéral',
+  'T Bar Row': 'Rowing T-bar',
+  'Seated Cable Row': 'Rowing poulie basse',
+  'Seated Cable Row (Machine)': 'Rowing poulie basse',
+  'Chest Supported Row': 'Tirage horizontal machine',
+  'Machine Row': 'Tirage horizontal machine',
+  'Shrug (Barbell)': 'Shrugs barre',
+  'Shrug (Dumbbell)': 'Shrugs haltères',
+  'Face Pull': 'Face pull',
+  'Deadlift (Barbell)': 'Soulevé de terre',
+  'Romanian Deadlift (Barbell)': 'Soulevé de terre roumain',
+  'Romanian Deadlift (Dumbbell)': 'Soulevé de terre roumain',
+  'Sumo Deadlift (Barbell)': 'Soulevé de terre sumo',
+  'Rack Pull': 'Rack pull',
+  'Good Morning (Barbell)': 'Good morning',
+  'Back Extension': 'Hyperextension lombaire',
+  'Hyperextension': 'Hyperextension lombaire',
+  /* Épaules */
+  'Overhead Press (Barbell)': 'Développé militaire barre',
+  'Seated Overhead Press (Dumbbell)': 'Développé haltères assis',
+  'Arnold Press (Dumbbell)': 'Développé Arnold',
+  'Shoulder Press (Machine)': 'Développé épaules machine',
+  'Lateral Raise (Dumbbell)': 'Élévations latérales haltères',
+  'Lateral Raise (Cable)': 'Élévations latérales poulie',
+  'Front Raise (Dumbbell)': 'Élévations frontales',
+  'Front Raise (Cable)': 'Élévations frontales',
+  'Rear Delt Fly (Dumbbell)': 'Oiseau haltères',
+  'Rear Delt Fly (Cable)': 'Oiseau à la poulie',
+  'Reverse Fly (Cable)': 'Oiseau à la poulie',
+  'Upright Row (Barbell)': 'Rowing menton',
+  'Push Press (Barbell)': 'Push press',
+  /* Bras */
+  'Bicep Curl (Barbell)': 'Curl barre',
+  'Bicep Curl (EZ Bar)': 'Curl barre EZ',
+  'Bicep Curl (Dumbbell)': 'Curl haltères alterné',
+  'Hammer Curl (Dumbbell)': 'Curl marteau',
+  'Incline Curl (Dumbbell)': 'Curl incliné haltères',
+  'Preacher Curl (Barbell)': 'Curl pupitre',
+  'Concentration Curl (Dumbbell)': 'Curl concentré',
+  'Cable Curl': 'Curl à la poulie',
+  'Spider Curl': 'Curl araignée',
+  'Skull Crusher (Barbell)': 'Barre au front',
+  'Skull Crusher (Dumbbell)': 'Barre au front',
+  'Triceps Extension (Cable)': 'Extension poulie haute',
+  'Tricep Pushdown': 'Extension poulie haute',
+  'Triceps Rope Pushdown': 'Extension poulie corde',
+  'Overhead Triceps Extension (Dumbbell)': 'Extension nuque haltère',
+  'Close Grip Bench Press': 'Développé couché prise serrée',
+  'Tricep Kickback (Dumbbell)': 'Kickback haltère',
+  'Bench Dips': 'Dips entre bancs',
+  'Wrist Curl': 'Curl poignets barre',
+  'Reverse Curl (Barbell)': 'Curl inversé barre',
+  "Farmer's Carry": 'Farmer’s walk',
+  "Farmer's Walk": 'Farmer’s walk',
+  'Farmers Walk': 'Farmer’s walk',
+  /* Jambes */
+  'Squat (Barbell)': 'Squat barre',
+  'Front Squat (Barbell)': 'Squat avant',
+  'Goblet Squat (Dumbbell)': 'Squat gobelet',
+  'Leg Press': 'Presse à cuisses',
+  'Hack Squat (Machine)': 'Hack squat',
+  'Walking Lunge (Dumbbell)': 'Fentes marchées haltères',
+  'Bulgarian Split Squat': 'Fentes bulgares',
+  'Step Up (Dumbbell)': 'Step-up',
+  'Leg Extension (Machine)': 'Leg extension',
+  'Lying Leg Curl (Machine)': 'Leg curl allongé',
+  'Seated Leg Curl (Machine)': 'Leg curl assis',
+  'Hip Thrust (Barbell)': 'Hip thrust barre',
+  'Glute Bridge': 'Pont fessier',
+  'Hip Abduction (Machine)': 'Abduction machine',
+  'Hip Adduction (Machine)': 'Adduction machine',
+  'Standing Calf Raise': 'Mollets debout',
+  'Seated Calf Raise': 'Mollets assis',
+  'Calf Press (Leg Press)': 'Mollets à la presse',
+  /* Abdos */
+  'Crunch': 'Crunch',
+  'Cable Crunch': 'Crunch à la poulie',
+  'Hanging Leg Raise': 'Relevé de jambes suspendu',
+  'Plank': 'Gainage',
+  'Side Plank': 'Gainage latéral',
+  'Weighted Plank': 'Gainage lesté',
+  'Ab Wheel Rollout': 'Roulette abdominale',
+  'Russian Twist': 'Russian twist',
+  'Sit Up': 'Sit-up',
+  'Bicycle Crunch': 'Crunch vélo',
+  'Mountain Climber': 'Mountain climbers',
+  'Hollow Body Hold': 'Hollow hold',
+  /* Cardio */
+  'Running': 'Course à pied',
+  'Treadmill Running': 'Course sur tapis',
+  'Walking': 'Marche rapide',
+  'Incline Walking': 'Marche inclinée tapis',
+  'Cycling': 'Vélo',
+  'Stationary Bike': 'Vélo d’appartement',
+  'Rowing Machine': 'Rameur',
+  'Elliptical': 'Elliptique',
+  'Jump Rope': 'Corde à sauter',
+  'Swimming': 'Natation',
+  'Stairmaster': 'Escalier / Stairmaster',
+  'Skierg': 'Ski erg',
+  'Assault Bike': 'Assault bike',
+  'Sprint': 'Sprint',
+  'Burpee': 'Burpees',
+  'Burpees': 'Burpees',
+  'Box Jump': 'Box jumps',
+  'Jumping Jacks': 'Jumping jacks',
+  'Squat Jump': 'Squat jumps',
+  'Battle Ropes': 'Battle ropes',
+  /* Haltérophilie */
+  'Clean and Jerk (Barbell)': 'Épaulé-jeté',
+  'Snatch (Barbell)': 'Arraché',
+  'Clean (Barbell)': 'Épaulé',
+  'Power Clean': 'Power clean',
+  'Jerk (Barbell)': 'Jeté',
+  'Thruster (Barbell)': 'Thruster',
+  'Wall Ball': 'Wall ball',
+  'Kettlebell Swing': 'Kettlebell swing',
+  'Turkish Get Up (Kettlebell)': 'Turkish get-up',
+  'Single Arm Dumbbell Snatch': 'Snatch haltère unilatéral',
+  /* Étirements */
+  'Hamstring Stretch': 'Étirement ischio-jambiers',
+  'Quadriceps Stretch': 'Étirement quadriceps',
+  'Chest Stretch': 'Étirement pectoraux',
+  'Calf Stretch': 'Étirement mollets',
+  'Hip Flexor Stretch': 'Étirement fléchisseurs de hanche',
+  'Cat Cow': 'Chat-vache',
+  'Band Pull Apart': 'Élastique pull-apart',
+  'Band Face Pull': 'Band face pull',
+  'Band Good Morning': 'Band good morning',
+}
+
+/** « Bench Press (Barbell) » → « Bench Press ». */
+function stripHevyVariant(v: string): string {
+  const i = v.lastIndexOf('(')
+  return (i > 0 ? v.slice(0, i) : v).trim()
+}
+
+/** Index insensible casse/accents de la correspondance Hevy → VeryHevy. */
+const HEVY_BY_NAME = new Map<string, string>()
+for (const [hevyName, vhName] of Object.entries(HEVY_TO_VERYHEVY)) {
+  HEVY_BY_NAME.set(normalizeExerciseName(hevyName), vhName)
+  HEVY_BY_NAME.set(normalizeExerciseName(stripHevyVariant(hevyName)), vhName)
+}
+
+/**
+ * Trouve l'exercice de bibliothèque correspondant à un titre Hevy :
+ * 1. nom exact de la bibliothèque (incl. altName),
+ * 2. correspondance de la table HEVY_TO_VERYHEVY (avec ou sans variante).
+ */
+export function findLibraryExerciseForHevyTitle(
+  title: string,
+  libByName: Map<string, Pick<Exercise, 'id' | 'name' | 'altName'>>,
+): Pick<Exercise, 'id' | 'name' | 'altName'> | undefined {
+  const direct = libByName.get(normalizeExerciseName(title))
+  if (direct) return direct
+  const mapped =
+    HEVY_BY_NAME.get(normalizeExerciseName(title)) ??
+    HEVY_BY_NAME.get(normalizeExerciseName(stripHevyVariant(title)))
+  if (!mapped) return undefined
+  return libByName.get(normalizeExerciseName(mapped))
+}
+
 function hevySetType(v: string): SetType {
   switch (v.trim().toLowerCase()) {
     case 'warmup':
@@ -274,6 +484,7 @@ export function parseHevyCsv(
     for (const ex of exos) {
       const key = normalizeExerciseName(ex.name)
       let lib = libByName.get(key) ?? newByName.get(key)
+      if (!lib) lib = findLibraryExerciseForHevyTitle(ex.name, libByName) ?? undefined
       if (!lib) {
         const drafts = ex.sets.map((s) => s.draft)
         const created: Exercise = {

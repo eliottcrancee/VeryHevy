@@ -24,11 +24,11 @@ import {
 import { useStore, selectActiveWorkout } from '@/store/store'
 import { Page, PageHeader } from '@/components/PageHeader'
 import { ChartTooltipContent, chartLineCursor, chartTooltipWrapper } from '@/components/charts'
-import { Button, Card, EmptyState, IconButton, SectionTitle, Stat, Tabs } from '@/components/ui'
+import { Button, Card, Chip, EmptyState, IconButton, SectionTitle, Stat, Tabs } from '@/components/ui'
 import { ExerciseFormModal } from '@/components/ExerciseFormModal'
 import { CATEGORY_META, TRACKING_TYPES } from '@/types'
 import { arcWorkouts, getExerciseProgress, getExerciseSessions, getPersonalRecords } from '@/lib/calc'
-import { cn, formatDate, formatDistance, formatDuration, formatVolume, formatWeight, kgToDisplay, tintBg, tintText } from '@/lib/utils'
+import { cn, formatDate, formatDistance, formatDuration, formatVolume, formatWeight, kgToDisplay, rangeSince, tintBg, tintText, RANGE_LABEL_KEYS, type RangeFilter } from '@/lib/utils'
 import { t, tx, useLang } from '@/lib/i18n'
 
 type Tab = 'progression' | 'historique' | 'infos'
@@ -57,6 +57,7 @@ export default function ExerciseDetailPage() {
   const notify = useStore((s) => s.notify)
 
   const [tab, setTab] = useState<Tab>('progression')
+  const [range, setRange] = useState<RangeFilter>('90j')
   const [editOpen, setEditOpen] = useState(false)
   const [imageIndex, setImageIndex] = useState(0)
 
@@ -69,12 +70,38 @@ export default function ExerciseDetailPage() {
     if (!editOpen && !exercise && wasPresent.current) navigate('/exercices')
   }, [editOpen, exercise, navigate])
 
-  const sessions = useMemo(() => (exercise ? getExerciseSessions(workouts, exercise.id) : []), [workouts, exercise])
-  const progress = useMemo(() => (exercise ? getExerciseProgress(workouts, exercise.id) : []), [workouts, exercise])
+  const since = useMemo(() => rangeSince(range), [range])
+
+  const sessions = useMemo(
+    () =>
+      exercise
+        ? getExerciseSessions(workouts, exercise.id).filter(
+            (s) => since === null || +new Date(s.workout.startedAt) >= since,
+          )
+        : [],
+    [workouts, exercise, since],
+  )
+  const progress = useMemo(
+    () =>
+      exercise
+        ? getExerciseProgress(workouts, exercise.id).filter(
+            (p) => since === null || +new Date(p.date) >= since,
+          )
+        : [],
+    [workouts, exercise, since],
+  )
   // Records limités à l'arc en cours (réinitialisables dans les réglages).
   const records = useMemo(
-    () => (exercise ? getPersonalRecords(arcWorkouts(workouts, settings.recordsSince), exercise.id) : []),
-    [workouts, exercise, settings.recordsSince],
+    () =>
+      exercise
+        ? getPersonalRecords(
+            arcWorkouts(workouts, settings.recordsSince).filter(
+              (w) => since === null || +new Date(w.startedAt) >= since,
+            ),
+            exercise.id,
+          )
+        : [],
+    [workouts, exercise, settings.recordsSince, since],
   )
 
   const duplicateAsCustom = () => {
@@ -166,6 +193,15 @@ export default function ExerciseDetailPage() {
       />
 
       <Page className="max-w-3xl space-y-4">
+        {/* Filtre de période (30j / 90j / 6m / tout) */}
+        <div className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1">
+          {RANGE_LABEL_KEYS.map(([value, key]) => (
+            <Chip key={value} size="sm" active={range === value} onClick={() => setRange(value)}>
+              {t(key)}
+            </Chip>
+          ))}
+        </div>
+
         {/* Photos */}
         {exercise.images.length > 0 && (
           <Card className="relative overflow-hidden">
@@ -288,10 +324,11 @@ export default function ExerciseDetailPage() {
         {records.length > 0 && (
           <div>
             <SectionTitle>{t('exercise.prTitle')}</SectionTitle>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <div className="grid grid-cols-3 gap-1.5">
               {records.map((r) => (
                 <Stat
                   key={r.kind}
+                  compact
                   label={t(RECORD_KEYS[r.kind])}
                   icon={<Trophy size={11} />}
                   value={
@@ -392,8 +429,9 @@ export default function ExerciseDetailPage() {
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
-                <div className="mt-4 grid grid-cols-3 gap-2 border-t border-line pt-4">
+                <div className="mt-4 grid grid-cols-3 gap-1.5 border-t border-line pt-4">
                   <Stat
+                    compact
                     label={t('exercise.bestSession')}
                     value={
                       hasWeight
@@ -401,8 +439,9 @@ export default function ExerciseDetailPage() {
                         : t('stats.setsCount', { n: Math.max(...progress.map((p) => p.sets)) })
                     }
                   />
-                  <Stat label={t('stats.sessions')} value={progress.length} />
+                  <Stat compact label={t('stats.sessions')} value={progress.length} />
                   <Stat
+                    compact
                     label={t('exercise.volTotal')}
                     value={`${Math.round(
                       kgToDisplay(

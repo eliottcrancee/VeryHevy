@@ -306,6 +306,18 @@ export async function getPostWorkout(post: Pick<Post, 'user_id' | 'workout_id'>)
   return ((data as { data: Workout } | null)?.data ?? null) as Workout | null
 }
 
+/**
+ * Séances complètes d'un profil suivi (RPC `shared_workouts`) :
+ * l'abonné a accès à l'historique et aux stats du compte qu'il suit.
+ * Requiert `supabase/schema_followers_access.sql` (étape 13).
+ */
+export async function listUserWorkouts(userId: string, limit = 500): Promise<Workout[]> {
+  const sb = sbOrThrow()
+  const { data, error } = await sb.rpc('shared_workouts', { target: userId, p_limit: limit })
+  if (error) throw new Error(t('lib.workoutError', { msg: error.message }))
+  return ((data as { data: Workout }[] | null) ?? []).map((row) => row.data)
+}
+
 export function displayAuthor(a?: SocialProfile | null, fallback = t('lib.athlete')): string {
   return a?.display_name?.trim() || (a?.username ? `@${a.username}` : fallback)
 }

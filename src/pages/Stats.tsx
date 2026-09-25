@@ -31,26 +31,21 @@ import { CATEGORY_META } from '@/types'
 import CalendarPage from '@/pages/Calendar'
 import { localeOf, t, tx, useLang } from '@/lib/i18n'
 import { ChartTooltipContent, chartCursor, chartLineCursor, chartTooltipWrapper } from '@/components/charts'
-import { addDays, cn, formatDuration, formatVolume, formatWeight, kgToDisplay, startOfWeek, toDateKey } from '@/lib/utils'
-
-type Range = '30j' | '90j' | '6m' | 'tout'
-
-const RANGE_DAYS: Record<Range, number | null> = { '30j': 30, '90j': 90, '6m': 182, tout: null }
+import { formatDuration, formatVolume, formatWeight, kgToDisplay, RANGE_LABEL_KEYS, rangeSince, type RangeFilter } from '@/lib/utils'
 
 export default function StatsPage({ bare = false }: { bare?: boolean }) {
   const workouts = useStore((s) => s.workouts)
   const exercises = useStore((s) => s.exercises)
   const settings = useStore((s) => s.settings)
-  const [range, setRange] = useState<Range>('90j')
+  const [range, setRange] = useState<RangeFilter>('90j')
   const loc = localeOf(useLang())
 
   const all = completedWorkouts(workouts)
 
   const filtered = useMemo(() => {
-    const days = RANGE_DAYS[range]
-    if (!days) return all
-    const limit = Date.now() - days * 86400000
-    return all.filter((w) => +new Date(w.startedAt) >= limit)
+    const since = rangeSince(range)
+    if (since === null) return all
+    return all.filter((w) => +new Date(w.startedAt) >= since)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [all, range])
 
@@ -59,12 +54,8 @@ export default function StatsPage({ bare = false }: { bare?: boolean }) {
   const totalSets = filtered.reduce((n, w) => n + workoutSets(w), 0)
 
   const series = useMemo(
-    () =>
-      weeklySeries(all, range === '30j' ? 6 : range === '90j' ? 12 : 16, settings.firstDayOfWeek).map((w) => ({
-        ...w,
-        volume: kgToDisplay(w.volume, settings.unit),
-      })),
-    [all, range, settings.firstDayOfWeek, settings.unit],
+    () => weeklySeries(all, range === '30j' ? 6 : range === '90j' ? 12 : 16, settings.firstDayOfWeek),
+    [all, range, settings.firstDayOfWeek],
   )
 
   const muscles = useMemo(() => muscleVolume(filtered, exercises).slice(0, 12), [filtered, exercises])
@@ -125,22 +116,7 @@ export default function StatsPage({ bare = false }: { bare?: boolean }) {
       .slice(0, 10)
   }, [filtered, all, exercises, settings.recordsSince])
 
-  // Heatmap de régularité (12 dernières semaines)
-  const heatmap = useMemo(() => {
-    const days = new Map<string, number>()
-    for (const w of all) {
-      const key = toDateKey(w.startedAt)
-      days.set(key, (days.get(key) ?? 0) + 1)
-    }
-    const start = startOfWeek(addDays(new Date(), -7 * 11), settings.firstDayOfWeek)
-    return Array.from({ length: 12 }, (_, week) =>
-      Array.from({ length: 7 }, (_, day) => {
-        const d = addDays(start, week * 7 + day)
-        const key = toDateKey(d)
-        return { date: d, key, count: days.get(key) ?? 0, future: d > new Date() }
-      }),
-    )
-  }, [all, settings.firstDayOfWeek])
+  // Calendrier d'entraînement (le détail par jour vit dans le composant Calendar).
 
   const bodyweightSeries = useMemo(
     () =>
@@ -177,16 +153,9 @@ export default function StatsPage({ bare = false }: { bare?: boolean }) {
       {!bare && <PageHeader title={t('stats.title')} subtitle={t('stats.subtitle', { n: filtered.length })} />}
       <Page className="space-y-5">
         <div className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1">
-            {(
-              [
-                ['30j', t('stats.range30')],
-                ['90j', t('stats.range90')],
-                ['6m', t('stats.range6m')],
-                ['tout', t('common.all')],
-              ] as [Range, string][]
-            ).map(([value, label]) => (
+            {RANGE_LABEL_KEYS.map(([value, key]) => (
               <Chip key={value} active={range === value} onClick={() => setRange(value)}>
-                {label}
+                {t(key)}
               </Chip>
             ))}
         </div>
@@ -205,45 +174,10 @@ export default function StatsPage({ bare = false }: { bare?: boolean }) {
           ))}
         </div>
 
-        {/* Régularité + calendrier */}
-        <Card className="space-y-4 p-4">
-          <div>
-            <SectionTitle>{t('stats.regularity')}</SectionTitle>
-          <div className="flex gap-1 overflow-x-auto pb-1">
-            {heatmap.map((week, wi) => (
-              <div key={wi} className="flex flex-col gap-1">
-                {week.map((day) => (
-                  <div
-                    key={day.key}
-                    title={day.count ? t('stats.heatDay', { date: day.date.toLocaleDateString('fr-FR'), n: day.count }) : day.date.toLocaleDateString('fr-FR')}
-                    className={cn(
-                      'h-5 w-5 shrink-0 rounded',
-                      day.future ? 'opacity-0' : day.count > 0 ? 'bg-accent' : 'bg-surface-3',
-                    )}
-                    style={day.count > 0 ? { opacity: Math.min(1, 0.55 + day.count * 0.25) } : undefined}
-                  />
-                ))}
-              </div>
-            ))}
-          </div>
-          <div className="mt-2 flex items-center gap-2 text-[10px] text-muted">
-            <span>{t('stats.less')}</span>
-            <span className="h-3 w-3 rounded bg-surface-3" />
-            <span className="h-3 w-3 rounded bg-accent/60" />
-            <span className="h-3 w-3 rounded bg-accent" />
-            <span>{t('stats.more')}</span>
-          </div>
-          </div>
-          <div className="border-t border-line pt-4">
-            <SectionTitle>{t('stats.calendar')}</SectionTitle>
-            <CalendarPage bare />
-          </div>
-        </Card>
-
-        {/* Volume hebdo */}
+        {/* Durée d'entraînement par semaine */}
         <Card className="p-4">
-          <SectionTitle>{t('stats.volumePerWeek', { unit: settings.unit })}</SectionTitle>
-          <div className="mx-auto h-52 w-full max-w-md">
+          <SectionTitle>{t('stats.durationPerWeek')}</SectionTitle>
+          <div className="mx-auto h-36 w-full max-w-md">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={series} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
                 <XAxis
@@ -259,7 +193,7 @@ export default function StatsPage({ bare = false }: { bare?: boolean }) {
                   axisLine={false}
                   tickLine={false}
                   width={44}
-                  tickFormatter={(v: number) => (v >= 1000 ? `${Math.round(v / 1000)}k` : `${v}`)}
+                  tickFormatter={(v: number) => (v >= 3600 ? `${Math.round(v / 3600)}h` : v >= 60 ? `${Math.round(v / 60)}m` : `${v}s`)}
                 />
                 <Tooltip
                   cursor={chartCursor}
@@ -267,10 +201,9 @@ export default function StatsPage({ bare = false }: { bare?: boolean }) {
                   content={
                     <ChartTooltipContent
                       format={(p, datum) =>
-                        p.dataKey === 'volume'
-                          ? t('stats.tipVolume', {
-                              v: Math.round(Number(p.value)).toLocaleString('fr-FR'),
-                              u: settings.unit,
+                        p.dataKey === 'duration'
+                          ? t('stats.tipDuration', {
+                              v: formatDuration(Number(p.value), 'compact'),
                               s: String(datum.sets ?? 0),
                             })
                           : null
@@ -278,18 +211,24 @@ export default function StatsPage({ bare = false }: { bare?: boolean }) {
                     />
                   }
                 />
-                <Bar dataKey="volume" name={t('stats.chartVolume')} radius={[6, 6, 2, 2]} fill="var(--accent)" minPointSize={2} maxBarSize={34}>
+                <Bar dataKey="duration" name={t('stats.chartDuration')} radius={[6, 6, 2, 2]} fill="var(--accent)" minPointSize={2} maxBarSize={34}>
                   {series.map((s, i) => (
                     <Cell
                       key={i}
                       fill="var(--accent)"
-                      fillOpacity={s.volume > 0 ? 0.65 + (0.35 * s.volume) / Math.max(1, ...series.map((x) => x.volume)) : 0.25}
+                      fillOpacity={s.duration > 0 ? 0.65 + (0.35 * s.duration) / Math.max(1, ...series.map((x) => x.duration)) : 0.25}
                     />
                   ))}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
+        </Card>
+
+        {/* Calendrier */}
+        <Card className="p-4">
+          <SectionTitle>{t('stats.calendar')}</SectionTitle>
+          <CalendarPage bare />
         </Card>
 
         {/* Types d'effort */}

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -65,7 +65,7 @@ import {
   type Thread,
 } from '@/lib/chat'
 import { Page, PageHeader } from '@/components/PageHeader'
-import { ProfileAvatar, ProfileLine, profileLinkOf, profileNameOf } from '@/components/ProfileAvatar'
+import { ProfileAvatar, ProfileLine } from '@/components/ProfileAvatar'
 import { Button, Card, Chip, EmptyState, Field, Input, Modal, Select, Tabs, Textarea } from '@/components/ui'
 import { IconButton } from '@/components/ui'
 import { ReportDialog } from '@/components/ReportDialog'
@@ -475,7 +475,6 @@ export default function ExplorerPage() {
     <div>
       <PageHeader
         title={t('explorer.title')}
-        subtitle={t('explorer.mapHint')}
         actions={
           <div className="flex items-center gap-1">
             <Button size="sm" variant="primary" onClick={() => setCreateOpen(true)}>
@@ -624,11 +623,14 @@ export default function ExplorerPage() {
                 )}
               </div>
               <div className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1">
-                <Chip active={dayFilter === 'all'} onClick={() => setDayFilter('all')}>{t('common.all')}</Chip>
-                <Chip active={dayFilter === 'today'} onClick={() => setDayFilter('today')}>{t('explorer.filterToday')}</Chip>
-                <Chip active={dayFilter === 'tomorrow'} onClick={() => setDayFilter('tomorrow')}>{t('explorer.filterTomorrow')}</Chip>
-                <Chip active={dayFilter === 'weekend'} onClick={() => setDayFilter('weekend')}>{t('explorer.filterWeekend')}</Chip>
+                <Chip size="sm" active={dayFilter === 'all'} onClick={() => setDayFilter('all')}>{t('common.all')}</Chip>
+                <Chip size="sm" active={dayFilter === 'today'} onClick={() => setDayFilter('today')}>{t('explorer.filterToday')}</Chip>
+                <Chip size="sm" active={dayFilter === 'tomorrow'} onClick={() => setDayFilter('tomorrow')}>{t('explorer.filterTomorrow')}</Chip>
+                <Chip size="sm" active={dayFilter === 'weekend'} onClick={() => setDayFilter('weekend')}>{t('explorer.filterWeekend')}</Chip>
               </div>
+              <p className="flex items-center gap-1.5 pt-0.5 text-[11px] font-medium text-muted">
+                <MapPin size={13} className="shrink-0" /> {t('explorer.mapHint')}
+              </p>
             </div>
             {/* relative z-0 : contexte d'empilement pour que les panneaux
                 Leaflet (z-index internes élevés) restent SOUS les modales. */}
@@ -775,7 +777,10 @@ function SessionRow({ s, me, friend, selected, onSelect, distanceKm }: {
           {friend && s.visibility !== 'open' && <span className="shrink-0 rounded-md bg-accent-soft px-1.5 py-0.5 text-[10px] font-extrabold text-accent">{t('explorer.friend')}</span>}
         </span>
         <span className="block truncate text-[11px] text-muted">
-          {fmtDate(s.starts_at)} · {s.gym_name || t('explorer.venueTbd')} · {s.spots_taken}/{s.spots_total}
+          {fmtDate(s.starts_at)} · {s.gym_name || t('explorer.venueTbd')}
+        </span>
+        <span className="block truncate text-[11px] text-muted">
+          {s.spots_taken}/{s.spots_total}
           {s.host === me ? ` ${t('explorer.ownSession')}` : ''}
           {distanceKm != null ? ` · ${fmtDistance(distanceKm)}` : ''}
         </span>
@@ -840,25 +845,10 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
 
   const pending = (requests ?? []).filter((r) => r.status === 'pending')
   const pendingInvites = (invites ?? []).filter((i) => i.status === 'pending')
-
-  /* Hôte : cliquable (photo + nom + pseudo) sauf anonymat des
-     sessions "sur proposition" pour les non-membres. */
-  const hostTo = mine ? '/profil' : profileLinkOf(s.host_profile)
-  const hostNode =
-    s.visibility === 'open' && !isMember && !mine ? (
-      <b>{t('explorer.anonymous')}</b>
-    ) : s.host_profile || mine ? (
-      <Link to={hostTo ?? '/profil'} className="inline-flex items-center gap-1 font-bold text-ink hover:text-accent">
-        <ProfileAvatar
-          url={s.host_profile?.avatar_url}
-          name={mine ? t('explorer.you') : profileNameOf(s.host_profile)}
-          size={18}
-        />
-        {mine ? t('explorer.you') : profileNameOf(s.host_profile)}
-      </Link>
-    ) : (
-      <b>{t('explorer.aSportif')}</b>
-    )
+  /* L'organisateur en tête de liste des inscrits. */
+  const orderedMembers = [...(members ?? [])].sort((a, b) =>
+    a.user_id === s.host ? -1 : b.user_id === s.host ? 1 : 0,
+  )
 
   const propose = async () => {
     setReqBusy(true)
@@ -973,7 +963,7 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
           )}
           <p className="mt-0.5 text-xs text-muted">
             {s.visibility === 'invite' ? t('session.visInvite') : s.visibility === 'open' ? t('session.visOpen') : t('session.visPublic')} · {t('session.levelLabel')} {s.level === 'tous' ? t('session.levelAny') : tx('level', s.level)} ·{' '}
-            {s.spots_taken}/{s.spots_total} · {t('session.byHost')} {hostNode}
+            {s.spots_taken}/{s.spots_total}
           </p>
           {/* Participants : cachés aux non-membres (sauf profils publics). */}
           {!isMember && publicOnes.length > 0 && (
@@ -985,21 +975,51 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
         </div>
         <div className="flex gap-1">
           {mine && <Button size="sm" variant="ghost" onClick={() => setEditOpen(true)}>{t('session.edit')}</Button>}
+          {mine && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="hover:text-danger"
+              disabled={busy}
+              onClick={() => {
+                if (!window.confirm(t('session.deleteConfirm'))) return
+                void act(s.id, () => deleteSession(s.id), t('session.deleted'))
+              }}
+            >
+              {t('common.delete')}
+            </Button>
+          )}
           {!mine && <Button size="sm" variant="ghost" onClick={() => setReportOpen(true)}>{t('session.report')}</Button>}
           <Button size="sm" variant="ghost" onClick={onClose}>{t('common.close')}</Button>
         </div>
       </div>
       {s.description && <p className="text-sm text-muted">{s.description}</p>}
 
+      {/* Hôte visible hors liste des inscrits : anonyme pour les sessions open. */}
+      {!isMember && (
+        <div className="flex items-center gap-2 rounded-xl bg-surface-2 p-2.5">
+          {s.visibility === 'open' ? (
+            <span className="text-[13px] font-bold">{t('explorer.anonymous')}</span>
+          ) : s.host_profile ? (
+            <>
+              <ProfileLine profile={s.host_profile} size={28} />
+              <span className="shrink-0 rounded-md bg-accent-soft px-1.5 py-0.5 text-[10px] font-extrabold text-accent">{t('session.hostTag')}</span>
+            </>
+          ) : (
+            <span className="text-[13px] font-bold">{t('explorer.aSportif')}</span>
+          )}
+        </div>
+      )}
+
       {/* Membres visibles : hôte + inscrits uniquement. */}
       {isMember && members !== null && members.length > 0 && (
         <div className="space-y-1 rounded-xl bg-surface-2 p-2.5">
           <p className="text-[11px] font-extrabold tracking-wide text-muted uppercase">{t('session.membersTitle', { n: members.length })}</p>
-          {members.map((m) => (
+          {orderedMembers.map((m) => (
             <div key={m.user_id} className="space-y-0.5">
               <div className="flex items-center gap-2">
-                <ProfileLine profile={m.profile} size={26} />
-                {m.user_id === s.host && <span className="shrink-0 text-[10px] text-muted">{t('session.hostTag')}</span>}
+                <ProfileLine profile={m.profile} size={28} />
+                {m.user_id === s.host && <span className="shrink-0 rounded-md bg-accent-soft px-1.5 py-0.5 text-[10px] font-extrabold text-accent">{t('session.hostTag')}</span>}
                 {mine && m.user_id !== me && (
                   <Button size="sm" variant="ghost" onClick={() => chatWith(m.user_id, m.profile)}>
                     <MessageCircle size={14} />
@@ -1026,12 +1046,7 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
 
       <div className="flex flex-wrap gap-2">
         {past ? (
-          mine ? (
-            <Button size="sm" variant="danger" disabled={busy} onClick={() => {
-              if (!window.confirm(t('session.deleteConfirm'))) return
-              void act(s.id, () => deleteSession(s.id), t('session.deleted'))
-            }}>{t('common.delete')}</Button>
-          ) : isMember ? (
+          mine ? null : isMember ? (
             <Button size="sm" variant="primary" block onClick={() => chatWith(s.host, s.host_profile ?? null)}>
               <MessageCircle size={14} /> {t('session.chatHost')}
             </Button>
@@ -1039,17 +1054,11 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
             <p className="text-xs text-muted">{t('session.finishedClosed')}</p>
           )
         ) : mine ? (
-          <>
-            {s.visibility === 'invite' && (
-              <Button size="sm" variant="secondary" onClick={() => setInviteOpen(true)}>
-                <Users size={14} /> {t('session.inviteBtn')}
-              </Button>
-            )}
-            <Button size="sm" variant="danger" disabled={busy} onClick={() => {
-              if (!window.confirm(t('session.deleteConfirm'))) return
-              void act(s.id, () => deleteSession(s.id), t('session.deleted'))
-            }}>{t('common.delete')}</Button>
-          </>
+          s.visibility === 'invite' ? (
+            <Button size="sm" variant="secondary" onClick={() => setInviteOpen(true)}>
+              <Users size={14} /> {t('session.inviteBtn')}
+            </Button>
+          ) : null
         ) : s.joined_by_me ? (
           <>
             <Button size="sm" variant="secondary" block disabled={busy} onClick={() => void act(s.id, () => leaveSession(s.id), t('session.left')).then(onChanged)}>
@@ -1108,60 +1117,48 @@ function SessionDetail({ s, me, busy, onClose, onChanged, onChat, act }: {
         )}
       </div>
 
-      {/* Demandes à valider (hôte, sessions open + public, à venir uniquement). */}
-      {mine && !past && s.visibility !== 'invite' && (
+      {/* Demandes à valider : affichées seulement s'il y en a. */}
+      {mine && !past && s.visibility !== 'invite' && pending.length > 0 && (
         <div className="space-y-2 rounded-xl bg-surface-2 p-2.5">
           <p className="text-[11px] font-extrabold tracking-wide text-muted uppercase">
             {s.visibility === 'open' ? t('session.requestsOpenTitle', { n: pending.length }) : t('session.requestsPublicTitle', { n: pending.length })}
           </p>
-          {requests === null ? (
-            <p className="text-xs text-muted">{t('common.loading')}</p>
-          ) : pending.length === 0 ? (
-            <p className="text-xs text-muted">{t('session.noRequests')}</p>
-          ) : (
-            pending.map((r) => (
-              <div key={r.user_id} className="flex items-center gap-2 rounded-lg bg-surface px-2.5 py-2">
-                <div className="min-w-0 flex-1">
-                  <ProfileLine profile={r.author} size={26} />
-                  {r.message && <p className="truncate pl-9 text-[11px] text-muted">« {r.message} »</p>}
-                </div>
-                <Button size="sm" variant="primary" disabled={reqBusy || full} onClick={() => void decide(r, true)}>
-                  <Check size={14} />
-                </Button>
-                <Button size="sm" variant="ghost" disabled={reqBusy} onClick={() => void decide(r, false)}>
-                  <X size={14} />
-                </Button>
+          {pending.map((r) => (
+            <div key={r.user_id} className="flex items-center gap-2 rounded-lg bg-surface px-2.5 py-2">
+              <div className="min-w-0 flex-1">
+                <ProfileLine profile={r.author} size={26} />
+                {r.message && <p className="truncate pl-9 text-[11px] text-muted">« {r.message} »</p>}
               </div>
-            ))
-          )}
+              <Button size="sm" variant="primary" disabled={reqBusy || full} onClick={() => void decide(r, true)}>
+                <Check size={14} />
+              </Button>
+              <Button size="sm" variant="ghost" disabled={reqBusy} onClick={() => void decide(r, false)}>
+                <X size={14} />
+              </Button>
+            </div>
+          ))}
         </div>
       )}
 
-      {/* Invités (hôte, sortie entre amis, à venir uniquement). */}
-      {mine && !past && s.visibility === 'invite' && (
+      {/* Invités : affichés seulement s'il y en a (hôte, sortie entre amis). */}
+      {mine && !past && s.visibility === 'invite' && (invites?.length ?? 0) > 0 && (
         <div className="space-y-2 rounded-xl bg-surface-2 p-2.5">
           <p className="text-[11px] font-extrabold tracking-wide text-muted uppercase">
             {t('session.guestsTitle', { n: pendingInvites.length })}
           </p>
-          {invites === null ? (
-            <p className="text-xs text-muted">{t('common.loading')}</p>
-          ) : invites.length === 0 ? (
-            <p className="text-xs text-muted">{t('session.noGuests')}</p>
-          ) : (
-            invites.map((i) => (
-              <div key={i.user_id} className="flex items-center gap-2 rounded-lg bg-surface px-2.5 py-2">
-                <ProfileLine profile={i.author} size={26} />
-                <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-extrabold ${i.status === 'pending' ? 'bg-warning/15 text-warning' : i.status === 'accepted' ? 'bg-success/15 text-success' : 'bg-surface-3 text-muted'}`}>
-                  {i.status === 'pending' ? t('session.statusPending') : i.status === 'accepted' ? t('session.statusAccepted') : t('session.statusDeclined')}
-                </span>
-                {i.status === 'pending' && (
-                  <Button size="sm" variant="ghost" disabled={reqBusy} onClick={() => void uninvite(i)}>
-                    <X size={14} />
-                  </Button>
-                )}
-              </div>
-            ))
-          )}
+          {(invites ?? []).map((i) => (
+            <div key={i.user_id} className="flex items-center gap-2 rounded-lg bg-surface px-2.5 py-2">
+              <ProfileLine profile={i.author} size={26} />
+              <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-extrabold ${i.status === 'pending' ? 'bg-warning/15 text-warning' : i.status === 'accepted' ? 'bg-success/15 text-success' : 'bg-surface-3 text-muted'}`}>
+                {i.status === 'pending' ? t('session.statusPending') : i.status === 'accepted' ? t('session.statusAccepted') : t('session.statusDeclined')}
+              </span>
+              {i.status === 'pending' && (
+                <Button size="sm" variant="ghost" disabled={reqBusy} onClick={() => void uninvite(i)}>
+                  <X size={14} />
+                </Button>
+              )}
+            </div>
+          ))}
         </div>
       )}
 
@@ -1534,15 +1531,16 @@ function ConversationView({ t: thread, onBack }: { t: ActiveThread; onBack: () =
   }
 
   return (
-    <Card className="flex min-h-[420px] flex-col overflow-hidden">
-      <div className="flex items-center gap-2.5 border-b border-line p-3">
+    <div className="fixed inset-x-0 top-0 bottom-[var(--bottom-stack,0px)] z-40 flex flex-col bg-canvas lg:left-64">
+      <header className="glass safe-t flex items-center gap-2 border-b border-line px-2 py-2">
         <Button size="sm" variant="ghost" onClick={onBack}>{t('common.back')}</Button>
+        <ProfileAvatar url={thread.other?.avatar_url} name={displayNameOf(thread.other)} size={32} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-extrabold">{displayNameOf(thread.other)}</p>
           <p className="truncate text-[11px] text-muted">{thread.title}</p>
         </div>
-      </div>
-      <div className="flex-1 space-y-2 overflow-y-auto p-3">
+      </header>
+      <div className="flex-1 space-y-2 overflow-y-auto overscroll-contain px-3 py-2">
         {msgs.length >= messageLimit && (
           <Button size="sm" variant="ghost" block onClick={() => setMessageLimit((n) => n + 200)}>
             {t('chat.loadMore')}
@@ -1568,19 +1566,20 @@ function ConversationView({ t: thread, onBack }: { t: ActiveThread; onBack: () =
         })}
         <div ref={bottom} />
       </div>
-      <div className="flex gap-2 border-t border-line p-3">
+      <div className="safe-b flex items-end gap-2 border-t border-line px-2 py-2">
         <Input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') void send() }}
           placeholder={t('chat.composePlaceholder')}
           maxLength={1000}
+          className="rounded-full"
         />
-        <Button variant="primary" size="sm" disabled={sending || !draft.trim()} onClick={() => void send()}>
+        <Button variant="primary" size="icon" className="shrink-0 rounded-full" disabled={sending || !draft.trim()} onClick={() => void send()}>
           <Send size={16} />
         </Button>
       </div>
-    </Card>
+    </div>
   )
 }
 

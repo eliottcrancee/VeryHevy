@@ -26,6 +26,23 @@ export const round = (v: number, decimals = 1) => {
   return Math.round(v * f) / f
 }
 
+/* ------------------------- Filtres de période ------------------------- */
+
+/** Filtre de période partagé par les stats, les stats d'exo et les profils. */
+export type RangeFilter = '30j' | '90j' | '6m' | 'tout'
+export const RANGE_DAYS: Record<RangeFilter, number | null> = { '30j': 30, '90j': 90, '6m': 182, tout: null }
+export const RANGE_LABEL_KEYS: [RangeFilter, string][] = [
+  ['30j', 'stats.range30'],
+  ['90j', 'stats.range90'],
+  ['6m', 'stats.range6m'],
+  ['tout', 'common.all'],
+]
+/** Timestamp de début correspondant à un filtre (null = tout). */
+export function rangeSince(range: RangeFilter, now = Date.now()): number | null {
+  const days = RANGE_DAYS[range]
+  return days ? now - days * 86400000 : null
+}
+
 /* ------------------------------- Unités ------------------------------- */
 
 export const KG_TO_LB = 2.2046226218

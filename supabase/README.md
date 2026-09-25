@@ -34,9 +34,12 @@ l'app reste 100 % locale et aucune page de login n'est exigée.
     nécessaire avant de publier le nouveau client.
 12. Puis exécutez `supabase/schema_account.sql` (suppression de compte :
     les participants peuvent effacer leurs messages).
+13. Puis exécutez `supabase/schema_followers_access.sql` (accès abonnés :
+    historique et stats complets d'un profil suivi + lecture des photos
+    de posts par les abonnés).
 
 Pour un projet déjà installé jusqu'à l'étape 10, exécutez uniquement les
-étapes 11 et 12. Vérifiez ensuite dans Supabase que le bucket `post-photos`
+étapes 11 à 13. Vérifiez ensuite dans Supabase que le bucket `post-photos`
 est privé.
 
 ## 2. Activer Google

@@ -29,6 +29,7 @@ import {
   DurationField,
   EmptyState,
   Field,
+  ColorPicker,
   IconButton,
   Input,
   Menu,
@@ -177,12 +178,13 @@ export default function RoutineEditorPage() {
               />
             </Field>
             <Field label={t('routine.color')}>
-              <input
-                type="color"
-                value={routine.color}
-                onChange={(e) => updateRoutine(routine.id, { color: e.target.value })}
-                className="h-11 w-full cursor-pointer rounded-xl border border-line bg-surface-2 px-2"
-              />
+              <div className="pt-1.5">
+                <ColorPicker
+                  value={routine.color}
+                  onChange={(color) => updateRoutine(routine.id, { color })}
+                  label={t('routine.color')}
+                />
+              </div>
             </Field>
           </div>
         </Card>

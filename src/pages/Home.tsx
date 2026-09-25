@@ -31,7 +31,6 @@ export default function HomePage() {
   const notify = useStore((s) => s.notify)
   const startWorkout = useStore((s) => s.startWorkout)
   const activeId = useStore((s) => s.activeWorkoutId)
-  const workouts = useStore((s) => s.workouts)
 
   const [posts, setPosts] = useState<Post[]>(() => user ? (peekHome(user.id)?.posts ?? []) : [])
   const [loading, setLoading] = useState(() => !user || !peekHome(user.id))
@@ -330,9 +329,6 @@ export default function HomePage() {
                 )}
               </span>
             </IconButton>
-            <IconButton label={t('home.startEmptyAria')} onClick={startEmpty}>
-              <Plus size={22} />
-            </IconButton>
           </>
         }
       />
@@ -341,7 +337,6 @@ export default function HomePage() {
           <span className="rounded-xl bg-accent/15 p-2 text-accent"><Plus size={22} /></span>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-extrabold">{activeId ? t('home.activeTitle') : t('home.readyTitle')}</p>
-            <p className="text-xs text-muted">{t('home.doneCount', { count: workouts.filter((w) => w.status === 'completed').length })}</p>
           </div>
           <Button size="sm" variant="primary" onClick={startEmpty}>{activeId ? t('home.resume') : t('home.start')}</Button>
         </Card>

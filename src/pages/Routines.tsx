@@ -3,12 +3,10 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Copy, Dumbbell, MoreVertical, Pencil, Play, Plus, Trash2 } from 'lucide-react'
 import { useStore, selectActiveWorkout } from '@/store/store'
 import { Page, PageHeader } from '@/components/PageHeader'
-import { Button, Card, EmptyState, IconButton, Input, Menu, Modal, Textarea } from '@/components/ui'
-import { cn, formatDate } from '@/lib/utils'
+import { Button, Card, ColorPicker, EmptyState, IconButton, Input, Menu, Modal, PROGRAM_COLORS, Textarea } from '@/components/ui'
+import { formatDate } from '@/lib/utils'
 import { ExercisePicker } from '@/components/ExercisePicker'
 import { t, useLang } from '@/lib/i18n'
-
-const COLORS = ['#4f83ff', '#22c55e', '#f97316', '#a855f7', '#ef4444', '#0ea5e9', '#eab308', '#14b8a6']
 
 export default function RoutinesPage() {
   const navigate = useNavigate()
@@ -31,7 +29,7 @@ export default function RoutinesPage() {
   const [newName, setNewName] = useState('')
   const [newDesc, setNewDesc] = useState('')
   const [newFolder, setNewFolder] = useState('Mes programmes')
-  const [newColor, setNewColor] = useState(COLORS[0])
+  const [newColor, setNewColor] = useState(PROGRAM_COLORS[0])
 
   const folders = useMemo(() => {
     const map = new Map<string, typeof routines>()
@@ -59,7 +57,6 @@ export default function RoutinesPage() {
     <div>
       <PageHeader
         title={t('routine.title')}
-        subtitle={t('routine.subtitle', { n: routines.length })}
         actions={
           <>
             <Link to="/exercices" className="shrink-0">
@@ -236,20 +233,7 @@ export default function RoutinesPage() {
           <Input placeholder={t('routine.folder')} value={newFolder} onChange={(e) => setNewFolder(e.target.value)} />
           <div>
             <p className="mb-2 text-xs font-semibold text-muted">{t('routine.color')}</p>
-            <div className="flex gap-2">
-              {COLORS.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setNewColor(c)}
-                  style={{ background: c }}
-                  className={cn(
-                    'h-8 w-8 rounded-full transition-transform',
-                    newColor === c && 'ring-2 ring-offset-2 ring-offset-surface',
-                  )}
-                />
-              ))}
-            </div>
+            <ColorPicker value={newColor} onChange={setNewColor} label={t('routine.color')} />
           </div>
         </div>
       </Modal>

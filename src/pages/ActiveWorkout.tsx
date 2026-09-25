@@ -464,8 +464,8 @@ export default function ActiveWorkoutPage() {
               )}
             </div>
           </div>
-          <Stat label={t('stats.sets')} value={`${doneSets}/${totalSets}`} icon={<Check size={12} />} />
-          <Stat label={t('stats.volume')} value={formatVolume(volume, settings.unit)} icon={<Flag size={12} />} />
+          <Stat compact label={t('stats.sets')} value={`${doneSets}/${totalSets}`} icon={<Check size={12} />} />
+          <Stat compact label={t('stats.volume')} value={formatVolume(volume, settings.unit)} icon={<Flag size={12} />} />
         </div>
       </Page>
 

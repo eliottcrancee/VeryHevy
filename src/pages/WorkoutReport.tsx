@@ -40,7 +40,6 @@ import {
   Input,
   Menu,
   Modal,
-  Rating,
   SectionTitle,
   Stat,
   Textarea,
@@ -289,16 +288,45 @@ export default function WorkoutReportPage() {
         )}
 
         {/* Résumé */}
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <Stat label={t('workout.duration')} value={formatDuration(duration, 'compact')} icon={<Clock size={12} />} sub={compare(duration, previousSame ? workoutDurationSeconds(previousSame) : undefined)} />
+        <div className="grid grid-cols-4 gap-1.5">
+          <Stat compact label={t('workout.duration')} value={formatDuration(duration, 'compact')} icon={<Clock size={12} />} sub={compare(duration, previousSame ? workoutDurationSeconds(previousSame) : undefined)} />
           <Stat
+            compact
             label={t('stats.volume')}
             value={formatVolume(volume, settings.unit)}
             icon={<Weight size={12} />}
           />
-          <Stat label={t('stats.sets')} value={sets} sub={compare(sets, previousSame ? workoutSets(previousSame) : undefined)} icon={<Flame size={12} />} />
-          <Stat label={t('workout.reps')} value={reps} icon={<Dumbbell size={12} />} />
+          <Stat compact label={t('stats.sets')} value={sets} sub={compare(sets, previousSame ? workoutSets(previousSame) : undefined)} icon={<Flame size={12} />} />
+          <Stat compact label={t('workout.reps')} value={reps} icon={<Dumbbell size={12} />} />
         </div>
+
+        {/* Notes de séance (en haut) */}
+        <Card className="p-4">
+          <div className="flex items-center justify-between">
+            <SectionTitle className="mb-0">{t('workout.sessionNotes')}</SectionTitle>
+            <Button size="sm" variant="ghost" onClick={() => setEditNotes((v) => !v)}>
+              {editNotes ? t('common.close') : t('workout.edit')}
+            </Button>
+          </div>
+          {editNotes ? (
+            <Textarea
+              className="mt-3"
+              autoFocus
+              value={workout.notes ?? ''}
+              onChange={(e) => updateWorkout(workout.id, { notes: e.target.value })}
+              placeholder={t('workout.notesHint2')}
+            />
+          ) : (
+            <p className={`mt-2 text-sm ${workout.notes ? '' : 'text-muted italic'}`}>
+              {workout.notes || t('workout.noNotes')}
+            </p>
+          )}
+          {workout.bodyweightKg !== undefined && (
+            <p className="mt-3 text-xs text-muted">
+              {t('workout.bodyweightIs', { w: formatWeight(workout.bodyweightKg, settings.unit) })}
+            </p>
+          )}
+        </Card>
 
         {previousSame && (
           <Card className="flex items-center gap-3 p-4">
@@ -422,12 +450,13 @@ export default function WorkoutReportPage() {
                             {we.exerciseName ?? t('workout.deletedExercise')}
                           </span>
                         )}
-                        {ex && (
-                          <span className="shrink-0 rounded-md bg-surface-2 px-1.5 py-0.5 text-[10px] font-bold text-muted">
-                            {CATEGORY_META[ex.category].emoji} {tx('muscle', ex.primaryMuscles[0])}
-                          </span>
-                        )}
                       </div>
+                      {ex && (
+                        <p className="mt-0.5 text-[11px] font-semibold text-muted">
+                          {CATEGORY_META[ex.category].emoji} {tx('cat', ex.category)}
+                          {ex.primaryMuscles[0] ? ` · ${tx('muscle', ex.primaryMuscles[0])}` : ''}
+                        </p>
+                      )}
                     </div>
                     <div className="tabular shrink-0 text-right text-[11px] text-muted">
                       {weVolume > 0 && <div>{formatVolume(weVolume, settings.unit)}</div>}
@@ -460,9 +489,8 @@ export default function WorkoutReportPage() {
                             )}
                             {s.rpe !== undefined && <span className="text-muted">RPE {s.rpe}</span>}
                           </span>
-                          {s.completed ? (
-                            <span className="shrink-0 text-[11px] font-semibold text-success">{t('workout.validatedSet')}</span>
-                          ) : (
+                          {/* Séries toujours validées : plus de mention « validée ». */}
+                          {!s.completed && (
                             <span className="shrink-0 text-[11px] text-muted">{t('workout.ignoredSet')}</span>
                           )}
                         </div>
@@ -481,41 +509,10 @@ export default function WorkoutReportPage() {
           </div>
         </div>
 
-        {/* Notes & note globale */}
-        <Card className="p-4">
-          <div className="flex items-center justify-between">
-            <SectionTitle className="mb-0">{t('workout.sessionNotes')}</SectionTitle>
-            <Button size="sm" variant="ghost" onClick={() => setEditNotes((v) => !v)}>
-              {editNotes ? t('common.close') : t('workout.edit')}
-            </Button>
-          </div>
-          {editNotes ? (
-            <Textarea
-              className="mt-3"
-              autoFocus
-              value={workout.notes ?? ''}
-              onChange={(e) => updateWorkout(workout.id, { notes: e.target.value })}
-              placeholder={t('workout.notesHint2')}
-            />
-          ) : (
-            <p className={`mt-2 text-sm ${workout.notes ? '' : 'text-muted italic'}`}>
-              {workout.notes || t('workout.noNotes')}
-            </p>
-          )}
-          {workout.bodyweightKg !== undefined && (
-            <p className="mt-3 text-xs text-muted">
-              {t('workout.bodyweightIs', { w: formatWeight(workout.bodyweightKg, settings.unit) })}
-            </p>
-          )}
-          <div className="mt-4 flex items-center justify-between border-t border-line pt-3">
-            <span className="text-xs font-semibold text-muted">{t('workout.rateSession')}</span>
-            <Rating value={workout.rating} onChange={(v) => updateWorkout(workout.id, { rating: v || undefined })} />
-          </div>
-        </Card>
-
         {!isActive && (
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid gap-2 sm:grid-cols-2">
             <Button
+              className="w-full"
               onClick={() => {
                 reopenWorkout(workout.id)
                 navigate('/seance')
@@ -523,7 +520,7 @@ export default function WorkoutReportPage() {
             >
               <Pencil size={16} /> {t('workout.edit')}
             </Button>
-            <Button variant="primary" onClick={() => setSaveRoutineOpen(true)}>
+            <Button className="w-full" variant="primary" onClick={() => setSaveRoutineOpen(true)}>
               <Copy size={16} /> {t('workout.saveAsProgram')}
             </Button>
           </div>

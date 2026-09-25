@@ -14,7 +14,7 @@ import {
   type TextareaHTMLAttributes,
 } from 'react'
 import { createPortal } from 'react-dom'
-import { Check, Minus, Plus, Star, X } from 'lucide-react'
+import { Check, Minus, Palette, Plus, Star, X } from 'lucide-react'
 import { t, useLang } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
@@ -158,12 +158,14 @@ export function Chip({
   onClick,
   className,
   color,
+  size = 'md',
 }: {
   active?: boolean
   children: ReactNode
   onClick?: () => void
   className?: string
   color?: string
+  size?: 'sm' | 'md'
 }) {
   return (
     <button
@@ -171,7 +173,8 @@ export function Chip({
       onClick={onClick}
       style={active && color ? { background: color, borderColor: color } : undefined}
       className={cn(
-        'inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-[13px] font-medium whitespace-nowrap transition-all',
+        'inline-flex shrink-0 items-center gap-1.5 rounded-full border font-medium whitespace-nowrap transition-all',
+        size === 'sm' ? 'px-2.5 py-1 text-[12px]' : 'px-3 py-1.5 text-[13px]',
         active
           ? 'border-accent-solid bg-accent-solid text-accent-contrast'
           : 'border-line bg-surface text-muted hover:border-muted/40 hover:text-ink',
@@ -180,6 +183,71 @@ export function Chip({
     >
       {children}
     </button>
+  )
+}
+
+/** Palette de couleurs proposée pour les programmes. */
+export const PROGRAM_COLORS = [
+  '#4f83ff',
+  '#22c55e',
+  '#f97316',
+  '#a855f7',
+  '#ef4444',
+  '#0ea5e9',
+  '#eab308',
+  '#14b8a6',
+]
+
+/** Sélecteur de couleur : pastilles + roue libre pour une teinte perso. */
+export function ColorPicker({
+  value,
+  onChange,
+  className,
+  label,
+}: {
+  value: string
+  onChange: (color: string) => void
+  className?: string
+  label?: string
+}) {
+  const normalized = value.toLowerCase()
+  const isCustom = !PROGRAM_COLORS.some((c) => c.toLowerCase() === normalized)
+  return (
+    <div className={cn('flex flex-wrap items-center gap-2', className)}>
+      {PROGRAM_COLORS.map((c) => (
+        <button
+          key={c}
+          type="button"
+          aria-label={c}
+          aria-pressed={normalized === c.toLowerCase()}
+          onClick={() => onChange(c)}
+          style={{ background: c }}
+          className={cn(
+            'h-9 w-9 rounded-full transition-transform hover:scale-105',
+            normalized === c.toLowerCase()
+              ? 'ring-2 ring-ink ring-offset-2 ring-offset-surface'
+              : 'ring-1 ring-black/10',
+          )}
+        />
+      ))}
+      <label
+        className={cn(
+          'relative inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-dashed text-muted transition-colors hover:text-ink',
+          isCustom ? 'border-transparent ring-2 ring-ink ring-offset-2 ring-offset-surface' : 'border-line',
+        )}
+        style={isCustom ? { background: value } : undefined}
+        title={label}
+      >
+        {!isCustom && <Palette size={16} />}
+        <input
+          type="color"
+          value={value}
+          aria-label={label}
+          onChange={(e) => onChange(e.target.value)}
+          className="absolute inset-0 cursor-pointer rounded-full opacity-0"
+        />
+      </label>
+    </div>
   )
 }
 
@@ -838,14 +906,29 @@ export function Stat({
   value,
   sub,
   icon,
+  compact,
   className,
 }: {
   label: string
   value: ReactNode
   sub?: ReactNode
   icon?: ReactNode
+  /** Version condensée (grille de chiffres, comme dans les stats du profil). */
+  compact?: boolean
   className?: string
 }) {
+  if (compact) {
+    return (
+      <div className={cn('rounded-xl bg-surface-2 px-1 py-2 text-center', className)}>
+        <p className="tabular truncate text-sm font-extrabold">{value}</p>
+        <p className="flex items-center justify-center gap-1 text-[10px] font-semibold text-muted uppercase">
+          {icon}
+          {label}
+        </p>
+        {sub && <p className="truncate text-[10px] text-muted">{sub}</p>}
+      </div>
+    )
+  }
   return (
     <div className={cn('rounded-2xl border border-line bg-surface p-3.5', className)}>
       <div className="flex items-center gap-1.5 text-[11px] font-semibold tracking-wide text-muted uppercase">
