@@ -52,6 +52,9 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,
+    // Accès distant via Tailscale (ex. https://serveur.tailXYZ.ts.net:8444
+    // exposé par `tailscale serve`) : autorise les noms du tailnet.
+    allowedHosts: ['.ts.net'],
   },
   build: {
     chunkSizeWarningLimit: 1200,

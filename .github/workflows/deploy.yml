@@ -31,6 +31,12 @@ jobs:
       - run: npm run typecheck
 
       - run: npm run build
+        env:
+          # Sans ces secrets, le build reste en mode 100 % local (sans login).
+          # Repo → Settings → Secrets and variables → Actions :
+          #   VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
       - uses: actions/configure-pages@v5
         # Pas d'`enablement: true` : le GITHUB_TOKEN du workflow n'a pas le droit de

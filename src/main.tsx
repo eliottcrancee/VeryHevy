@@ -4,17 +4,23 @@ import { HashRouter } from 'react-router-dom'
 import App from './App'
 import './index.css'
 import { startAutoSync } from './lib/sync'
+import { startAutoCloudSync } from './lib/cloudSync'
+import { AuthProvider } from './lib/auth'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <HashRouter>
-      <App />
+      <AuthProvider>
+        <App />
+      </AuthProvider>
     </HashRouter>
   </StrictMode>,
 )
 
 // Synchro auto serveur maison (no-op tant qu'elle n'est pas configurée).
 startAutoSync()
+// Synchro cloud Supabase (no-op sans config ou sans compte connecté).
+startAutoCloudSync()
 
 // Installation hors ligne (PWA) — uniquement sur la version compilée.
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {

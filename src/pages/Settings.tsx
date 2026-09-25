@@ -18,6 +18,9 @@ import {
 import type { AppData } from '@/types'
 import { useStore } from '@/store/store'
 import { syncNow } from '@/lib/sync'
+import { syncCloudNow } from '@/lib/cloudSync'
+import { useAuth } from '@/lib/auth'
+import { isCloudEnabled } from '@/lib/supabase'
 import { Page, PageHeader } from '@/components/PageHeader'
 import { Logo } from '@/components/Logo'
 import {
@@ -58,6 +61,7 @@ export default function SettingsPage() {
   const resetAll = useStore((s) => s.resetAll)
   const importExercises = useStore((s) => s.importExercises)
   const notify = useStore((s) => s.notify)
+  const { user, cloudEnabled, signOut } = useAuth()
 
   const [confirmReset, setConfirmReset] = useState(false)
   const [pendingRestore, setPendingRestore] = useState<{
@@ -82,6 +86,17 @@ export default function SettingsPage() {
   const runSync = async () => {
     setSyncing(true)
     try {
+      if (cloudEnabled && user) {
+        const res = await syncCloudNow()
+        if (res.status === 'ok') {
+          notify(`Synchro cloud OK : ${res.pushed ?? 0} envoyé(s), ${res.pulled ?? 0} reçu(s)`, 'success')
+        } else if (res.status === 'error') {
+          notify(res.error ?? 'Échec de synchro', 'error')
+        } else {
+          notify('Rien à synchroniser', 'info')
+        }
+        return
+      }
       const res = await syncNow()
       if (res.status === 'ok') {
         notify(`Synchro OK : ${res.pushed ?? 0} envoyé(s), ${res.pulled ?? 0} reçu(s)`, 'success')
@@ -184,6 +199,43 @@ export default function SettingsPage() {
       <PageHeader title="Réglages" />
 
       <Page className="max-w-3xl space-y-6 pb-10">
+        {/* Compte */}
+        <Card className="flex items-center gap-3 p-4">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-lg font-extrabold text-accent">
+            {(user?.user_metadata?.full_name as string | undefined)?.slice(0, 1).toUpperCase()
+              ?? user?.email?.slice(0, 1).toUpperCase()
+              ?? '🏋️'}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-bold">
+              {cloudEnabled && user
+                ? ((user.user_metadata?.full_name as string | undefined) ?? user.email)
+                : 'Mode local'}
+            </p>
+            <p className="truncate text-xs text-muted">
+              {cloudEnabled && user
+                ? `Connecté avec Google · ${user.email}`
+                : isCloudEnabled
+                  ? 'Non connecté — vos données restent sur cet appareil'
+                  : 'Cloud non configuré — 100 % local, aucune donnée envoyée'}
+            </p>
+          </div>
+          <Link to="/profil">
+            <Button size="sm" variant="primary">Mon profil</Button>
+          </Link>
+          {cloudEnabled && user && (
+            <Button
+              size="sm"
+              onClick={() => {
+                void signOut()
+                notify('Déconnecté — vos données locales sont conservées', 'info')
+              }}
+            >
+              Déconnexion
+            </Button>
+          )}
+        </Card>
+
         {/* Apparence */}
         <Card className="space-y-4 p-4">
           <SectionTitle className="mb-0">
@@ -432,15 +484,19 @@ export default function SettingsPage() {
         <Card className="space-y-4 p-4">
           <SectionTitle className="mb-0">
             <span className="inline-flex items-center gap-1.5">
-              <CloudDownload size={13} /> Synchronisation (serveur maison)
+              <CloudDownload size={13} /> {cloudEnabled && user ? 'Synchronisation cloud (Google)' : 'Synchronisation (serveur maison)'}
             </span>
           </SectionTitle>
           <p className="text-sm text-muted">
-            Sauvegarde et réconcilie vos données avec votre serveur : automatiquement après
-            chaque modification (fin de séance, programme, exercice…), toutes les 5 minutes et au
-            retour d’internet.
-            100 % local par défaut — rien ne part tant que ce n’est pas configuré. La séance en
-            cours et le chrono ne sont jamais synchronisés.
+            {cloudEnabled && user ? (
+              <>Vos données sont liées à votre compte Google et isolées par utilisateur : chaque compte ne voit que les siennes. La synchro part automatiquement après chaque modification, toutes les 5 minutes et au retour d’internet.</>
+            ) : (
+              <>Sauvegarde et réconcilie vos données avec votre serveur : automatiquement après
+              chaque modification (fin de séance, programme, exercice…), toutes les 5 minutes et au
+              retour d’internet.
+              100 % local par défaut — rien ne part tant que ce n’est pas configuré. La séance en
+              cours et le chrono ne sont jamais synchronisés.</>
+            )}
           </p>
           <Checkbox
             checked={settings.sync.enabled}
@@ -468,7 +524,7 @@ export default function SettingsPage() {
             </Field>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" variant="primary" disabled={syncing || syncState === 'off'} onClick={runSync}>
+            <Button size="sm" variant="primary" disabled={syncing || (syncState === 'off' && !(cloudEnabled && user))} onClick={runSync}>
               {syncing ? <RefreshCw size={14} className="animate-spin" /> : <RefreshCw size={14} />}
               Synchroniser maintenant
             </Button>
