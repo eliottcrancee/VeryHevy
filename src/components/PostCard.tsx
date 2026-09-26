@@ -8,6 +8,7 @@ import {
   addComment,
   deleteComment,
   deletePost,
+  decodableImage,
   displayAuthor,
   getPostWorkout,
   listComments,
@@ -50,6 +51,30 @@ function Avatar({ url, name, size = 40 }: { url?: string | null; name: string; s
  * détail complet avec séries et 1RM estimé), likes (appui long = qui a aimé),
  * commentaires et réutilisation de la séance.
  */
+
+/**
+ * Photo d'un post : ratio naturel respecté (portrait ou paysage, aucun
+ * rognage ni fond), sauf ratio excessif (au-delà de 2.2:1 ou en deçà de
+ * 1:2.2) où l'on recadre pour éviter une bande interminable dans le feed.
+ */
+function PostPhoto({ src }: { src: string }) {
+  const [ratio, setRatio] = useState<number | null>(null)
+  const extreme = ratio !== null && (ratio > 2.2 || ratio < 1 / 2.2)
+  return (
+    <img
+      src={src}
+      alt=""
+      loading="lazy"
+      decoding="async"
+      referrerPolicy="no-referrer"
+      onLoad={(e) => {
+        const img = e.currentTarget
+        if (img.naturalWidth > 0 && img.naturalHeight > 0) setRatio(img.naturalWidth / img.naturalHeight)
+      }}
+      className={cn('block w-full', extreme ? 'max-h-[65vh] object-cover' : 'h-auto')}
+    />
+  )
+}
 
 /** Détail séance normalisé (snapshot figé ou séance locale/ancienne). */
 type DetailSet = { reps: number | null; weight: number | null; duration: number | null; distance?: number | null }
@@ -456,15 +481,25 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
     finally { setBusy(false) }
   }
 
-  /** Aperçu local de la nouvelle photo choisie. */
+  /** Aperçu local de la nouvelle photo choisie (HEIC converti au besoin). */
   useEffect(() => {
     if (!photoFile) {
       setPhotoPreview(null)
       return
     }
-    const url = URL.createObjectURL(photoFile)
-    setPhotoPreview(url)
-    return () => URL.revokeObjectURL(url)
+    let cancelled = false
+    let url: string | null = null
+    decodableImage(photoFile)
+      .then((source) => {
+        if (cancelled) return
+        url = URL.createObjectURL(source)
+        setPhotoPreview(url)
+      })
+      .catch(() => { if (!cancelled) setPhotoPreview(null) })
+    return () => {
+      cancelled = true
+      if (url) URL.revokeObjectURL(url)
+    }
   }, [photoFile])
 
   const openEdit = () => {
@@ -590,9 +625,7 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
         </div> : <button type="button" onClick={() => setReportOpen(true)} aria-label={t('post.reportAria')} className="rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-danger"><Flag size={16} /></button>}
       </div>
 
-      {shownPhoto && (
-        <img src={shownPhoto} alt="" className="max-h-[480px] w-full object-cover" loading="lazy" />
-      )}
+      {shownPhoto && <PostPhoto src={shownPhoto} />}
 
       <div className="space-y-2.5 p-3">
         {post.caption && <p className="text-sm whitespace-pre-wrap">{post.caption}</p>}
@@ -712,7 +745,7 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
               </span>
               <input
                 type="file"
-                accept="image/*"
+                accept="image/*,.heic,.heif"
                 className="hidden"
                 onChange={(e) => {
                   setPhotoFile(e.target.files?.[0] ?? null)

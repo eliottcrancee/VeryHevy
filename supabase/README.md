@@ -40,10 +40,19 @@ l'app reste 100 % locale et aucune page de login n'est exigée.
 14. Enfin exécutez `supabase/schema_shared_profile.sql` (profil consultable
     de bout en bout : les profils publics comme les abonnements ouvrent
     l'historique et les programmes, copiables depuis le profil).
+15. Enfin exécutez `supabase/schema_permissions_fix.sql` (OBLIGATOIRE pour
+    l'édition de post et la suppression de compte : rend `photo_url`
+    modifiable et accorde les suppressions manquantes — signalements,
+    likes/commentaires, candidatures/invitations, Storage).
 
 Pour un projet déjà installé jusqu'à l'étape 10, exécutez uniquement les
-étapes 11 à 14. Vérifiez ensuite dans Supabase que le bucket `post-photos`
+étapes 11 à 15. Vérifiez ensuite dans Supabase que le bucket `post-photos`
 est privé.
+
+Les permissions attendues par le client sont vérifiables hors ligne :
+`npm run test:perms` relit les `.sql` et le code TypeScript et échoue si une
+colonne modifiée n'est pas accordée, ou si une table est supprimée sans
+policy de suppression.
 
 ## 2. Activer Google
 

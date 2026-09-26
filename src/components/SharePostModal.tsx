@@ -4,7 +4,7 @@ import { Field, Button, Modal, Select, Textarea } from '@/components/ui'
 import { useStore } from '@/store/store'
 import { t, useLang } from '@/lib/i18n'
 import type { PostVisibility } from '@/types'
-import { buildWorkoutSnapshot, createPost } from '@/lib/posts'
+import { buildWorkoutSnapshot, createPost, decodableImage } from '@/lib/posts'
 
 /**
  * Publier une séance en post (photo optionnelle + légende + visibilité).
@@ -44,9 +44,20 @@ export function SharePostModal({
       setPreview(null)
       return
     }
-    const url = URL.createObjectURL(file)
-    setPreview(url)
-    return () => URL.revokeObjectURL(url)
+    /* Aperçu : un HEIC est converti pour rester visible partout. */
+    let cancelled = false
+    let url: string | null = null
+    decodableImage(file)
+      .then((source) => {
+        if (cancelled) return
+        url = URL.createObjectURL(source)
+        setPreview(url)
+      })
+      .catch(() => { if (!cancelled) setPreview(null) })
+    return () => {
+      cancelled = true
+      if (url) URL.revokeObjectURL(url)
+    }
   }, [file])
 
   if (!open || !workoutId) return null
@@ -87,14 +98,16 @@ export function SharePostModal({
             </span>
             <input
               type="file"
-              accept="image/*"
+              accept="image/*,.heic,.heif"
               className="hidden"
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
             />
           </label>
         </Field>
         {preview && (
-          <img src={preview} alt="" className="max-h-64 w-full rounded-xl object-cover" />
+          /* Aperçu fidèle : ratio naturel, pas de rognage (recadrage
+             seulement au-delà d'un ratio excessif). */
+          <img src={preview} alt="" className="block max-h-[55vh] w-full rounded-xl bg-surface-2 object-contain" />
         )}
         <Field label={t('post.captionLabel')} hint={t('post.captionHint')}>
           <Textarea

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Copy, Dumbbell, MoreVertical, Pencil, Play, Plus, Trash2 } from 'lucide-react'
+import { ChevronRight, Copy, Dumbbell, MoreVertical, Pencil, Play, Plus, Trash2 } from 'lucide-react'
 import { useStore, selectActiveWorkout } from '@/store/store'
 import { Page, PageHeader } from '@/components/PageHeader'
 import { Button, Card, ColorPicker, EmptyState, IconButton, Input, Menu, Modal, PROGRAM_COLORS, Textarea } from '@/components/ui'
@@ -82,16 +82,21 @@ export default function RoutinesPage() {
       />
 
       <Page className="space-y-6">
-        {/* Bandeau fin : lancer / reprendre une séance (repris de l'accueil). */}
-        <div className="flex items-center gap-2.5 rounded-xl border border-accent-line bg-accent-soft px-3 py-1.5">
+        {/* Bandeau fin : lancer / reprendre une séance (repris de l'accueil).
+            Toute la ligne est cliquable : plus de bouton « Démarrer » textuel. */}
+        <button
+          type="button"
+          onClick={startEmpty}
+          aria-label={active ? t('home.resume') : t('home.start')}
+          title={active ? t('home.resume') : t('home.start')}
+          className="flex w-full items-center gap-2 rounded-xl border border-accent-line bg-accent-soft px-3 py-1.5 text-left transition-colors hover:brightness-[1.04] active:scale-[0.995]"
+        >
           <span className="shrink-0 text-accent"><Play size={15} /></span>
-          <p className="min-w-0 flex-1 truncate text-[13px] font-bold">
+          <span className="min-w-0 flex-1 truncate text-[12.5px] font-bold">
             {active ? t('home.activeTitle') : t('home.readyTitle')}
-          </p>
-          <Button size="sm" variant="primary" onClick={startEmpty}>
-            {active ? t('home.resume') : t('home.start')}
-          </Button>
-        </div>
+          </span>
+          <span className="shrink-0 text-accent"><ChevronRight size={16} /></span>
+        </button>
         {!routines.length ? (
           <Card>
             <EmptyState

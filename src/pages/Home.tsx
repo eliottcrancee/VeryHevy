@@ -211,33 +211,12 @@ export default function HomePage() {
     }
   }
 
-  const searchBlock = (
+  /* Résultats de recherche : rendus en tête de feed, uniquement pendant une
+     recherche. La barre de saisie, elle, vit dans l'en-tête (compacte) pour
+     laisser toute la place au feed. */
+  const searchOpen = searching || results !== null
+  const searchResults = (
     <Card className="space-y-2 p-3">
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') void search() }}
-            aria-label={t('home.searchAria')}
-            placeholder={t('home.searchPlaceholder')}
-            autoComplete="off"
-          />
-          {query.length > 0 && (
-            <button
-              type="button"
-              aria-label={t('common.clear')}
-              onClick={() => { setQuery(''); setResults(null) }}
-              className="absolute top-1/2 right-2 -translate-y-1/2 rounded-full p-1 text-muted hover:text-ink"
-            >
-              <X size={14} />
-            </button>
-          )}
-        </div>
-        <Button aria-label={t('home.searchGoAria')} variant="primary" disabled={searching || query.trim().length < 2} onClick={() => void search()}>
-          <Search size={16} />
-        </Button>
-      </div>
       {searching && <p className="text-xs text-muted">{t('home.searching')}</p>}
       {results !== null && !searching && results.length === 0 && query.trim().length >= 2 && (
         <p className="text-sm text-muted">{t('home.noResults', { query: query.trim() })}</p>
@@ -318,6 +297,40 @@ export default function HomePage() {
         title={t('nav.home')}
         actions={
           <>
+            {/* Recherche de pseudo compacte, collée à la cloche : le feed garde
+                toute la largeur de la page. Les résultats s'affichent dans le
+                feed (searchResults), pas dans l'en-tête. */}
+            <div className="relative">
+              <button
+                type="button"
+                aria-label={t('home.searchGoAria')}
+                title={t('home.searchGoAria')}
+                onClick={() => void search()}
+                className="absolute top-1/2 left-0.5 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-muted transition-colors hover:text-accent"
+              >
+                <Search size={14} />
+              </button>
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') void search() }}
+                aria-label={t('home.searchAria')}
+                placeholder={t('home.searchCompact')}
+                title={t('home.searchPlaceholder')}
+                autoComplete="off"
+                className="h-8 w-32 rounded-full pr-8 pl-8 text-xs sm:w-40 lg:w-48"
+              />
+              {query.length > 0 && (
+                <button
+                  type="button"
+                  aria-label={t('common.clear')}
+                  onClick={() => { setQuery(''); setResults(null) }}
+                  className="absolute top-1/2 right-0.5 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-muted hover:text-ink"
+                >
+                  <X size={13} />
+                </button>
+              )}
+            </div>
             <IconButton label={t('home.notifLabel')} onClick={() => navigate('/notifications')}>
               <span className="relative inline-flex">
                 <Bell size={20} />
@@ -332,7 +345,7 @@ export default function HomePage() {
         }
       />
       <Page className="max-w-2xl space-y-3 pb-10">
-        {searchBlock}
+        {searchOpen && searchResults}
         {pull > 0 || refreshing ? (
           <div className="flex h-8 items-center justify-center transition-all">
             <span className={cn('inline-block h-4 w-4 rounded-full border-2 border-accent border-t-transparent', (refreshing || pull >= 64) && 'animate-spin')} />

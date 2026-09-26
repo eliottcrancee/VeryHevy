@@ -23,10 +23,59 @@ async function myId(): Promise<string> {
 
 /* ------------------------------ photo ------------------------------ */
 
+/** HEIC/HEIF (iPhone) : la plupart des navigateurs ne savent pas les décoder. */
+const HEIC_RE = /\.(hei[cf]|heif)$/i
+
+export function isHeicImage(file: File | Blob): boolean {
+  const type = (file.type || '').toLowerCase()
+  return type.includes('hei') || (file instanceof File && HEIC_RE.test(file.name))
+}
+
+/** Fichier image exploitable : type MIME connu, ou extension HEIC/HEIF. */
+export function isImageFile(file: File): boolean {
+  return file.type.startsWith('image/') || isHeicImage(file)
+}
+
+/**
+ * Image décodable par le canvas : un HEIC est converti en JPEG au besoin.
+ * Certains navigateurs (Safari récent) décodent le HEIC nativement ; on
+ * teste d'abord ce chemin pour éviter de charger le décodeur (~1,3 Mo).
+ */
+export async function decodableImage(file: File): Promise<Blob> {
+  if (!isHeicImage(file)) return file
+  const native = await new Promise<boolean>((resolve) => {
+    const url = URL.createObjectURL(file)
+    const img = new Image()
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      resolve(img.naturalWidth > 0 && img.naturalHeight > 0)
+    }
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      resolve(false)
+    }
+    img.src = url
+  })
+  if (native) return file
+  try {
+    const { default: heic2any } = await import('heic2any')
+    const out = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.92 })
+    const blob = Array.isArray(out) ? out[0] : out
+    if (blob) return blob
+  } catch {
+    /* message explicite ci-dessous */
+  }
+  throw new Error(t('lib.heicFailed'))
+}
+
 /** Redimensionne côté client (max 1600px, JPEG 0.82) pour limiter le poids. */
 export function compressImage(file: File, maxDim = 1600, quality = 0.82): Promise<Blob> {
+  return decodableImage(file).then((source) => compressToJpeg(source, maxDim, quality))
+}
+
+function compressToJpeg(source: Blob, maxDim: number, quality: number): Promise<Blob> {
   return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file)
+    const url = URL.createObjectURL(source)
     const img = new Image()
     img.onload = () => {
       URL.revokeObjectURL(url)
@@ -54,6 +103,7 @@ export function compressImage(file: File, maxDim = 1600, quality = 0.82): Promis
 
 async function uploadPostPhoto(file: File, userId: string): Promise<string> {
   const sb = sbOrThrow()
+  if (!isImageFile(file)) throw new Error(t('lib.imageRequired'))
   if (file.size > 8 * 1024 * 1024) throw new Error(t('lib.photoHeavy'))
   const blob = await compressImage(file)
   const path = `${userId}/${crypto.randomUUID()}.jpg`

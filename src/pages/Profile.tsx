@@ -451,9 +451,27 @@ export default function ProfilePage() {
       })
       notify(t('profile.programCopied', { name: routine.name }), 'success')
     }
+    /** Mention de visibilité affichée au-dessus du pseudo. */
+    const visibilityLabel =
+      p?.visibility === 'public'
+        ? t('profile.publicSubtitle')
+        : p?.visibility === 'private'
+          ? t('profile.privateAccount')
+          : t('profile.followersOnly')
     return (
       <div>
-        <PageHeader title={p ? `@${p.username}` : t('nav.profile')} back subtitle={t('profile.publicSubtitle')} />
+        {/* Profil consulté : aucune barre d'en-tête. Le retour flotte sur la
+            page (il reste épinglé au défilement) et la mention de visibilité
+            passe au-dessus du pseudo, juste avant la description. */}
+        <div className="pointer-events-none sticky top-0 z-20 flex px-4 pt-[calc(env(safe-area-inset-top,0px)+8px)]">
+          <IconButton
+            label={t('ui.back')}
+            onClick={() => navigate(-1)}
+            className="glass pointer-events-auto rounded-full border border-line shadow-sm"
+          >
+            <ChevronLeft size={20} />
+          </IconButton>
+        </div>
         <Page className="max-w-3xl space-y-4 pb-10">
           {loadingProfile || p === undefined ? (
             <p className="text-sm text-muted">{t('common.loading')}</p>
@@ -466,6 +484,7 @@ export default function ProfilePage() {
               <div className="flex items-center gap-4 py-2">
                 <Avatar url={p.avatar_url} name={p.display_name ?? p.username ?? '?'} />
                 <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-bold tracking-wide text-accent uppercase">{visibilityLabel}</p>
                   <p className="truncate text-lg font-extrabold">
                     {p.display_name ?? `@${p.username}`}
                     {/* Cadenas : profil privé ET inaccessible (non suivi). Ni pour

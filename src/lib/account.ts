@@ -49,39 +49,60 @@ export async function deleteAccountEverywhere(): Promise<void> {
   const me = session?.user?.id
   if (!me) throw new Error(t('lib.notConnected'))
 
-  // 1. Messages (envoyés ou reçus) — policy "message delete participant".
-  const { error: mErr } = await sb.from('messages').delete().or(`from_id.eq.${me},to_id.eq.${me}`)
-  if (mErr) throw new Error(t('lib.wipeMessages', { msg: mErr.message }))
-
-  // 2. Notifications reçues.
-  await wipeTable(sb, 'notifications', { user_id: me })
-
-  // 3. Inscriptions à des sorties d'autres hôtes.
-  await wipeTable(sb, 'session_joins', { user_id: me })
-
-  // 4. Follows + demandes (deux sens).
-  await wipeTable(sb, 'follows', { follower: me })
-  await wipeTable(sb, 'follows', { followed: me })
-  await wipeTable(sb, 'follow_requests', { requester: me })
-  await wipeTable(sb, 'follow_requests', { target: me })
-
-  // 5. Posts (cascade likes/commentaires) puis sorties créées
-  //    (cascade inscrits/demandes/invitations).
-  await wipeTable(sb, 'posts', { user_id: me })
-  await wipeTable(sb, 'sessions', { host: me })
-
-  // 6. Blocs posés.
-  await wipeTable(sb, 'blocks', { blocker: me })
-
-  // 7. Données d'entraînement synchronisées.
-  for (const table of ['workouts', 'routines', 'exercises', 'deleted_items'] as const) {
-    await wipeTable(sb, table, { user_id: me })
+  // Une table refusée (policy ou GRANT manquant) ne doit pas bloquer le reste :
+  // on tente TOUT, puis on rapporte précisément ce qui a résisté. La fonction
+  // reste idempotente, donc relançable après avoir appliqué le correctif SQL.
+  const failures: string[] = []
+  const wipe = async (table: string, match: Record<string, string>) => {
+    try {
+      await wipeTable(sb, table, match)
+    } catch (err) {
+      failures.push(err instanceof Error ? err.message : table)
+    }
   }
 
-  // 8. Profil.
-  await wipeTable(sb, 'profiles', { id: me })
+  // 1. Messages (envoyés ou reçus) — policy "message delete participant".
+  const { error: mErr } = await sb.from('messages').delete().or(`from_id.eq.${me},to_id.eq.${me}`)
+  if (mErr) failures.push(t('lib.wipeMessages', { msg: mErr.message }))
 
-  // 9. Fichiers (best effort).
+  // 2. Notifications reçues.
+  await wipe('notifications', { user_id: me })
+
+  // 3. Sorties : mes inscriptions, candidatures et invitations, puis celles
+  //    que j'organise (cascade inscrits/candidatures/invitations).
+  await wipe('session_joins', { user_id: me })
+  await wipe('session_requests', { user_id: me })
+  await wipe('session_invites', { user_id: me })
+  await wipe('sessions', { host: me })
+
+  // 4. Follows + demandes (dans les deux sens).
+  await wipe('follows', { follower: me })
+  await wipe('follows', { followed: me })
+  await wipe('follow_requests', { requester: me })
+  await wipe('follow_requests', { target: me })
+
+  // 5. Mes likes et commentaires sur les posts des autres.
+  await wipe('post_likes', { user_id: me })
+  await wipe('post_comments', { user_id: me })
+
+  // 6. Mes posts (cascade likes/commentaires attachés au post).
+  await wipe('posts', { user_id: me })
+
+  // 7. Blocs posés et signalements déposés.
+  await wipe('blocks', { blocker: me })
+  await wipe('reports', { reporter: me })
+
+  // 8. Données d'entraînement synchronisées.
+  for (const table of ['workouts', 'routines', 'exercises', 'deleted_items'] as const) {
+    await wipe(table, { user_id: me })
+  }
+
+  // 9. Profil.
+  await wipe('profiles', { id: me })
+
+  // 10. Fichiers (best effort : les orphelins ne bloquent pas la suppression).
   await wipeStoragePrefix(sb, 'avatars', me)
   await wipeStoragePrefix(sb, 'post-photos', me)
+
+  if (failures.length) throw new Error(t('lib.wipePartial', { list: failures.join(' · ') }))
 }

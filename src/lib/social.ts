@@ -58,21 +58,20 @@ export async function claimUsername(wanted: string): Promise<SocialProfile> {
     (meta.avatar_url as string | undefined) ??
     (meta.picture as string | undefined) ??
     null
-  const { data, error } = await sb
-    .from('profiles')
-    .upsert(
-      { id, username, display_name: display, avatar_url: avatar, updated_at: new Date().toISOString() },
-      { onConflict: 'id' },
-    )
-    .select(PROFILE_COLUMNS)
-    .single()
-  if (error) {
-    if (error.message.includes('duplicate') || error.message.includes('unique')) {
-      throw new Error(t('lib.usernameTaken'))
-    }
-    throw new Error(t('lib.usernameError', { msg: error.message }))
+  const base = { username, display_name: display, avatar_url: avatar, updated_at: new Date().toISOString() }
+  const fail = (message?: string): never => {
+    if (message && /duplicate|unique/i.test(message)) throw new Error(t('lib.usernameTaken'))
+    throw new Error(t('lib.usernameError', { msg: message ?? '?' }))
   }
-  return data as SocialProfile
+  // Insertion, puis repli en update si le profil existe déjà : `upsert`
+  // exigerait UPDATE sur « id », colonne volontairement non modifiable
+  // (GRANT update limité côté base) — l'upsert échouait en permission denied.
+  const inserted = await sb.from('profiles').insert({ id, ...base }).select(PROFILE_COLUMNS).single()
+  if (!inserted.error) return inserted.data as SocialProfile
+  if (!/profiles_pkey/i.test(inserted.error.message)) fail(inserted.error.message)
+  const updated = await sb.from('profiles').update(base).eq('id', id).select(PROFILE_COLUMNS).single()
+  if (updated.error) fail(updated.error.message)
+  return updated.data as SocialProfile
 }
 
 /** Profil par pseudo exact (page /profil/:username). */
@@ -315,9 +314,9 @@ export async function listMyBlocks(): Promise<SocialProfile[]> {  const sb = sbO
 export async function uploadAvatar(file: File): Promise<string> {
   const sb = sbOrThrow()
   const me = await myId()
-  if (!file.type.startsWith('image/')) throw new Error(t('lib.imageRequired'))
+  const { compressImage, isImageFile } = await import('./posts')
+  if (!isImageFile(file)) throw new Error(t('lib.imageRequired'))
   if (file.size > 8 * 1024 * 1024) throw new Error(t('lib.photoHeavy'))
-  const { compressImage } = await import('./posts')
   const blob = await compressImage(file, 512, 0.85)
   const path = `${me}/avatar.jpg`
   const { error } = await sb.storage.from('avatars').upload(path, blob, {
