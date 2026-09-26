@@ -405,6 +405,12 @@ export interface PostComment {
   author?: SocialProfile | null
 }
 
+/** Photo publiée dans un post (carrousel d'un profil consulté). */
+export interface PostPhoto {
+  id: string
+  url: string
+}
+
 export interface SportSession {
   id: string
   host: string

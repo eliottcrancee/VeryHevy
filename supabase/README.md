@@ -37,9 +37,12 @@ l'app reste 100 % locale et aucune page de login n'est exigée.
 13. Puis exécutez `supabase/schema_followers_access.sql` (accès abonnés :
     historique et stats complets d'un profil suivi + lecture des photos
     de posts par les abonnés).
+14. Enfin exécutez `supabase/schema_shared_profile.sql` (profil consultable
+    de bout en bout : les profils publics comme les abonnements ouvrent
+    l'historique et les programmes, copiables depuis le profil).
 
 Pour un projet déjà installé jusqu'à l'étape 10, exécutez uniquement les
-étapes 11 à 13. Vérifiez ensuite dans Supabase que le bucket `post-photos`
+étapes 11 à 14. Vérifiez ensuite dans Supabase que le bucket `post-photos`
 est privé.
 
 ## 2. Activer Google

@@ -53,6 +53,16 @@ export default function RoutinesPage() {
     navigate('/seance')
   }
 
+  /** Reprise / démarrage d'une séance vide depuis le bandeau du haut. */
+  const startEmpty = () => {
+    if (active) {
+      navigate('/seance')
+      return
+    }
+    startWorkout({})
+    navigate('/seance')
+  }
+
   return (
     <div>
       <PageHeader
@@ -72,6 +82,16 @@ export default function RoutinesPage() {
       />
 
       <Page className="space-y-6">
+        {/* Bandeau fin : lancer / reprendre une séance (repris de l'accueil). */}
+        <div className="flex items-center gap-2.5 rounded-xl border border-accent-line bg-accent-soft px-3 py-1.5">
+          <span className="shrink-0 text-accent"><Play size={15} /></span>
+          <p className="min-w-0 flex-1 truncate text-[13px] font-bold">
+            {active ? t('home.activeTitle') : t('home.readyTitle')}
+          </p>
+          <Button size="sm" variant="primary" onClick={startEmpty}>
+            {active ? t('home.resume') : t('home.start')}
+          </Button>
+        </div>
         {!routines.length ? (
           <Card>
             <EmptyState

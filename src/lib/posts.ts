@@ -2,7 +2,7 @@
  * Posts & feed : photo optionnelle (Storage post-photos), likes,
  * commentaires, snapshot workout pour réutiliser une séance.
  */
-import type { Post, PostComment, PostVisibility, SocialProfile, Workout, WorkoutSnapshot } from '@/types'
+import type { Post, PostComment, PostPhoto, PostVisibility, Routine, SocialProfile, Workout, WorkoutSnapshot } from '@/types'
 import { getSupabase } from './supabase'
 import { t } from './i18n'
 import { fetchSocialProfiles } from './social'
@@ -359,6 +359,44 @@ export async function listUserWorkouts(userId: string, limit = 500): Promise<Wor
   const { data, error } = await sb.rpc('shared_workouts', { target: userId, p_limit: limit })
   if (error) throw new Error(t('lib.workoutError', { msg: error.message }))
   return ((data as { data: Workout }[] | null) ?? []).map((row) => row.data)
+}
+
+/**
+ * Photos d'un profil consulté (carrousel) : les posts visibles selon la RLS,
+ * avec des URLs signées 1 h comme pour le feed.
+ */
+export async function listUserPhotos(userId: string, limit = 40): Promise<PostPhoto[]> {
+  const sb = sbOrThrow()
+  const { data, error } = await sb
+    .from('posts')
+    .select('id,photo_url')
+    .eq('user_id', userId)
+    .not('photo_url', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (error) throw new Error(t('lib.postsError', { msg: error.message }))
+  const rows = (data as { id: string; photo_url: string | null }[] | null) ?? []
+  const storage = sb.storage.from('post-photos')
+  const out: PostPhoto[] = []
+  for (const row of rows) {
+    const path = photoPath(row.photo_url)
+    if (!path) continue
+    const { data: signed, error: signErr } = await storage.createSignedUrl(path, 3600)
+    if (!signErr && signed) out.push({ id: row.id, url: signed.signedUrl })
+  }
+  return out
+}
+
+/**
+ * Programmes d'un profil consulté (RPC `shared_routines`) : lisibles et
+ * copiables quand le profil est public ou qu'on le suit.
+ * Requiert `supabase/schema_shared_profile.sql` (étape 14).
+ */
+export async function listUserRoutines(userId: string): Promise<Routine[]> {
+  const sb = sbOrThrow()
+  const { data, error } = await sb.rpc('shared_routines', { target: userId })
+  if (error) throw new Error(t('lib.routinesError', { msg: error.message }))
+  return ((data as { data: Routine }[] | null) ?? []).map((row) => row.data)
 }
 
 export function displayAuthor(a?: SocialProfile | null, fallback = t('lib.athlete')): string {

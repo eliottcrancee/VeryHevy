@@ -25,12 +25,13 @@ import {
 import { useStore, selectActiveWorkout } from '@/store/store'
 import { Page, PageHeader } from '@/components/PageHeader'
 import { ChartTooltipContent, chartLineCursor, chartTooltipWrapper } from '@/components/charts'
-import { Button, Card, Chip, EmptyState, IconButton, SectionTitle, Stat, Tabs } from '@/components/ui'
+import { Button, Card, EmptyState, IconButton, SectionTitle, Stat, Tabs } from '@/components/ui'
 import { RECORD_LABEL_KEYS } from '@/components/ExerciseSheet'
 import { ExerciseFormModal } from '@/components/ExerciseFormModal'
 import { CATEGORY_META, TRACKING_TYPES } from '@/types'
 import { arcWorkouts, getExerciseProgress, getExerciseSessions, getPersonalRecords } from '@/lib/calc'
-import { cn, formatDate, formatDistance, formatDuration, formatVolume, formatWeight, kgToDisplay, rangeSince, tintBg, tintText, RANGE_LABEL_KEYS, type RangeFilter } from '@/lib/utils'
+import { cn, formatDate, formatDistance, formatDuration, formatVolume, formatWeight, kgToDisplay, rangeSince, tintBg, tintText, DEFAULT_RANGE, type RangeFilter } from '@/lib/utils'
+import { RangeChips } from '@/components/RangeChips'
 import { t, tx, useLang } from '@/lib/i18n'
 
 type Tab = 'progression' | 'historique' | 'infos'
@@ -49,7 +50,7 @@ export default function ExerciseDetailPage() {
   const notify = useStore((s) => s.notify)
 
   const [tab, setTab] = useState<Tab>('progression')
-  const [range, setRange] = useState<RangeFilter>('90j')
+  const [range, setRange] = useState<RangeFilter>(DEFAULT_RANGE)
   const [editOpen, setEditOpen] = useState(false)
   const [imageIndex, setImageIndex] = useState(0)
 
@@ -346,15 +347,9 @@ export default function ExerciseDetailPage() {
 
         {tab === 'progression' && (
           <Card className="space-y-3 p-4">
-            {/* Filtre de période (30j / 90j / 6m / tout) : rattaché à la
-                progression, pas perché en haut de la fiche. */}
-            <div className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1">
-              {RANGE_LABEL_KEYS.map(([value, key]) => (
-                <Chip key={value} size="sm" active={range === value} onClick={() => setRange(value)}>
-                  {t(key)}
-                </Chip>
-              ))}
-            </div>
+            {/* Filtre de période (30 j · 3 mois · 6 mois · 1 an · tout) :
+                rattaché à la progression, pas perché en haut de la fiche. */}
+            <RangeChips size="sm" value={range} onChange={setRange} />
             {progress.length < 2 ? (
               <EmptyState
                 icon={<Play size={22} />}

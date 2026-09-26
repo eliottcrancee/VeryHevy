@@ -28,15 +28,24 @@ export const round = (v: number, decimals = 1) => {
 
 /* ------------------------- Filtres de période ------------------------- */
 
-/** Filtre de période partagé par les stats, les stats d'exo et les profils. */
-export type RangeFilter = '30j' | '90j' | '6m' | 'tout'
-export const RANGE_DAYS: Record<RangeFilter, number | null> = { '30j': 30, '90j': 90, '6m': 182, tout: null }
+/**
+ * Filtre de période partagé par les stats, les stats d'exo, l'historique et
+ * les profils. Partout dans l'app : mêmes 5 boutons, dans cet ordre —
+ * 30 j · 3 mois · 6 mois · 1 an · tout (voir `RangeChips`).
+ */
+export type RangeFilter = '30j' | '3m' | '6m' | '1a' | 'tout'
+export const RANGE_DAYS: Record<RangeFilter, number | null> = { '30j': 30, '3m': 90, '6m': 182, '1a': 365, tout: null }
 export const RANGE_LABEL_KEYS: [RangeFilter, string][] = [
   ['30j', 'stats.range30'],
-  ['90j', 'stats.range90'],
+  ['3m', 'stats.range3m'],
   ['6m', 'stats.range6m'],
+  ['1a', 'stats.range1y'],
   ['tout', 'common.all'],
 ]
+/** Filtre par défaut de toute l'app : 3 mois. */
+export const DEFAULT_RANGE: RangeFilter = '3m'
+/** Nombre de semaines tracées dans les graphes pour un filtre donné. */
+export const RANGE_WEEKS: Record<RangeFilter, number> = { '30j': 6, '3m': 13, '6m': 16, '1a': 16, tout: 16 }
 /** Timestamp de début correspondant à un filtre (null = tout). */
 export function rangeSince(range: RangeFilter, now = Date.now()): number | null {
   const days = RANGE_DAYS[range]

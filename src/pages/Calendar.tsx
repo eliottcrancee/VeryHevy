@@ -7,14 +7,26 @@ import { Button, Card, EmptyState, IconButton, SectionTitle } from '@/components
 import { workoutDurationSeconds, workoutSets, workoutVolume } from '@/lib/calc'
 import { addDays, cn, formatDate, formatDuration, formatVolume, startOfWeek, toDateKey } from '@/lib/utils'
 import { localeOf, t, useLang } from '@/lib/i18n'
+import type { Workout } from '@/types'
 
-export default function CalendarPage({ bare }: { bare?: boolean }) {
+/**
+ * Calendrier d'entraînement du carnet local, ou d'un profil consulté
+ * (`workouts` injectés) : en mode `shared`, les séances ne sont pas
+ * cliquables et on ne propose pas de lancer une séance chez l'autre.
+ */
+export default function CalendarPage({ bare, workouts: injected, shared: sharedMode = false }: {
+  bare?: boolean
+  workouts?: Workout[]
+  shared?: boolean
+}) {
   const navigate = useNavigate()
-  const workouts = useStore((s) => s.workouts)
+  const myWorkouts = useStore((s) => s.workouts)
   const settings = useStore((s) => s.settings)
   const [cursor, setCursor] = useState(() => new Date())
   const [selected, setSelected] = useState<string | null>(null)
   const loc = localeOf(useLang())
+
+  const workouts = injected ?? myWorkouts
 
   const monthLabel = new Intl.DateTimeFormat(loc, { month: 'long', year: 'numeric' }).format(cursor)
 
@@ -122,35 +134,47 @@ export default function CalendarPage({ bare }: { bare?: boolean }) {
                   title={t('workout.restDay')}
                   message={t('workout.noWorkout')}
                   action={
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      onClick={() => {
-                        useStore.getState().startWorkout()
-                        navigate('/seance')
-                      }}
-                    >
-                      <Plus size={14} /> {t('workout.startWorkout')}
-                    </Button>
+                    sharedMode ? undefined : (
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => {
+                          useStore.getState().startWorkout()
+                          navigate('/seance')
+                        }}
+                      >
+                        <Plus size={14} /> {t('workout.startWorkout')}
+                      </Button>
+                    )
                   }
                 />
               </Card>
             ) : (
               <div className="space-y-2">
-                {selectedWorkouts.map((w) => (
-                  <Link
-                    key={w.id}
-                    to={`/historique/${w.id}`}
-                    className="block rounded-2xl border border-line bg-surface p-3.5 transition-colors hover:bg-surface-2"
-                  >
-                    <p className="font-bold">{w.name}</p>
-                    <p className="mt-1 text-[11px] text-muted">
-                      {t('history.exCount', { n: w.exercises.length })} · {t('history.setCount', { n: workoutSets(w) })} ·{' '}
-                      {formatVolume(workoutVolume(w), settings.unit)} ·{' '}
-                      {formatDuration(workoutDurationSeconds(w), 'compact')}
-                    </p>
-                  </Link>
-                ))}
+                {selectedWorkouts.map((w) => {
+                  const rowClass = 'block rounded-2xl border border-line bg-surface p-3.5'
+                  const content = (
+                    <>
+                      <p className="font-bold">{w.name}</p>
+                      <p className="mt-1 text-[11px] text-muted">
+                        {t('history.exCount', { n: w.exercises.length })} · {t('history.setCount', { n: workoutSets(w) })} ·{' '}
+                        {formatVolume(workoutVolume(w), settings.unit)} ·{' '}
+                        {formatDuration(workoutDurationSeconds(w), 'compact')}
+                      </p>
+                    </>
+                  )
+                  return sharedMode ? (
+                    <div key={w.id} className={rowClass}>{content}</div>
+                  ) : (
+                    <Link
+                      key={w.id}
+                      to={`/historique/${w.id}`}
+                      className={cn(rowClass, 'transition-colors hover:bg-surface-2')}
+                    >
+                      {content}
+                    </Link>
+                  )
+                })}
               </div>
             )}
           </div>

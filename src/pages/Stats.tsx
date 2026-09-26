@@ -12,7 +12,8 @@ import {
 import { Activity, Dumbbell, Trophy } from 'lucide-react'
 import { useStore } from '@/store/store'
 import { PageHeader } from '@/components/PageHeader'
-import { Card, Chip, EmptyState, ProgressBar, SectionTitle } from '@/components/ui'
+import { Card, EmptyState, ProgressBar, SectionTitle } from '@/components/ui'
+import { RangeChips } from '@/components/RangeChips'
 import {
   arcWorkouts,
   completedWorkouts,
@@ -28,15 +29,26 @@ import { CATEGORY_META } from '@/types'
 import CalendarPage from '@/pages/Calendar'
 import { t, tx, useLang } from '@/lib/i18n'
 import { ChartTooltipContent, chartCursor, chartTooltipWrapper } from '@/components/charts'
-import { formatDuration, formatVolume, formatWeight, kgToDisplay, cn, RANGE_LABEL_KEYS, rangeSince, type RangeFilter } from '@/lib/utils'
+import { formatDuration, formatVolume, formatWeight, kgToDisplay, cn, DEFAULT_RANGE, RANGE_WEEKS, rangeSince, type RangeFilter } from '@/lib/utils'
+import type { Exercise, Workout } from '@/types'
 
-export default function StatsPage({ bare = false }: { bare?: boolean }) {
+/**
+ * Stats du carnet local, ou d'un profil consulté (`workouts`/`exercises`
+ * injectés : ses séances + sa bibliothèque reconstituée).
+ */
+export default function StatsPage({ bare = false, workouts: shared, exercises: sharedExercises }: {
+  bare?: boolean
+  workouts?: Workout[]
+  exercises?: Exercise[]
+}) {
   useLang()
-  const workouts = useStore((s) => s.workouts)
-  const exercises = useStore((s) => s.exercises)
+  const myWorkouts = useStore((s) => s.workouts)
+  const myExercises = useStore((s) => s.exercises)
   const settings = useStore((s) => s.settings)
-  const [range, setRange] = useState<RangeFilter>('90j')
+  const [range, setRange] = useState<RangeFilter>(DEFAULT_RANGE)
 
+  const workouts = shared ?? myWorkouts
+  const exercises = sharedExercises ?? myExercises
   const all = completedWorkouts(workouts)
 
   const filtered = useMemo(() => {
@@ -51,7 +63,7 @@ export default function StatsPage({ bare = false }: { bare?: boolean }) {
   const totalSets = filtered.reduce((n, w) => n + workoutSets(w), 0)
 
   const series = useMemo(
-    () => weeklySeries(all, range === '30j' ? 6 : range === '90j' ? 12 : 16, settings.firstDayOfWeek),
+    () => weeklySeries(all, RANGE_WEEKS[range], settings.firstDayOfWeek),
     [all, range, settings.firstDayOfWeek],
   )
 
@@ -98,8 +110,9 @@ export default function StatsPage({ bare = false }: { bare?: boolean }) {
 
   const records = useMemo(() => {
     const used = new Set(filtered.flatMap((w) => w.exercises.map((we) => we.exerciseId)))
-    // Records limités à l'arc en cours (réinitialisables dans les réglages).
-    const arc = arcWorkouts(all, settings.recordsSince)
+    // Records limités à l'arc en cours (réinitialisables dans les réglages) —
+    // pour un profil consulté, on garde tout son historique.
+    const arc = arcWorkouts(all, shared ? null : settings.recordsSince)
     return [...used]
       .map((id) => {
         const ex = exercises.find((e) => e.id === id)
@@ -111,7 +124,7 @@ export default function StatsPage({ bare = false }: { bare?: boolean }) {
       .filter((x): x is NonNullable<typeof x> => x !== null)
       .sort((a, b) => +new Date(b.date) - +new Date(a.date))
       .slice(0, 10)
-  }, [filtered, all, exercises, settings.recordsSince])
+  }, [filtered, all, exercises, settings.recordsSince, shared])
 
   // Calendrier d'entraînement (le détail par jour vit dans le composant Calendar).
 
@@ -140,13 +153,7 @@ export default function StatsPage({ bare = false }: { bare?: boolean }) {
     <div>
       {!bare && <PageHeader title={t('stats.title')} subtitle={t('stats.subtitle', { n: filtered.length })} />}
       <div className={pageClass}>
-        <div className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1">
-            {RANGE_LABEL_KEYS.map(([value, key]) => (
-              <Chip key={value} active={range === value} onClick={() => setRange(value)}>
-                {t(key)}
-              </Chip>
-            ))}
-        </div>
+        <RangeChips value={range} onChange={setRange} />
 
         <div className="grid grid-cols-4 gap-1.5 text-center">
           {[
@@ -216,7 +223,7 @@ export default function StatsPage({ bare = false }: { bare?: boolean }) {
         {/* Calendrier */}
         <Card className="p-4">
           <SectionTitle>{t('stats.calendar')}</SectionTitle>
-          <CalendarPage bare />
+          <CalendarPage bare workouts={workouts} shared={Boolean(shared)} />
         </Card>
 
         {/* Types d'effort */}

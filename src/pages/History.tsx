@@ -4,7 +4,8 @@ import { ChevronRight, Dumbbell, Megaphone, Search, Share2, Star } from 'lucide-
 import { useStore } from '@/store/store'
 import { useAuth } from '@/lib/auth'
 import { PageHeader } from '@/components/PageHeader'
-import { Button, Card, Chip, EmptyState, IconButton, Input } from '@/components/ui'
+import { Button, Card, EmptyState, IconButton, Input } from '@/components/ui'
+import { RangeChips } from '@/components/RangeChips'
 import {
   completedWorkouts,
   muscleBreakdown,
@@ -12,37 +13,43 @@ import {
   workoutSets,
   workoutVolume,
 } from '@/lib/calc'
-import { formatDate, formatDuration, formatVolume, cn, normalize } from '@/lib/utils'
+import { formatDate, formatDuration, formatVolume, cn, normalize, DEFAULT_RANGE, rangeSince, type RangeFilter } from '@/lib/utils'
 import { shareWorkout } from '@/lib/share'
 import { SharePostModal } from '@/components/SharePostModal'
 import { localeOf, t, tx, useLang } from '@/lib/i18n'
+import type { Exercise, Workout } from '@/types'
 
-type Period = 'tout' | '30j' | '90j' | 'annee'
-
-export default function HistoryPage({ bare = false }: { bare?: boolean }) {
+/**
+ * Historique du carnet local, ou d'un profil consulté (`workouts` injectés) :
+ * en mode `shared`, les séances ne sont pas cliquables (le rapport complet
+ * n'existe que sur l'appareil de leur propriétaire).
+ */
+export default function HistoryPage({ bare = false, workouts: shared, exercises: sharedExercises, shared: sharedMode = false }: {
+  bare?: boolean
+  workouts?: Workout[]
+  exercises?: Exercise[]
+  shared?: boolean
+}) {
   const navigate = useNavigate()
-  const workouts = useStore((s) => s.workouts)
-  const exercises = useStore((s) => s.exercises)
+  const myWorkouts = useStore((s) => s.workouts)
+  const myExercises = useStore((s) => s.exercises)
   const settings = useStore((s) => s.settings)
   const notify = useStore((s) => s.notify)
   const { cloudEnabled } = useAuth()
   const [query, setQuery] = useState('')
-  const [period, setPeriod] = useState<Period>('tout')
+  const [period, setPeriod] = useState<RangeFilter>(DEFAULT_RANGE)
   // Séance dont on crée un post (bouton mégaphone de la carte).
   const [postWorkoutId, setPostWorkoutId] = useState<string | null>(null)
   const loc = localeOf(useLang())
 
+  const workouts = shared ?? myWorkouts
+  const exercises = sharedExercises ?? myExercises
+
   const filtered = useMemo(() => {
-    const now = Date.now()
-    const limits: Record<Period, number> = {
-      tout: 0,
-      '30j': 30 * 86400000,
-      '90j': 90 * 86400000,
-      annee: 365 * 86400000,
-    }
+    const since = rangeSince(period)
     const q = normalize(query)
     return completedWorkouts(workouts)
-      .filter((w) => (limits[period] ? now - +new Date(w.startedAt) <= limits[period] : true))
+      .filter((w) => (since === null ? true : +new Date(w.startedAt) >= since))
       .filter((w) => {
         if (!q) return true
         const haystack = [
@@ -89,20 +96,7 @@ export default function HistoryPage({ bare = false }: { bare?: boolean }) {
               className="pl-9"
             />
           </div>
-          <div className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1">
-            {(
-              [
-                ['tout', t('common.all')],
-                ['30j', t('history.last30')],
-                ['90j', t('history.last90')],
-                ['annee', t('history.lastYear')],
-              ] as [Period, string][]
-            ).map(([value, label]) => (
-              <Chip key={value} active={period === value} onClick={() => setPeriod(value)}>
-                {label}
-              </Chip>
-            ))}
-          </div>
+          <RangeChips value={period} onChange={setPeriod} />
         </div>
 
         {!filtered.length ? (
@@ -130,12 +124,9 @@ export default function HistoryPage({ bare = false }: { bare?: boolean }) {
               <div className="space-y-2">
                 {list.map((w) => {
                   const breakdown = muscleBreakdown(w, exercises)
-                  return (
-                    <Link
-                      key={w.id}
-                      to={`/historique/${w.id}`}
-                      className="block rounded-2xl border border-line bg-surface p-3.5 transition-colors hover:bg-surface-2"
-                    >
+                  const rowClass = 'block rounded-2xl border border-line bg-surface p-3.5'
+                  const inner = (
+                    <>
                       <div className="flex items-start gap-3">
                         <span className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-xl bg-surface-2 leading-none">
                           <span className="text-[15px] font-extrabold">
@@ -179,7 +170,7 @@ export default function HistoryPage({ bare = false }: { bare?: boolean }) {
                             </span>
                           ) : null}
                           <span className="mt-auto flex items-center">
-                            {cloudEnabled && (
+                            {cloudEnabled && !sharedMode && (
                               <IconButton
                                 label={t('history.postLabel', { name: w.name })}
                                 className="h-8 w-8"
@@ -192,24 +183,38 @@ export default function HistoryPage({ bare = false }: { bare?: boolean }) {
                                 <Megaphone size={15} />
                               </IconButton>
                             )}
-                            <IconButton
-                              label={t('history.shareLabel', { name: w.name })}
-                              className="h-8 w-8"
-                              onClick={(e) => {
-                                e.preventDefault()
-                                e.stopPropagation()
-                                const previousWorkouts = completedWorkouts(workouts).filter(
-                                  (o) => o.id !== w.id && +new Date(o.startedAt) < +new Date(w.startedAt),
-                                )
-                                void shareWorkout({ workout: w, exercises, settings, previousWorkouts, notify })
-                              }}
-                            >
-                              <Share2 size={15} />
-                            </IconButton>
-                            <ChevronRight size={16} className="text-muted" />
+                            {!sharedMode && (
+                              <IconButton
+                                label={t('history.shareLabel', { name: w.name })}
+                                className="h-8 w-8"
+                                onClick={(e) => {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  const previousWorkouts = completedWorkouts(workouts).filter(
+                                    (o) => o.id !== w.id && +new Date(o.startedAt) < +new Date(w.startedAt),
+                                  )
+                                  void shareWorkout({ workout: w, exercises, settings, previousWorkouts, notify })
+                                }}
+                              >
+                                <Share2 size={15} />
+                              </IconButton>
+                            )}
+                            {!sharedMode && <ChevronRight size={16} className="text-muted" />}
                           </span>
                         </div>
                       </div>
+                    </>
+                  )
+                  // Profil consulté : la séance n'a pas de rapport ouvrable ici.
+                  return sharedMode ? (
+                    <div key={w.id} className={rowClass}>{inner}</div>
+                  ) : (
+                    <Link
+                      key={w.id}
+                      to={`/historique/${w.id}`}
+                      className={cn(rowClass, 'transition-colors hover:bg-surface-2')}
+                    >
+                      {inner}
                     </Link>
                   )
                 })}

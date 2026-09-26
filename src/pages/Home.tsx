@@ -332,13 +332,6 @@ export default function HomePage() {
         }
       />
       <Page className="max-w-2xl space-y-3 pb-10">
-        <Card className="flex items-center gap-3 border-accent-line bg-accent-soft p-4">
-          <span className="rounded-xl bg-accent/15 p-2 text-accent"><Plus size={22} /></span>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-extrabold">{activeId ? t('home.activeTitle') : t('home.readyTitle')}</p>
-          </div>
-          <Button size="sm" variant="primary" onClick={startEmpty}>{activeId ? t('home.resume') : t('home.start')}</Button>
-        </Card>
         {searchBlock}
         {pull > 0 || refreshing ? (
           <div className="flex h-8 items-center justify-center transition-all">

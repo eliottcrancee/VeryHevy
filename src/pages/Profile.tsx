@@ -1,12 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import {
   Ban,
   BarChart3,
+  ChevronLeft,
+  ChevronRight,
+  Copy,
   Flag,
   History,
   LayoutGrid,
+  ListChecks,
   MoreVertical,
   Pencil,
   Settings as SettingsIcon,
@@ -33,39 +36,35 @@ import {
   type FollowState,
 } from '@/lib/social'
 import { cancelFollowRequest } from '@/lib/notifications'
-import { listMyPosts, listUserPosts, listUserWorkouts } from '@/lib/posts'
+import { listMyPosts, listUserPhotos, listUserPosts, listUserRoutines, listUserWorkouts } from '@/lib/posts'
 import { loadMyPosts, loadMyProfile, peekMyPosts, peekMyProfile } from '@/lib/pagePreload'
 import { PostCard } from '@/components/PostCard'
 import { ReportDialog } from '@/components/ReportDialog'
 import { ProfileAvatar } from '@/components/ProfileAvatar'
-import type { Post, PostVisibility, SocialProfile } from '@/types'
+import type { Exercise, Post, PostPhoto, PostVisibility, Routine, SocialProfile, Workout } from '@/types'
 import { normalizeUsername } from '@/types'
-import { formatDuration, formatDate, formatVolume, RANGE_LABEL_KEYS, rangeSince, type RangeFilter } from '@/lib/utils'
+import { uid } from '@/lib/utils'
 import { t, useLang } from '@/lib/i18n'
 import { Page, PageHeader } from '@/components/PageHeader'
-import { ChartTooltipContent, chartCursor, chartTooltipWrapper } from '@/components/charts'
 import {
   Button,
   Card,
-  Chip,
   ConfirmDialog,
   EmptyState,
   Field,
   Input,
   Menu,
   Modal,
-  SectionTitle,
   Select,
   Tabs,
   Textarea,
 } from '@/components/ui'
 import { IconButton } from '@/components/ui'
-import { completedWorkouts, weeklySeries, workoutDurationSeconds, workoutSets, workoutVolume } from '@/lib/calc'
-import type { Workout } from '@/types'
+import { completedWorkouts } from '@/lib/calc'
 import HistoryPage from '@/pages/History'
 import StatsPage from '@/pages/Stats'
 
-type Tab = 'posts' | 'historique' | 'stats'
+type Tab = 'posts' | 'historique' | 'stats' | 'programmes'
 
 function Avatar({ url, name, size = 64 }: { url?: string | null; name: string; size?: number }) {
   if (url) {
@@ -96,6 +95,7 @@ export default function ProfilePage() {
   const userId = user?.id
   const navigate = useNavigate()
   const workouts = useStore((s) => s.workouts)
+  const myExercises = useStore((s) => s.exercises)
   const settings = useStore((s) => s.settings)
   const updateSettings = useStore((s) => s.updateSettings)
   const notify = useStore((s) => s.notify)
@@ -119,17 +119,33 @@ export default function ProfilePage() {
   const [loadingUserPosts, setLoadingUserPosts] = useState(false)
   const [userPostsMore, setUserPostsMore] = useState(false)
   const [userPostsError, setUserPostsError] = useState<string | null>(null)
-  /** Séances d'un profil suivi (accès abonné via RPC shared_workouts). */
+  /** Séances d'un profil consulté (accès abonné/public via RPC shared_workouts). */
   const [sharedWorkouts, setSharedWorkouts] = useState<Workout[] | null>(null)
   const [sharedLoading, setSharedLoading] = useState(false)
   const [sharedError, setSharedError] = useState<string | null>(null)
+  /** Programmes d'un profil consulté (RPC shared_routines) : copiables. */
+  const [sharedRoutines, setSharedRoutines] = useState<Routine[] | null>(null)
+  const [routinesLoading, setRoutinesLoading] = useState(false)
+  const [routinesError, setRoutinesError] = useState<string | null>(null)
+  /** Photos des posts du profil consulté (carrousel). */
+  const [userPhotos, setUserPhotos] = useState<PostPhoto[]>([])
+  const [loadingPhotos, setLoadingPhotos] = useState(false)
   /** Profil dont l'historique/les stats ont déjà été demandés (garde anti-boucle). */
   const sharedFetchedFor = useRef<string | null>(null)
+  const routinesFetchedFor = useRef<string | null>(null)
+  const photosFetchedFor = useRef<string | null>(null)
 
   const isPublicView = Boolean(routeUsername)
   const trainingTab = tab === 'historique' || tab === 'stats'
-  /** Onglets Historique/Stats : réservés à l'abonné (ou à soi-même). */
-  const canSeeTraining = Boolean(publicProfile) && (publicProfile?.id === userId || following === 'following')
+  /**
+   * Profil consultable en grand : le mien, un profil que je suis, ou un
+   * profil public (tout est visible, comme sur mon propre profil).
+   */
+  const canSeeTraining = Boolean(publicProfile) && (
+    publicProfile?.id === userId ||
+    following === 'following' ||
+    publicProfile?.visibility === 'public'
+  )
 
   const refreshUserPosts = useCallback(async (uid: string) => {
     if (!cloudEnabled) return
@@ -234,13 +250,21 @@ export default function ProfilePage() {
     if (tab === 'posts' && !isPublicView) void refreshPosts()
   }, [tab, isPublicView, refreshPosts])
 
-  /* Historique/Stats d'un profil public : lisibles par l'abonné
-     (RPC shared_workouts) — reset au changement de profil. */
+  /* Historique/Stats/Programmes/Photos d'un profil consulté : reset au
+     changement de profil (les RPC ne répondent que pour le bon compte). */
   useEffect(() => {
+    setTab('posts')
     setSharedWorkouts(null)
     setSharedError(null)
     setSharedLoading(false)
+    setSharedRoutines(null)
+    setRoutinesError(null)
+    setRoutinesLoading(false)
+    setUserPhotos([])
+    setLoadingPhotos(false)
     sharedFetchedFor.current = null
+    routinesFetchedFor.current = null
+    photosFetchedFor.current = null
   }, [routeUsername])
 
   useEffect(() => {
@@ -260,6 +284,72 @@ export default function ProfilePage() {
     return () => { alive = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPublicView, publicProfile, trainingTab, canSeeTraining])
+
+  /* Programmes d'un profil consulté (RPC shared_routines) : chargés à
+     l'ouverture de l'onglet Programmes, puis mis en cache par profil. */
+  useEffect(() => {
+    if (!isPublicView || !publicProfile || tab !== 'programmes' || !canSeeTraining) return
+    if (routinesFetchedFor.current === publicProfile.id) return
+    routinesFetchedFor.current = publicProfile.id
+    let alive = true
+    setRoutinesLoading(true)
+    setRoutinesError(null)
+    listUserRoutines(publicProfile.id)
+      .then((list) => { if (alive) setSharedRoutines(list) })
+      .catch((err) => { if (alive) setRoutinesError(err instanceof Error ? err.message : t('profile.loadFailed')) })
+      .finally(() => { if (alive) setRoutinesLoading(false) })
+    return () => { alive = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPublicView, publicProfile, tab, canSeeTraining])
+
+  /* Photos des posts : carrousel en tête de profil consulté. */
+  useEffect(() => {
+    if (!isPublicView || !publicProfile || !canSeeTraining) return
+    if (photosFetchedFor.current === publicProfile.id) return
+    photosFetchedFor.current = publicProfile.id
+    let alive = true
+    setLoadingPhotos(true)
+    listUserPhotos(publicProfile.id)
+      .then((list) => { if (alive) setUserPhotos(list) })
+      .catch(() => { if (alive) setUserPhotos([]) })
+      .finally(() => { if (alive) setLoadingPhotos(false) })
+    return () => { alive = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPublicView, publicProfile, canSeeTraining])
+
+  /**
+   * Bibliothèque reconstituée d'un profil consulté : ses séances ne portent
+   * que des ids + noms d'exercices. On complète avec mes exercices connus
+   * (les ids du catalogue sont stables d'un compte à l'autre) et des entrées
+   * minimales sinon, pour que stats et répartition musculaire tiennent debout.
+   */
+  const sharedExercises = useMemo<Exercise[]>(() => {
+    const map = new Map<string, Exercise>()
+    for (const w of sharedWorkouts ?? []) {
+      for (const we of w.exercises) {
+        if (map.has(we.exerciseId)) continue
+        map.set(
+          we.exerciseId,
+          myExercises.find((e) => e.id === we.exerciseId) ?? {
+            id: we.exerciseId,
+            name: we.exerciseName ?? t('lib.exerciseFallback'),
+            category: 'autre',
+            tracking: 'weight_reps',
+            primaryMuscles: [],
+            secondaryMuscles: [],
+            equipment: '',
+            level: 'débutant',
+            instructions: [],
+            images: [],
+            isCustom: false,
+            isFavorite: false,
+            createdAt: new Date().toISOString(),
+          },
+        )
+      }
+    }
+    return [...map.values()]
+  }, [sharedWorkouts, myExercises])
 
   const meta = user?.user_metadata ?? {}
   const displayName =
@@ -336,6 +426,30 @@ export default function ProfilePage() {
       } finally {
         setFollowBusy(false)
       }
+    }
+
+    /** Copie d'un programme consulté dans mon carnet local. */
+    const copyRoutine = (routine: Routine) => {
+      const st = useStore.getState()
+      st.createRoutine({
+        name: routine.name,
+        description: routine.description,
+        folder: routine.folder,
+        color: routine.color,
+        exercises: routine.exercises.map((re) => ({
+          id: uid('re'),
+          exerciseId: re.exerciseId,
+          exerciseName:
+            re.exerciseName ??
+            st.exercises.find((e) => e.id === re.exerciseId)?.name ??
+            t('lib.exerciseFallback'),
+          sets: re.sets.map((s) => ({ ...s })),
+          restSeconds: re.restSeconds,
+          supersetId: re.supersetId ?? null,
+          notes: re.notes,
+        })),
+      })
+      notify(t('profile.programCopied', { name: routine.name }), 'success')
     }
     return (
       <div>
@@ -427,7 +541,9 @@ export default function ProfilePage() {
                   </>
                 )
               )}
-              {/* Onglets réservés à l'abonné : historique + stats complets. */}
+              {/* Carrousel de photos du profil consulté (défilement horizontal). */}
+              {canSeeTraining && <PhotoCarousel photos={userPhotos} loading={loadingPhotos} />}
+              {/* Onglets complets : public ou abonné voit tout, comme chez soi. */}
               {canSeeTraining && (
                 <Tabs<Tab>
                   value={tab}
@@ -436,16 +552,30 @@ export default function ProfilePage() {
                     { value: 'posts', label: t('profile.tabPosts'), icon: <LayoutGrid size={14} /> },
                     { value: 'historique', label: t('history.title'), icon: <History size={14} /> },
                     { value: 'stats', label: t('stats.title'), icon: <BarChart3 size={14} /> },
+                    { value: 'programmes', label: t('routine.title'), icon: <ListChecks size={14} /> },
                   ]}
                 />
               )}
               {!canSeeTraining && (
                 <p className="text-xs text-muted">{t('profile.followToSeeAll', { who: `@${p.username}` })}</p>
               )}
-              {canSeeTraining && tab === 'historique' ? (
-                <PublicTraining workouts={sharedWorkouts} mode="historique" loading={sharedLoading} error={sharedError} />
-              ) : canSeeTraining && tab === 'stats' ? (
-                <PublicTraining workouts={sharedWorkouts} mode="stats" loading={sharedLoading} error={sharedError} />
+              {canSeeTraining && tab === 'programmes' ? (
+                <SharedPrograms
+                  routines={sharedRoutines}
+                  loading={routinesLoading}
+                  error={routinesError}
+                  onCopy={(routine) => copyRoutine(routine)}
+                />
+              ) : canSeeTraining && (tab === 'historique' || tab === 'stats') ? (
+                sharedLoading && sharedWorkouts === null ? (
+                  <p className="py-4 text-center text-sm text-muted">{t('common.loading')}</p>
+                ) : sharedError ? (
+                  <Card><EmptyState title={t('profile.postsUnavailable')} message={sharedError} /></Card>
+                ) : tab === 'historique' ? (
+                  <HistoryPage bare shared workouts={sharedWorkouts ?? []} exercises={sharedExercises} />
+                ) : (
+                  <StatsPage bare workouts={sharedWorkouts ?? []} exercises={sharedExercises} />
+                )
               ) : (
                 <>
               {userPostsError ? (
@@ -638,172 +768,111 @@ export default function ProfilePage() {
   )
 }
 
-/* ------------------------- listes abonnés/abonnements ------------------------- */
+
+/* ------------------- photos & programmes d'un profil ------------------- */
 
 /**
- * Historique / Stats complets d'un profil public : lisibles par l'abonné
- * (RPC `shared_workouts`), avec le même filtre de période que les stats.
+ * Carrousel de photos d'un profil consulté : défilement horizontal, tap pour
+ * ouvrir la photo en grand avec navigation précédent / suivant.
  */
-function PublicTraining({ workouts, mode, loading, error }: {
-  workouts: Workout[] | null
-  mode: 'historique' | 'stats'
-  loading: boolean
-  error: string | null
-}) {
+function PhotoCarousel({ photos, loading }: { photos: PostPhoto[]; loading: boolean }) {
   useLang()
-  const settings = useStore((s) => s.settings)
-  const [range, setRange] = useState<RangeFilter>('tout')
-
-  if (loading && workouts === null) {
-    return <p className="py-6 text-center text-sm text-muted">{t('common.loading')}</p>
-  }
-  if (error || workouts === null) {
-    return (
-      <Card>
-        <EmptyState title={t('profile.postsUnavailable')} message={error ?? t('profile.secSharedEmpty')} />
-      </Card>
-    )
-  }
-
-  const since = rangeSince(range)
-  const scoped = workouts.filter((w) => since === null || +new Date(w.startedAt) >= since)
-  const filter = (
-    <div className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1">
-      {RANGE_LABEL_KEYS.map(([value, key]) => (
-        <Chip key={value} size="sm" active={range === value} onClick={() => setRange(value)}>
-          {t(key)}
-        </Chip>
-      ))}
-    </div>
-  )
-
-  if (mode === 'historique') {
-    return (
-      <div className="space-y-3">
-        {filter}
-        {scoped.length === 0 ? (
-          <Card>
-            <EmptyState title={t('profile.secShared')} message={t('profile.secSharedEmpty')} />
-          </Card>
-        ) : (
-          scoped.map((w) => (
-            <Card key={w.id} className="p-3.5">
-              <div className="flex items-center justify-between gap-2">
-                <p className="truncate text-sm font-extrabold">{w.name}</p>
-                <span className="shrink-0 text-[11px] text-muted">{formatDate(w.startedAt, 'long')}</span>
-              </div>
-              <p className="mt-1 text-[11px] text-muted">
-                {formatDuration(workoutDurationSeconds(w), 'compact')} · {formatVolume(workoutVolume(w), settings.unit)} · {t('stats.setsCount', { n: workoutSets(w) })}
-              </p>
-              <p className="mt-1 truncate text-xs text-muted">
-                {w.exercises.map((e) => e.exerciseName ?? '').filter(Boolean).join(' · ')}
-              </p>
-            </Card>
-          ))
-        )}
-      </div>
-    )
-  }
-
-  return <PublicTrainingStats scoped={scoped} filter={filter} />
-}
-
-/** Bloc statistiques de l'onglet Stats d'un profil suivi. */
-function PublicTrainingStats({ scoped, filter }: { scoped: Workout[]; filter: React.ReactNode }) {
-  useLang()
-  const settings = useStore((s) => s.settings)
-  const totalVolume = scoped.reduce((n, w) => n + workoutVolume(w), 0)
-  const totalTime = scoped.reduce((n, w) => n + workoutDurationSeconds(w), 0)
-  const totalSets = scoped.reduce((n, w) => n + workoutSets(w), 0)
-  const series = weeklySeries(scoped, 12, settings.firstDayOfWeek)
-
-  const byExercise = new Map<string, { name: string; sets: number; volume: number }>()
-  for (const w of scoped) {
-    for (const we of w.exercises) {
-      const name = we.exerciseName ?? t('lib.exerciseFallback')
-      const entry = byExercise.get(name) ?? { name, sets: 0, volume: 0 }
-      for (const s of we.sets) {
-        if (!s.completed) continue
-        entry.sets += 1
-        entry.volume += (s.weight ?? 0) * (s.reps ?? 0)
-      }
-      byExercise.set(name, entry)
-    }
-  }
-  const top = [...byExercise.values()].sort((a, b) => b.volume - a.volume).slice(0, 6)
-
+  const [open, setOpen] = useState<number | null>(null)
+  if (loading || photos.length === 0) return null
+  const index = open ?? 0
+  const current = photos[index]
+  const go = (step: number) => setOpen((index + step + photos.length) % photos.length)
   return (
-    <div className="space-y-4">
-      {filter}
-      <div className="grid grid-cols-4 gap-1.5 text-center">
-        {[
-          { label: t('stats.sessions'), value: String(scoped.length) },
-          { label: t('stats.time'), value: formatDuration(totalTime, 'compact') },
-          { label: t('stats.volume'), value: formatVolume(totalVolume, settings.unit) },
-          { label: t('stats.sets'), value: String(totalSets) },
-        ].map((s) => (
-          <div key={s.label} className="rounded-xl border border-line bg-surface px-1 py-2">
-            <p className="tabular truncate text-sm font-extrabold">{s.value}</p>
-            <p className="text-[10px] tracking-wide text-muted uppercase">{s.label}</p>
-          </div>
+    <>
+      <div className="no-scrollbar -mx-1 flex snap-x snap-mandatory gap-2 overflow-x-auto px-1 pb-1">
+        {photos.map((photo, i) => (
+          <button
+            key={photo.id}
+            type="button"
+            onClick={() => setOpen(i)}
+            aria-label={t('profile.photos')}
+            className="h-28 w-24 shrink-0 snap-start overflow-hidden rounded-xl border border-line bg-surface-2"
+          >
+            <img src={photo.url} alt="" className="h-full w-full object-cover" loading="lazy" />
+          </button>
         ))}
       </div>
-      <Card className="p-4">
-        <SectionTitle>{t('stats.durationPerWeek')}</SectionTitle>
-        <div className="mx-auto h-36 w-full max-w-md">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={series} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-              <XAxis
-                dataKey="label"
-                tick={{ fontSize: 10, fill: 'var(--muted)' }}
-                axisLine={false}
-                tickLine={false}
-                interval="preserveStartEnd"
-                minTickGap={24}
-              />
-              <YAxis
-                tick={{ fontSize: 10, fill: 'var(--muted)' }}
-                axisLine={false}
-                tickLine={false}
-                width={44}
-                tickFormatter={(v: number) => (v >= 3600 ? `${Math.round(v / 3600)}h` : v >= 60 ? `${Math.round(v / 60)}m` : `${v}s`)}
-              />
-              <Tooltip
-                cursor={chartCursor}
-                wrapperStyle={chartTooltipWrapper}
-                content={
-                  <ChartTooltipContent
-                    format={(p, datum) =>
-                      p.dataKey === 'duration'
-                        ? t('stats.tipDuration', {
-                            v: formatDuration(Number(p.value), 'compact'),
-                            s: String(datum.sets ?? 0),
-                          })
-                        : null
-                    }
-                  />
-                }
-              />
-              <Bar dataKey="duration" name={t('stats.chartDuration')} radius={[6, 6, 2, 2]} fill="var(--accent)" minPointSize={2} maxBarSize={34} />
-            </BarChart>
-          </ResponsiveContainer>
+      <Modal open={open !== null} onClose={() => setOpen(null)} title={t('profile.photos')}>
+        <div className="space-y-2">
+          <img src={current.url} alt="" className="max-h-[65vh] w-full rounded-xl bg-surface-2 object-contain" />
+          {photos.length > 1 && (
+            <div className="flex items-center justify-between gap-2">
+              <Button size="sm" aria-label={t('common.prev')} onClick={() => go(-1)}>
+                <ChevronLeft size={15} /> {t('common.prev')}
+              </Button>
+              <span className="tabular text-xs text-muted">{`${index + 1} / ${photos.length}`}</span>
+              <Button size="sm" aria-label={t('common.next')} onClick={() => go(1)}>
+                {t('common.next')} <ChevronRight size={15} />
+              </Button>
+            </div>
+          )}
         </div>
+      </Modal>
+    </>
+  )
+}
+
+/**
+ * Programmes d'un profil consulté : chaque carte se copie en un tap dans mon
+ * carnet (mêmes exercices et mêmes séries) pour reprendre le plan tel quel.
+ */
+function SharedPrograms({ routines, loading, error, onCopy }: {
+  routines: Routine[] | null
+  loading: boolean
+  error: string | null
+  onCopy: (routine: Routine) => void
+}) {
+  useLang()
+  if (loading && routines === null) {
+    return <p className="py-6 text-center text-sm text-muted">{t('common.loading')}</p>
+  }
+  if (error || routines === null) {
+    return (
+      <Card>
+        <EmptyState title={t('profile.programsUnavailable')} message={error ?? t('profile.noPrograms')} />
       </Card>
-      {top.length > 0 && (
-        <Card className="p-4">
-          <SectionTitle>{t('stats.topExercises')}</SectionTitle>
-          <div className="space-y-2">
-            {top.map((x) => (
-              <div key={x.name} className="flex items-center justify-between gap-3 rounded-xl bg-surface-2 px-3 py-2">
-                <span className="min-w-0 flex-1 truncate text-[13px] font-semibold">{x.name}</span>
-                <span className="shrink-0 text-[11px] text-muted">
-                  {t('stats.setsCount', { n: x.sets })} · {formatVolume(x.volume, settings.unit)}
-                </span>
-              </div>
-            ))}
+    )
+  }
+  if (routines.length === 0) {
+    return (
+      <Card>
+        <EmptyState title={t('routine.empty')} message={t('profile.noPrograms')} />
+      </Card>
+    )
+  }
+  return (
+    <div className="space-y-2">
+      {routines.map((routine) => (
+        <Card key={routine.id} className="p-3">
+          <div className="flex items-start gap-3">
+            <span className="h-9 w-1.5 shrink-0 rounded-full" style={{ background: routine.color }} />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-extrabold">{routine.name}</p>
+              <p className="mt-0.5 truncate text-[11px] text-muted">
+                {t('routine.exNum', { n: routine.exercises.length })}
+                {routine.exercises.length > 0 && (
+                  <>
+                    {' · '}
+                    {routine.exercises
+                      .slice(0, 4)
+                      .map((re) => re.exerciseName ?? '')
+                      .filter(Boolean)
+                      .join(', ')}
+                  </>
+                )}
+              </p>
+            </div>
+            <Button size="sm" onClick={() => onCopy(routine)}>
+              <Copy size={14} /> {t('profile.copyProgram')}
+            </Button>
           </div>
         </Card>
-      )}
+      ))}
     </div>
   )
 }

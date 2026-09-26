@@ -97,37 +97,39 @@ function WorkoutDetail({
   useLang()
   const settings = useStore((s) => s.settings)
   return (
-    <div className="rounded-xl bg-surface-2 p-2.5">
-      <div className="flex items-start gap-2">
-        <button type="button" onClick={onOpen} title={t('post.detailTitle')} className="min-w-0 flex-1 text-left">
-          <span className="block truncate text-[13px] font-extrabold">{detail.name}</span>
-          <span className="mt-0.5 block text-[11px] text-muted">
-            {t('post.setsCount', { count: detail.sets })} · {formatVolume(detail.volume, settings.unit)} · {formatDuration(detail.seconds, 'compact')}
-          </span>
-          {detail.exercises.slice(0, 6).map((e, i) => {
-            const e1rm = bestE1RM(e.sets)
-            return (
-              <span key={i} className="mt-0.5 flex items-center gap-2 text-xs text-muted">
-                <span className="min-w-0 flex-1 truncate">
-                  {e.name} · {t('post.setCount', { count: e.sets.length })}
-                </span>
-                {e1rm > 0 && (
-                  <span className="tabular shrink-0 text-[11px] font-bold text-accent">
-                    {t('post.e1rm', { w: formatWeight(e1rm, settings.unit) })}
-                  </span>
-                )}
+    <div className="relative rounded-xl bg-surface-2 p-2.5">
+      <button type="button" onClick={onOpen} title={t('post.detailTitle')} className="block w-full text-left">
+        <span className="block truncate pr-7 text-[13px] font-extrabold">{detail.name}</span>
+        <span className="mt-0.5 block text-[11px] text-muted">
+          {t('post.setsCount', { count: detail.sets })} · {formatVolume(detail.volume, settings.unit)} · {formatDuration(detail.seconds, 'compact')}
+        </span>
+        {detail.exercises.slice(0, 6).map((e, i) => {
+          const e1rm = bestE1RM(e.sets)
+          return (
+            <span key={i} className="mt-0.5 flex items-center gap-2 text-xs text-muted">
+              <span className="min-w-0 flex-1 truncate">
+                {e.name} · {t('post.setCount', { count: e.sets.length })}
               </span>
-            )
-          })}
-          {detail.exercises.length > 6 && (
-            <span className="mt-0.5 block text-[11px] text-muted">
-              {t('post.moreExercises', { count: detail.exercises.length - 6 })}
+              {e1rm > 0 && (
+                <span className="tabular shrink-0 text-right text-[11px] font-bold text-accent">
+                  {t('post.e1rm', { w: formatWeight(e1rm, settings.unit) })}
+                </span>
+              )}
             </span>
-          )}
-          <span className="mt-1 flex items-center gap-0.5 text-[11px] font-bold text-accent">
-            {t('post.seeDetail')} <ChevronRight size={13} />
+          )
+        })}
+        {detail.exercises.length > 6 && (
+          <span className="mt-0.5 block text-[11px] text-muted">
+            {t('post.moreExercises', { count: detail.exercises.length - 6 })}
           </span>
-        </button>
+        )}
+        <span className="mt-1 flex items-center gap-0.5 text-[11px] font-bold text-accent">
+          {t('post.seeDetail')} <ChevronRight size={13} />
+        </span>
+      </button>
+      {/* Menu posé en absolu : les lignes d'exercices courent jusqu'au bord
+          droit du bloc, donc les 1RM restent alignés à droite. */}
+      <div className="absolute top-1 right-1">
         <Menu
           align="right"
           trigger={({ toggle }) => (
