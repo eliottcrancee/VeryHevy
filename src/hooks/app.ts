@@ -125,6 +125,39 @@ export function useBottomBar() {
   return setEl
 }
 
+/**
+ * Détecte l'ouverture du clavier virtuel et neutralise la zone sûre basse.
+ *
+ * iOS conserve `env(safe-area-inset-bottom)` (~34 px) quand le clavier est
+ * affiché : la barre de navigation — et les composeurs qui s'empilent dessus —
+ * laissaient donc un vide entre elles et le clavier. On publie aussi
+ * `--kb-inset` (hauteur recouverte) pour que les éléments fixés en bas
+ * remontent au-dessus du clavier quand la fenêtre ne rétrécit pas.
+ */
+export function useKeyboardInset() {
+  useEffect(() => {
+    const vv = window.visualViewport
+    if (!vv) return
+    const root = document.documentElement
+    const update = () => {
+      const inset = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop))
+      // Seuil : un clavier fait ≥ 150 px, la barre d'URL beaucoup moins.
+      const open = inset > 150
+      root.classList.toggle('kb-open', open)
+      root.style.setProperty('--kb-inset', open ? `${inset}px` : '0px')
+    }
+    update()
+    vv.addEventListener('resize', update)
+    vv.addEventListener('scroll', update)
+    return () => {
+      vv.removeEventListener('resize', update)
+      vv.removeEventListener('scroll', update)
+      root.classList.remove('kb-open')
+      root.style.removeProperty('--kb-inset')
+    }
+  }, [])
+}
+
 /** Re-render régulier (pour les chronos). */
 export function useInterval(callback: () => void, delay: number | null) {
   useEffect(() => {

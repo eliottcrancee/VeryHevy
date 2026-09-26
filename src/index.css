@@ -203,6 +203,12 @@
   .safe-t {
     padding-top: env(safe-area-inset-top, 0px);
   }
+  /* Clavier virtuel ouvert (voir `useKeyboardInset`) : la zone sûre basse est
+     recouverte par le clavier, on la neutralise pour supprimer le vide entre
+     la barre de navigation / les composeurs et le clavier. */
+  .kb-open .safe-b {
+    padding-bottom: 0;
+  }
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }

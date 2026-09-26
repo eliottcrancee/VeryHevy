@@ -11,7 +11,7 @@ import {
 } from 'recharts'
 import { Activity, Dumbbell, Trophy } from 'lucide-react'
 import { useStore } from '@/store/store'
-import { Page, PageHeader } from '@/components/PageHeader'
+import { PageHeader } from '@/components/PageHeader'
 import { Card, Chip, EmptyState, ProgressBar, SectionTitle } from '@/components/ui'
 import {
   arcWorkouts,
@@ -28,7 +28,7 @@ import { CATEGORY_META } from '@/types'
 import CalendarPage from '@/pages/Calendar'
 import { t, tx, useLang } from '@/lib/i18n'
 import { ChartTooltipContent, chartCursor, chartTooltipWrapper } from '@/components/charts'
-import { formatDuration, formatVolume, formatWeight, kgToDisplay, RANGE_LABEL_KEYS, rangeSince, type RangeFilter } from '@/lib/utils'
+import { formatDuration, formatVolume, formatWeight, kgToDisplay, cn, RANGE_LABEL_KEYS, rangeSince, type RangeFilter } from '@/lib/utils'
 
 export default function StatsPage({ bare = false }: { bare?: boolean }) {
   useLang()
@@ -115,11 +115,15 @@ export default function StatsPage({ bare = false }: { bare?: boolean }) {
 
   // Calendrier d'entraînement (le détail par jour vit dans le composant Calendar).
 
+  // En mode `bare` (onglet Profil), le parent fournit déjà le padding de Page :
+  // on n'ajoute que l'espacement vertical.
+  const pageClass = cn('w-full space-y-5', !bare && 'mx-auto max-w-5xl px-4 py-4')
+
   if (!all.length) {
     return (
       <div>
         {!bare && <PageHeader title={t('stats.title')} />}
-        <Page>
+        <div className={pageClass}>
           <Card>
             <EmptyState
               icon={<Activity size={26} />}
@@ -127,7 +131,7 @@ export default function StatsPage({ bare = false }: { bare?: boolean }) {
               message={t('stats.emptyHint')}
             />
           </Card>
-        </Page>
+        </div>
       </div>
     )
   }
@@ -135,7 +139,7 @@ export default function StatsPage({ bare = false }: { bare?: boolean }) {
   return (
     <div>
       {!bare && <PageHeader title={t('stats.title')} subtitle={t('stats.subtitle', { n: filtered.length })} />}
-      <Page className="space-y-5">
+      <div className={pageClass}>
         <div className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1">
             {RANGE_LABEL_KEYS.map(([value, key]) => (
               <Chip key={value} active={range === value} onClick={() => setRange(value)}>
@@ -340,7 +344,7 @@ export default function StatsPage({ bare = false }: { bare?: boolean }) {
           </Card>
         )}
 
-        </Page>
+        </div>
     </div>
   )
 }

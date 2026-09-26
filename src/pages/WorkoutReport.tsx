@@ -187,17 +187,6 @@ export default function WorkoutReportPage() {
           <>
             {!isActive && (
               <IconButton
-                label={t('workout.renameAction')}
-                onClick={() => {
-                  const name = window.prompt(t('workout.promptName'), workout.name)
-                  if (name?.trim()) updateWorkout(workout.id, { name: name.trim() })
-                }}
-              >
-                <Pencil size={17} />
-              </IconButton>
-            )}
-            {!isActive && (
-              <IconButton
                 label={t('workout.shareImage')}
                 onClick={() =>
                   void shareWorkout({ workout, exercises, settings, previousWorkouts, notify })

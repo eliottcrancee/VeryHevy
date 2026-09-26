@@ -427,7 +427,6 @@ export default function ProfilePage() {
                   </>
                 )
               )}
-              <PublicMiniStats posts={userPosts} />
               {/* Onglets réservés à l'abonné : historique + stats complets. */}
               {canSeeTraining && (
                 <Tabs<Tab>
@@ -610,8 +609,8 @@ export default function ProfilePage() {
             </div>
           )
         )}
-        {tab === 'historique' && <div className="-mx-4"><HistoryPage bare /></div>}
-        {tab === 'stats' && <div className="-mx-4"><StatsPage bare /></div>}
+        {tab === 'historique' && <HistoryPage bare />}
+        {tab === 'stats' && <StatsPage bare />}
       </Page>
 
       <EditProfileModal
@@ -640,37 +639,6 @@ export default function ProfilePage() {
 }
 
 /* ------------------------- listes abonnés/abonnements ------------------------- */
-
-/** Quelques chiffres d'après ses posts visibles (snapshots). */
-function PublicMiniStats({ posts }: { posts: Post[] }) {
-  useLang()
-  const snaps = posts.map((p) => p.workout_snapshot).filter((s): s is NonNullable<typeof s> => Boolean(s))
-  if (snaps.length === 0) return null
-  const sets = snaps.reduce((n, s) => n + s.sets, 0)
-  const volume = snaps.reduce((n, s) => n + s.volume, 0)
-  const seconds = snaps.reduce((n, s) => n + s.seconds, 0)
-  const cells: { value: string; label: string }[] = [
-    { value: String(posts.length), label: t('profile.statPosts') },
-    { value: String(sets), label: t('stats.sets') },
-    { value: formatVolume(volume, 'kg'), label: t('stats.volume') },
-    { value: formatDuration(seconds, 'compact'), label: t('stats.time') },
-  ]
-  return (
-    <div>
-      <div className="grid grid-cols-4 gap-2">
-        {cells.map((c) => (
-          <div key={c.label} className="rounded-xl bg-surface-2 px-1 py-2 text-center">
-            <p className="tabular truncate text-sm font-extrabold">{c.value}</p>
-            <p className="text-[10px] font-semibold text-muted uppercase">{c.label}</p>
-          </div>
-        ))}
-      </div>
-      <p className="mt-1 text-center text-[10px] text-muted">
-        {posts.length === 1 ? t('profile.basedOnOne') : t('profile.basedOnMany', { count: posts.length })}
-      </p>
-    </div>
-  )
-}
 
 /**
  * Historique / Stats complets d'un profil public : lisibles par l'abonné

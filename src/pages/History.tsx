@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ChevronRight, Dumbbell, Search, Share2, Star } from 'lucide-react'
+import { ChevronRight, Dumbbell, Megaphone, Search, Share2, Star } from 'lucide-react'
 import { useStore } from '@/store/store'
-import { Page, PageHeader } from '@/components/PageHeader'
+import { useAuth } from '@/lib/auth'
+import { PageHeader } from '@/components/PageHeader'
 import { Button, Card, Chip, EmptyState, IconButton, Input } from '@/components/ui'
 import {
   completedWorkouts,
@@ -11,8 +12,9 @@ import {
   workoutSets,
   workoutVolume,
 } from '@/lib/calc'
-import { formatDate, formatDuration, formatVolume, normalize } from '@/lib/utils'
+import { formatDate, formatDuration, formatVolume, cn, normalize } from '@/lib/utils'
 import { shareWorkout } from '@/lib/share'
+import { SharePostModal } from '@/components/SharePostModal'
 import { localeOf, t, tx, useLang } from '@/lib/i18n'
 
 type Period = 'tout' | '30j' | '90j' | 'annee'
@@ -23,8 +25,11 @@ export default function HistoryPage({ bare = false }: { bare?: boolean }) {
   const exercises = useStore((s) => s.exercises)
   const settings = useStore((s) => s.settings)
   const notify = useStore((s) => s.notify)
+  const { cloudEnabled } = useAuth()
   const [query, setQuery] = useState('')
   const [period, setPeriod] = useState<Period>('tout')
+  // Séance dont on crée un post (bouton mégaphone de la carte).
+  const [postWorkoutId, setPostWorkoutId] = useState<string | null>(null)
   const loc = localeOf(useLang())
 
   const filtered = useMemo(() => {
@@ -55,6 +60,9 @@ export default function HistoryPage({ bare = false }: { bare?: boolean }) {
 
   const all = completedWorkouts(workouts)
 
+  // En mode `bare` (onglet Profil), le parent fournit déjà le padding de Page.
+  const pageClass = cn('w-full space-y-5', !bare && 'mx-auto max-w-5xl px-4 py-4')
+
   const grouped = useMemo(() => {
     const map = new Map<string, typeof filtered>()
     for (const w of filtered) {
@@ -70,7 +78,7 @@ export default function HistoryPage({ bare = false }: { bare?: boolean }) {
     <div>
       {!bare && <PageHeader title={t('history.title')} subtitle={t('history.subtitle', { count: all.length })} />}
 
-      <Page className="space-y-5">
+      <div className={pageClass}>
         <div className="space-y-2">
           <div className="relative">
             <Search size={16} className="absolute top-1/2 left-3 -translate-y-1/2 text-muted" />
@@ -171,6 +179,19 @@ export default function HistoryPage({ bare = false }: { bare?: boolean }) {
                             </span>
                           ) : null}
                           <span className="mt-auto flex items-center">
+                            {cloudEnabled && (
+                              <IconButton
+                                label={t('history.postLabel', { name: w.name })}
+                                className="h-8 w-8"
+                                onClick={(e) => {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  setPostWorkoutId(w.id)
+                                }}
+                              >
+                                <Megaphone size={15} />
+                              </IconButton>
+                            )}
                             <IconButton
                               label={t('history.shareLabel', { name: w.name })}
                               className="h-8 w-8"
@@ -196,7 +217,13 @@ export default function HistoryPage({ bare = false }: { bare?: boolean }) {
             </section>
           ))
         )}
-      </Page>
+      </div>
+
+      <SharePostModal
+        open={postWorkoutId !== null}
+        workoutId={postWorkoutId}
+        onClose={() => setPostWorkoutId(null)}
+      />
     </div>
   )
 }

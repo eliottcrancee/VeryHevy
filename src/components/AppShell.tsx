@@ -21,6 +21,7 @@ import { Logo } from '@/components/Logo'
 import { useAuth } from '@/lib/auth'
 import { t, useLang } from '@/lib/i18n'
 import { loadHome, loadMyPosts, loadMyProfile, loadSessions } from '@/lib/pagePreload'
+import { useKeyboardInset } from '@/hooks/app'
 
 const NAV = [
   { to: '/', key: 'nav.home', icon: House, end: true },
@@ -85,7 +86,7 @@ export function RestTimerBar() {
   const pct = Math.min(100, ((total - remaining) / total) * 100)
 
   return (
-    <div className="animate-slide-up fixed inset-x-0 bottom-[calc(var(--bottom-stack,0px)+var(--bottom-bar,0px)+16px)] z-40 px-3 lg:left-auto lg:right-4 lg:w-96 lg:px-0">
+    <div className="animate-slide-up fixed inset-x-0 bottom-[calc(var(--bottom-stack,0px)+var(--bottom-bar,0px)+var(--kb-inset,0px)+16px)] z-40 px-3 lg:left-auto lg:right-4 lg:w-96 lg:px-0">
       <div
         className={cn(
           'glass relative overflow-hidden rounded-2xl border shadow-xl',
@@ -220,6 +221,9 @@ export function AppShell() {
 
   const navItems = useMemo(() => NAV, [])
 
+  // Clavier virtuel : neutralise la zone sûre basse pendant la saisie.
+  useKeyboardInset()
+
   const onWorkoutScreen = location.pathname === '/seance'
   const showNav = !(activeWorkout && onWorkoutScreen)
   const showActivePill = Boolean(activeWorkout) && !onWorkoutScreen
@@ -314,7 +318,7 @@ export function AppShell() {
         {showNav && (
           <div
             ref={bottomStackRef}
-            className="glass safe-b fixed inset-x-0 bottom-0 z-40 flex flex-col border-t border-line lg:hidden"
+            className="glass safe-b fixed inset-x-0 bottom-[var(--kb-inset,0px)] z-40 flex flex-col border-t border-line lg:hidden"
           >
             {showActivePill && (
               <div className="border-b border-line px-3 py-2">

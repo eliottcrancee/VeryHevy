@@ -21,7 +21,6 @@ import { CSS } from '@dnd-kit/utilities'
 import {
   Check,
   Dumbbell,
-  Flag,
   HeartPulse,
   Link2,
   ListChecks,
@@ -48,7 +47,6 @@ import {
   Menu,
   Modal,
   NumberField,
-  Stat,
   Textarea,
 } from '@/components/ui'
 import { ExercisePicker } from '@/components/ExercisePicker'
@@ -296,6 +294,24 @@ export default function ActiveWorkoutPage() {
                 </IconButton>
               )}
               items={[
+                // Chrono : la durée est déjà affichée dans le header, on garde
+                // ici la correction manuelle et la pause/reprise.
+                {
+                  label: t('workout.editDuration'),
+                  icon: <Timer size={15} />,
+                  onClick: () => {
+                    setDurationDraft(Math.round(elapsed / 60))
+                    setDurationOpen(true)
+                  },
+                },
+                {
+                  label: clockPaused ? t('workout.resumeChrono') : t('workout.pauseChrono'),
+                  icon: clockPaused ? <Play size={15} /> : <Pause size={15} />,
+                  onClick: () => {
+                    if (clockPaused) resumeWorkoutClock(workout.id)
+                    else pauseWorkoutClock(workout.id)
+                  },
+                },
                 {
                   label: t('workout.saveAsProgram'),
                   icon: <Save size={15} />,
@@ -419,49 +435,12 @@ export default function ActiveWorkoutPage() {
             placeholder={t('workout.notesHint')}
           />
         </Card>
-
-        <div className="grid grid-cols-3 gap-2">
-          {/* Chrono : toucher la durée pour la corriger à la main, ⏸/▶ pour la pauser. */}
-          <div className="rounded-2xl border border-line bg-surface p-3.5">
-            <div className="flex items-center gap-1.5 text-[11px] font-semibold tracking-wide text-muted uppercase">
-              <Timer size={12} />
-              {t('workout.duration')}
-              {clockPaused && (
-                <span className="rounded bg-warning/15 px-1 py-px text-[9px] font-bold text-warning">{t('workout.pause')}</span>
-              )}
-            </div>
-            <div className="mt-1.5 flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => {
-                  setDurationDraft(Math.round(elapsed / 60))
-                  setDurationOpen(true)
-                }}
-                title={t('workout.editDuration')}
-                className="tabular min-w-0 flex-1 truncate text-left text-xl font-extrabold transition-colors hover:text-accent"
-              >
-                {formatDuration(elapsed, 'compact')}
-              </button>
-              {clockPaused ? (
-                <IconButton label={t('workout.resumeChrono')} onClick={() => resumeWorkoutClock(workout.id)} className="h-8 w-8 text-success">
-                  <Play size={15} />
-                </IconButton>
-              ) : (
-                <IconButton label={t('workout.pauseChrono')} onClick={() => pauseWorkoutClock(workout.id)} className="h-8 w-8">
-                  <Pause size={15} />
-                </IconButton>
-              )}
-            </div>
-          </div>
-          <Stat compact label={t('stats.sets')} value={`${doneSets}/${totalSets}`} icon={<Check size={12} />} />
-          <Stat compact label={t('stats.volume')} value={formatVolume(volume, settings.unit)} icon={<Flag size={12} />} />
-        </div>
       </Page>
 
       {/* Barre de validation */}
       <div
         ref={bottomBarRef}
-        className="safe-b glass fixed inset-x-0 bottom-[var(--bottom-stack,0px)] z-30 border-t border-line px-4 py-3 lg:left-64"
+        className="safe-b glass fixed inset-x-0 bottom-[calc(var(--bottom-stack,0px)+var(--kb-inset,0px))] z-30 border-t border-line px-4 py-3 lg:left-64"
       >
         <div className="mx-auto flex max-w-3xl items-center gap-3">
           <div className="hidden flex-1 sm:block">

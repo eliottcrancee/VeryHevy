@@ -231,14 +231,57 @@ export async function deletePost(postId: string): Promise<void> {
   if (path) await sb.storage.from('post-photos').remove([path])
 }
 
-export async function updatePost(postId: string, caption: string, visibility: PostVisibility): Promise<void> {
+export async function updatePost(
+  postId: string,
+  caption: string,
+  visibility: PostVisibility,
+  photoFile?: File | null,
+  removePhoto = false,
+): Promise<void> {
   const sb = sbOrThrow()
-  const { error } = await sb.from('posts').update({ caption: caption.trim().slice(0, 500), visibility })
-    .eq('id', postId)
-  if (error) throw new Error(t('lib.editError', { msg: error.message }))
+  const patch: Record<string, unknown> = { caption: caption.trim().slice(0, 500), visibility }
+  let uploading = false
+  if (photoFile) {
+    patch.photo_url = await uploadPostPhoto(photoFile, await myId())
+    uploading = true
+  } else if (removePhoto) {
+    patch.photo_url = null
+  }
+  // Ancienne image : supprimée du Storage une fois la mise à jour réussie.
+  let previous: string | null = null
+  if (patch.photo_url !== undefined) {
+    const { data: current } = await sb.from('posts').select('photo_url').eq('id', postId).maybeSingle()
+    previous = photoPath((current as { photo_url?: string | null } | null)?.photo_url)
+  }
+  const { error } = await sb.from('posts').update(patch).eq('id', postId)
+  if (error) {
+    if (uploading && typeof patch.photo_url === 'string') {
+      void sb.storage.from('post-photos').remove([patch.photo_url])
+    }
+    throw new Error(t('lib.editError', { msg: error.message }))
+  }
+  if (previous && previous !== patch.photo_url) {
+    await sb.storage.from('post-photos').remove([previous])
+  }
 }
 
 /* ------------------------------ likes ------------------------------ */
+
+/** Profils des personnes qui ont aimé un post (appui long sur le cœur). */
+export async function listLikers(postId: string, limit = 100): Promise<SocialProfile[]> {
+  const sb = sbOrThrow()
+  const { data, error } = await sb
+    .from('post_likes')
+    .select('user_id')
+    .eq('post_id', postId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (error) throw new Error(t('lib.likersError', { msg: error.message }))
+  const ids = [...new Set(((data as { user_id: string }[] | null) ?? []).map((l) => l.user_id))]
+  if (!ids.length) return []
+  const profiles = await fetchSocialProfiles(ids)
+  return ids.map((id) => profiles.get(id)).filter((p): p is SocialProfile => Boolean(p))
+}
 
 export async function toggleLike(post: Post): Promise<boolean> {
   const sb = sbOrThrow()

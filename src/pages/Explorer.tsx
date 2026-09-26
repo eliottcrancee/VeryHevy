@@ -1597,7 +1597,7 @@ function ConversationView({ t: thread, onBack }: { t: ActiveThread; onBack: () =
   }
 
   return (
-    <div className="fixed inset-x-0 top-0 bottom-[var(--bottom-stack,0px)] z-40 flex flex-col bg-bg lg:left-64">
+    <div className="fixed inset-x-0 top-0 bottom-[calc(var(--bottom-stack,0px)+var(--kb-inset,0px))] z-40 flex flex-col bg-bg lg:left-64">
       <header className="glass safe-t flex shrink-0 items-center gap-2 border-b border-line px-3 py-2.5">
         <Button size="sm" variant="ghost" onClick={onBack}>{t('common.back')}</Button>
         <ProfileAvatar url={thread.other?.avatar_url} name={displayNameOf(thread.other)} size={32} />

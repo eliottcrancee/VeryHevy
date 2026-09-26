@@ -1074,7 +1074,7 @@ export function CheckBadge({
 export function Toaster({ toasts }: { toasts: { id: string; message: string; tone: string }[] }) {
   if (!toasts.length) return null
   return createPortal(
-    <div className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--bottom-stack,0px)+var(--bottom-bar,0px)+28px)] z-[60] flex flex-col items-center gap-2 px-4">
+    <div className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--bottom-stack,0px)+var(--bottom-bar,0px)+var(--kb-inset,0px)+28px)] z-[60] flex flex-col items-center gap-2 px-4">
       {toasts.map((t) => (
         <div
           key={t.id}

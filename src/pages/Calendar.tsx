@@ -18,6 +18,17 @@ export default function CalendarPage({ bare }: { bare?: boolean }) {
 
   const monthLabel = new Intl.DateTimeFormat(loc, { month: 'long', year: 'numeric' }).format(cursor)
 
+  // Abréviations des jours dérivées de la locale (lun., mar., …) : libellés
+  // courts garantis (ils débordaient avant, faute de clés i18n par jour).
+  const weekdayLabels = useMemo(() => {
+    const fmt = new Intl.DateTimeFormat(loc, { weekday: 'short' })
+    // Lundi de référence : convention des données, 0 = lundi.
+    const monday = new Date(2024, 0, 1)
+    return Array.from({ length: 7 }, (_, i) =>
+      fmt.format(addDays(monday, (i + settings.firstDayOfWeek + 6) % 7)).replace('.', ''),
+    )
+  }, [loc, settings.firstDayOfWeek])
+
   const days = useMemo(() => {
     const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1)
     const gridStart = startOfWeek(first, settings.firstDayOfWeek)
@@ -39,7 +50,7 @@ export default function CalendarPage({ bare }: { bare?: boolean }) {
   const selectedWorkouts = selected ? (byDay.get(selected) ?? []) : []
 
   const body = (
-    <>
+    <div className="space-y-4">
       <Card className="p-3">
         <div className="mb-3 flex items-center justify-between">
             <IconButton
@@ -58,8 +69,7 @@ export default function CalendarPage({ bare }: { bare?: boolean }) {
           </div>
 
           <div className="grid grid-cols-7 gap-1">
-            {/* Les jours partent du lundi (workout.weekday.0) : on décale selon le 1er jour choisi. */}
-            {Array.from({ length: 7 }, (_, i) => t(`workout.weekday.${(i + settings.firstDayOfWeek + 6) % 7}`)).map((label) => (
+            {weekdayLabels.map((label) => (
               <div key={label} className="pb-1 text-center text-[10px] font-bold tracking-wide text-muted uppercase">
                 {label}
               </div>
@@ -149,7 +159,7 @@ export default function CalendarPage({ bare }: { bare?: boolean }) {
             {t('workout.tapDay')}
           </Card>
         )}
-    </>
+    </div>
   )
 
   if (bare) return body

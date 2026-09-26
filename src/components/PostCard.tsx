@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { BookmarkPlus, Dumbbell, Flag, Heart, MessageCircle, Pencil, Play, Trash2 } from 'lucide-react'
-import type { Post, PostComment, PostVisibility, Workout } from '@/types'
+import { BookmarkPlus, ChevronRight, Dumbbell, Flag, Heart, ImagePlus, MessageCircle, MoreVertical, Pencil, Play, Trash2 } from 'lucide-react'
+import type { Post, PostComment, PostVisibility, SocialProfile, Workout } from '@/types'
 import { useStore } from '@/store/store'
 import { useAuth } from '@/lib/auth'
 import {
@@ -11,12 +11,13 @@ import {
   displayAuthor,
   getPostWorkout,
   listComments,
+  listLikers,
   toggleLike,
   updatePost,
 } from '@/lib/posts'
-import { workoutDurationSeconds, workoutSets, workoutVolume } from '@/lib/calc'
-import { formatDate, formatDuration, formatVolume } from '@/lib/utils'
-import { Button, Card, Field, Input, Modal, Select, Textarea } from '@/components/ui'
+import { estimate1RM, workoutDurationSeconds, workoutSets, workoutVolume } from '@/lib/calc'
+import { formatDate, formatDistance, formatDuration, formatVolume, formatWeight } from '@/lib/utils'
+import { Button, Card, Field, Input, Menu, Modal, Select, Textarea } from '@/components/ui'
 import { ReportDialog } from '@/components/ReportDialog'
 import { t, useLang } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
@@ -44,64 +45,203 @@ function Avatar({ url, name, size = 40 }: { url?: string | null; name: string; s
   )
 }
 
-/**
- * Carte post du feed : auteur, photo, légende, résumé séance,
- * likes, commentaires et réutilisation de la séance.
+/*
+ * Carte post du feed : auteur, photo, légende, résumé séance (cliquable →
+ * détail complet avec séries et 1RM estimé), likes (appui long = qui a aimé),
+ * commentaires et réutilisation de la séance.
  */
-function WorkoutDetail({
-  name,
-  sets,
-  volume,
-  seconds,
-  exercises,
-  busy,
-  onSave,
-  onStart,
-  onOpen,
-}: {
+
+/** Détail séance normalisé (snapshot figé ou séance locale/ancienne). */
+type DetailSet = { reps: number | null; weight: number | null; duration: number | null; distance?: number | null }
+type PostWorkoutDetail = {
   name: string
   sets: number
   volume: number
   seconds: number
-  exercises: { name: string; count: number }[]
+  exercises: { name: string; sets: DetailSet[] }[]
+}
+
+/** Meilleur 1RM estimé d'un exercice (0 si non calculable). */
+function bestE1RM(sets: DetailSet[]): number {
+  return sets.reduce((best, s) => Math.max(best, estimate1RM(s.weight ?? undefined, s.reps ?? undefined)), 0)
+}
+
+/** Une série en clair : « 8 reps × 60 kg », « 45 s », « 2 km »… */
+function describeSet(s: DetailSet, unit: 'kg' | 'lb', distanceUnit: 'km' | 'mi'): string {
+  const parts: string[] = []
+  if (s.reps) parts.push(`${s.reps} reps`)
+  if (s.weight) parts.push(formatWeight(s.weight, unit))
+  if (s.duration) parts.push(formatDuration(s.duration, 'compact'))
+  if (s.distance) parts.push(formatDistance(s.distance, distanceUnit))
+  return parts.length ? parts.join(' × ') : '—'
+}
+
+/**
+ * Résumé séance d'un post : nom + chiffres cliquables (ouvre le détail),
+ * liste des exercices avec leur 1RM estimé, actions (enregistrer / démarrer)
+ * regroupées dans un menu 3 points.
+ */
+function WorkoutDetail({
+  detail,
+  busy,
+  onOpen,
+  onSave,
+  onStart,
+}: {
+  detail: PostWorkoutDetail
   busy: boolean
+  onOpen: () => void
   onSave: () => void
   onStart: () => void
-  onOpen?: () => void
 }) {
   useLang()
+  const settings = useStore((s) => s.settings)
   return (
     <div className="rounded-xl bg-surface-2 p-2.5">
-      <div className="space-y-1.5">
-        <p className="text-[13px] font-extrabold">{name}</p>
-        <p className="text-[11px] text-muted">
-          {t('post.setsCount', { count: sets })} · {formatVolume(volume, 'kg')} · {formatDuration(seconds, 'compact')}
-        </p>
-        <ul className="space-y-0.5">
-          {exercises.slice(0, 6).map((e, i) => (
-            <li key={i} className="text-xs text-muted">
-              {e.name} · {t('post.setCount', { count: e.count })}
+      <div className="flex items-start gap-2">
+        <button type="button" onClick={onOpen} title={t('post.detailTitle')} className="min-w-0 flex-1 text-left">
+          <span className="block truncate text-[13px] font-extrabold">{detail.name}</span>
+          <span className="mt-0.5 block text-[11px] text-muted">
+            {t('post.setsCount', { count: detail.sets })} · {formatVolume(detail.volume, settings.unit)} · {formatDuration(detail.seconds, 'compact')}
+          </span>
+          {detail.exercises.slice(0, 6).map((e, i) => {
+            const e1rm = bestE1RM(e.sets)
+            return (
+              <span key={i} className="mt-0.5 flex items-center gap-2 text-xs text-muted">
+                <span className="min-w-0 flex-1 truncate">
+                  {e.name} · {t('post.setCount', { count: e.sets.length })}
+                </span>
+                {e1rm > 0 && (
+                  <span className="tabular shrink-0 text-[11px] font-bold text-accent">
+                    {t('post.e1rm', { w: formatWeight(e1rm, settings.unit) })}
+                  </span>
+                )}
+              </span>
+            )
+          })}
+          {detail.exercises.length > 6 && (
+            <span className="mt-0.5 block text-[11px] text-muted">
+              {t('post.moreExercises', { count: detail.exercises.length - 6 })}
+            </span>
+          )}
+          <span className="mt-1 flex items-center gap-0.5 text-[11px] font-bold text-accent">
+            {t('post.seeDetail')} <ChevronRight size={13} />
+          </span>
+        </button>
+        <Menu
+          align="right"
+          trigger={({ toggle }) => (
+            <button
+              type="button"
+              onClick={toggle}
+              aria-label={t('post.options')}
+              className="shrink-0 rounded-lg p-1.5 text-muted hover:bg-surface-3 hover:text-ink"
+            >
+              <MoreVertical size={16} />
+            </button>
+          )}
+          items={[
+            { label: t('post.saveAsProgram'), icon: <BookmarkPlus size={15} />, onClick: onSave },
+            { label: t('post.startNow'), icon: <Play size={15} />, onClick: onStart },
+          ]}
+        />
+      </div>
+      {busy && <p className="mt-1 text-[11px] text-muted">{t('common.loading')}</p>}
+    </div>
+  )
+}
+
+/** Feuille « Détail de la séance » : chaque série en clair + 1RM estimé. */
+function WorkoutSheet({ open, detail, onClose }: {
+  open: boolean
+  detail: PostWorkoutDetail | null
+  onClose: () => void
+}) {
+  useLang()
+  const settings = useStore((s) => s.settings)
+  if (!detail) return null
+  return (
+    <Modal open={open} onClose={onClose} title={t('post.detailTitle')}>
+      <div className="space-y-3">
+        <div>
+          <p className="text-sm font-extrabold">{detail.name}</p>
+          <p className="mt-0.5 text-[11px] text-muted">
+            {t('post.setsCount', { count: detail.sets })} · {formatVolume(detail.volume, settings.unit)} · {formatDuration(detail.seconds, 'compact')}
+          </p>
+        </div>
+        <div className="space-y-2.5">
+          {detail.exercises.map((e, i) => {
+            const e1rm = bestE1RM(e.sets)
+            return (
+              <div key={i} className="rounded-xl border border-line p-2.5">
+                <div className="flex items-center gap-2">
+                  <p className="min-w-0 flex-1 truncate text-[13px] font-bold">{e.name}</p>
+                  {e1rm > 0 && (
+                    <span className="tabular shrink-0 rounded-lg bg-accent-soft px-1.5 py-0.5 text-[10px] font-bold text-accent">
+                      {t('post.e1rm', { w: formatWeight(e1rm, settings.unit) })}
+                    </span>
+                  )}
+                </div>
+                <ul className="mt-1 space-y-0.5">
+                  {e.sets.map((s, j) => (
+                    <li key={j} className="flex items-center gap-2 text-[11px] text-muted">
+                      <span className="tabular w-4 shrink-0 font-bold">{j + 1}</span>
+                      <span className="tabular">{describeSet(s, settings.unit, settings.distanceUnit)}</span>
+                    </li>
+                  ))}
+                  {e.sets.length === 0 && <li className="text-[11px] text-muted">{t('post.noSet')}</li>}
+                </ul>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+/** Qui a aimé ce post (appui long sur le cœur). */
+function LikersModal({ open, likers, loading, onClose }: {
+  open: boolean
+  likers: SocialProfile[] | null
+  loading: boolean
+  onClose: () => void
+}) {
+  useLang()
+  const list = likers ?? []
+  return (
+    <Modal open={open} onClose={onClose} title={t('post.likers')}>
+      {loading ? (
+        <p className="text-sm text-muted">{t('common.loading')}</p>
+      ) : list.length === 0 ? (
+        <p className="text-sm text-muted">{t('post.likersEmpty')}</p>
+      ) : (
+        <ul className="space-y-1">
+          {list.map((p) => (
+            <li key={p.id}>
+              {p.username ? (
+                <Link
+                  to={`/profil/${p.username}`}
+                  onClick={onClose}
+                  className="flex items-center gap-2.5 rounded-xl px-1.5 py-1.5 transition-colors hover:bg-surface-2"
+                >
+                  <Avatar url={p.avatar_url} name={displayAuthor(p)} size={34} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13px] font-bold">{displayAuthor(p)}</span>
+                    <span className="block truncate text-[11px] text-muted">@{p.username}</span>
+                  </span>
+                </Link>
+              ) : (
+                <div className="flex items-center gap-2.5 px-1.5 py-1.5">
+                  <Avatar url={p.avatar_url} name={displayAuthor(p)} size={34} />
+                  <span className="min-w-0 flex-1 truncate text-[13px] font-bold">{displayAuthor(p)}</span>
+                </div>
+              )}
             </li>
           ))}
         </ul>
-        {exercises.length > 6 && (
-          <p className="text-[11px] text-muted">{t('post.moreExercises', { count: exercises.length - 6 })}</p>
-        )}
-        <div className="flex flex-wrap gap-2 pt-1">
-          <Button size="sm" variant="primary" disabled={busy} onClick={onSave}>
-            <BookmarkPlus size={14} /> {t('post.saveAsProgram')}
-          </Button>
-          <Button size="sm" variant="ghost" disabled={busy} onClick={onStart}>
-            <Play size={14} /> {t('post.startNow')}
-          </Button>
-          {onOpen && (
-            <Button size="sm" variant="ghost" onClick={onOpen}>
-              {t('post.open')}
-            </Button>
-          )}
-        </div>
-      </div>
-    </div>
+      )}
+    </Modal>
   )
 }
 
@@ -119,7 +259,6 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
   const [loadingComments, setLoadingComments] = useState(false)
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
-  const [expanded, setExpanded] = useState(false)
   const [remoteWorkout, setRemoteWorkout] = useState<Workout | null>(null)
   const [loadingWorkout, setLoadingWorkout] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -127,10 +266,57 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
   const [editOpen, setEditOpen] = useState(false)
   const [caption, setCaption] = useState(post.caption)
   const [visibility, setVisibility] = useState<PostVisibility>(post.visibility)
+  // Feuille de détail séance + liste des personnes qui ont aimé.
+  const [sheetOpen, setSheetOpen] = useState(false)
+  const [likersOpen, setLikersOpen] = useState(false)
+  const [likers, setLikers] = useState<SocialProfile[] | null>(null)
+  const [loadingLikers, setLoadingLikers] = useState(false)
+  // Appui long sur le cœur : distingué du clic simple.
+  const pressTimer = useRef<number | null>(null)
+  const longPressed = useRef(false)
+  // Photo remplacée / retirée depuis la modale d'édition.
+  const [photoFile, setPhotoFile] = useState<File | null>(null)
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null)
+  const [removePhoto, setRemovePhoto] = useState(false)
 
   const mine = user?.id === post.user_id
   const localWorkout = post.workout_id ? localWorkouts.find((w) => w.id === post.workout_id) : undefined
   const workout = localWorkout ?? remoteWorkout
+
+  /** Détail complet de la séance (snapshot figé ou séance connue localement). */
+  const detail = useMemo<PostWorkoutDetail | null>(() => {
+    const snap = post.workout_snapshot
+    if (snap) {
+      return {
+        name: snap.name,
+        sets: snap.sets,
+        volume: snap.volume,
+        seconds: snap.seconds,
+        exercises: snap.exercises.map((e) => ({
+          name: e.name,
+          sets: e.sets.map((s) => ({ reps: s.reps, weight: s.weight, duration: s.duration })),
+        })),
+      }
+    }
+    if (!workout) return null
+    return {
+      name: workout.name,
+      sets: workoutSets(workout),
+      volume: workoutVolume(workout),
+      seconds: workoutDurationSeconds(workout),
+      exercises: workout.exercises.map((we) => ({
+        name: we.exerciseName ?? t('lib.exerciseFallback'),
+        sets: we.sets
+          .filter((s) => s.completed)
+          .map((s) => ({
+            reps: s.reps ?? null,
+            weight: s.weight ?? null,
+            duration: s.duration ?? null,
+            distance: s.distance ?? null,
+          })),
+      })),
+    }
+  }, [post.workout_snapshot, workout])
 
   const doLike = async () => {
     const prev = liked
@@ -139,11 +325,70 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
     try {
       const now = await toggleLike({ ...post, liked_by_me: prev })
       setLiked(now)
+      setLikers(null) // la liste se rechargera au prochain appui long
     } catch (err) {
       setLiked(prev)
       setLikes((n) => n + (prev ? 1 : -1))
       notify(err instanceof Error ? err.message : t('post.likeFailed'), 'error')
     }
+  }
+
+  /** Appui long sur le cœur : qui a aimé ce post. */
+  const openLikers = async () => {
+    setLikersOpen(true)
+    if (likers !== null) return
+    setLoadingLikers(true)
+    try {
+      setLikers(await listLikers(post.id))
+    } catch (err) {
+      notify(err instanceof Error ? err.message : t('post.likeFailed'), 'error')
+    } finally {
+      setLoadingLikers(false)
+    }
+  }
+
+  const startLikePress = () => {
+    longPressed.current = false
+    if (pressTimer.current) window.clearTimeout(pressTimer.current)
+    pressTimer.current = window.setTimeout(() => {
+      longPressed.current = true
+      void openLikers()
+    }, 450)
+  }
+
+  const endLikePress = () => {
+    if (pressTimer.current) {
+      window.clearTimeout(pressTimer.current)
+      pressTimer.current = null
+    }
+  }
+
+  const clickLike = () => {
+    if (longPressed.current) {
+      longPressed.current = false
+      return
+    }
+    void doLike()
+  }
+
+  /** Ouvre le détail : rapport complet pour ma séance, feuille sinon. */
+  const openDetail = async () => {
+    if (localWorkout) {
+      navigate(`/historique/${localWorkout.id}`)
+      return
+    }
+    if (!workout && post.workout_id) {
+      setLoadingWorkout(true)
+      try {
+        setRemoteWorkout(await getPostWorkout(post))
+      } catch (err) {
+        notify(err instanceof Error ? err.message : t('post.workoutFailed'), 'error')
+        return
+      } finally {
+        setLoadingWorkout(false)
+      }
+    }
+    setSheetOpen(true)
   }
 
   const openComments = async () => {
@@ -199,31 +444,43 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
   const savePost = async () => {
     setBusy(true)
     try {
-      await updatePost(post.id, caption, visibility)
+      await updatePost(post.id, caption, visibility, photoFile, removePhoto)
       setEditOpen(false)
+      setPhotoFile(null)
+      setRemovePhoto(false)
       notify(t('post.updated'), 'success')
       onChanged?.()
     } catch (err) { notify(err instanceof Error ? err.message : t('post.updateFailed'), 'error') }
     finally { setBusy(false) }
   }
 
-  const expandWorkout = async () => {
-    if (expanded) {
-      setExpanded(false)
+  /** Aperçu local de la nouvelle photo choisie. */
+  useEffect(() => {
+    if (!photoFile) {
+      setPhotoPreview(null)
       return
     }
-    setExpanded(true)
-    if (!workout && post.workout_id) {
-      setLoadingWorkout(true)
-      try {
-        setRemoteWorkout(await getPostWorkout(post))
-      } catch (err) {
-        notify(err instanceof Error ? err.message : t('post.workoutFailed'), 'error')
-      } finally {
-        setLoadingWorkout(false)
-      }
-    }
+    const url = URL.createObjectURL(photoFile)
+    setPhotoPreview(url)
+    return () => URL.revokeObjectURL(url)
+  }, [photoFile])
+
+  const openEdit = () => {
+    setCaption(post.caption)
+    setVisibility(post.visibility)
+    setPhotoFile(null)
+    setRemovePhoto(false)
+    setEditOpen(true)
   }
+
+  /** Fermeture sans enregistrer : on annule aussi le changement de photo. */
+  const closeEdit = () => {
+    setEditOpen(false)
+    setPhotoFile(null)
+    setRemovePhoto(false)
+  }
+
+  const shownPhoto = photoPreview ?? (!removePhoto ? post.photo_url ?? null : null)
 
   /** Un programme se sauvegarde sans créer de séance active. */
   const cloneSource = async (source: {
@@ -326,83 +583,51 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
           </p>
         </div>
         {mine ? <div className="flex">
-          <button type="button" onClick={() => setEditOpen(true)} aria-label={t('post.editAria')} className="rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-accent"><Pencil size={16} /></button>
+          <button type="button" onClick={openEdit} aria-label={t('post.editAria')} className="rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-accent"><Pencil size={16} /></button>
           <button type="button" onClick={() => void removePost()} aria-label={t('post.deleteAria')} className="rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-danger"><Trash2 size={16} /></button>
         </div> : <button type="button" onClick={() => setReportOpen(true)} aria-label={t('post.reportAria')} className="rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-danger"><Flag size={16} /></button>}
       </div>
 
-      {post.photo_url && (
-        <img src={post.photo_url} alt="" className="max-h-[480px] w-full object-cover" loading="lazy" />
+      {shownPhoto && (
+        <img src={shownPhoto} alt="" className="max-h-[480px] w-full object-cover" loading="lazy" />
       )}
 
       <div className="space-y-2.5 p-3">
         {post.caption && <p className="text-sm whitespace-pre-wrap">{post.caption}</p>}
 
-        {post.workout_snapshot ? (
-          /* Détail toujours visible (snapshot figé à la publication). */
+        {detail ? (
+          /* Résumé figé (snapshot) ou séance locale : le bloc ouvre le détail. */
           <WorkoutDetail
-            name={post.workout_snapshot.name}
-            sets={post.workout_snapshot.sets}
-            volume={post.workout_snapshot.volume}
-            seconds={post.workout_snapshot.seconds}
-            exercises={post.workout_snapshot.exercises.map((e) => ({ name: e.name, count: e.sets.length }))}
+            detail={detail}
             busy={busy}
+            onOpen={() => void openDetail()}
             onSave={() => void clone(false)}
             onStart={() => void clone(true)}
-          />
-        ) : localWorkout ? (
-          /* Ancien post de ma propre séance : détail local, visible aussi. */
-          <WorkoutDetail
-            name={localWorkout.name}
-            sets={workoutSets(localWorkout)}
-            volume={workoutVolume(localWorkout)}
-            seconds={workoutDurationSeconds(localWorkout)}
-            exercises={localWorkout.exercises.map((we) => ({ name: we.exerciseName ?? t('lib.exerciseFallback'), count: we.sets.length }))}
-            busy={busy}
-            onSave={() => void clone(false)}
-            onStart={() => void clone(true)}
-            onOpen={() => navigate(`/historique/${localWorkout.id}`)}
           />
         ) : post.workout_id ? (
-          /* Ancien post d'un autre compte : repli lecture distante. */
-          <div>
-            {!expanded ? (
-              <button
-                type="button"
-                onClick={() => void expandWorkout()}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-surface-2 px-2.5 py-1.5 text-xs font-bold text-muted hover:text-ink"
-              >
-                <Dumbbell size={13} /> {t('post.viewWorkout')}
-              </button>
-            ) : (
-              <div className="rounded-xl bg-surface-2 p-2.5">
-                {loadingWorkout ? (
-                  <p className="text-xs text-muted">{t('common.loading')}</p>
-                ) : workout ? (
-                  <WorkoutDetail
-                    name={workout.name}
-                    sets={workoutSets(workout)}
-                    volume={workoutVolume(workout)}
-                    seconds={workoutDurationSeconds(workout)}
-                    exercises={workout.exercises.map((we) => ({ name: we.exerciseName ?? t('lib.exerciseFallback'), count: we.sets.length }))}
-                    busy={busy}
-                    onSave={() => void clone(false)}
-                    onStart={() => void clone(true)}
-                  />
-                ) : (
-                  <p className="text-xs text-muted">{t('post.workoutNotShared')}</p>
-                )}
-              </div>
-            )}
-          </div>
+          /* Ancien post sans résumé : lecture distante puis détail. */
+          <button
+            type="button"
+            onClick={() => void openDetail()}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-surface-2 px-2.5 py-1.5 text-xs font-bold text-muted hover:text-ink"
+          >
+            <Dumbbell size={13} /> {loadingWorkout ? t('common.loading') : t('post.viewWorkout')}
+          </button>
         ) : null}
 
         <div className="flex items-center gap-1 border-t border-line pt-2">
           <button
             type="button"
-            onClick={() => void doLike()}
+            onClick={clickLike}
+            onPointerDown={startLikePress}
+            onPointerUp={endLikePress}
+            onPointerLeave={endLikePress}
+            onPointerCancel={endLikePress}
+            onContextMenu={(e) => e.preventDefault()}
+            title={t('post.longPressLikes')}
+            aria-label={t('post.likers')}
             className={cn(
-              'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] font-bold transition-colors',
+              'inline-flex touch-manipulation items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] font-bold transition-colors select-none',
               liked ? 'text-danger' : 'text-muted hover:text-ink',
             )}
           >
@@ -458,8 +683,47 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: () => vo
         )}
       </div>
       <ReportDialog open={reportOpen} targetType="post" targetId={post.id} onClose={() => setReportOpen(false)} />
-      <Modal open={editOpen} onClose={() => setEditOpen(false)} title={t('post.editTitle')}>
+      <WorkoutSheet open={sheetOpen} detail={detail} onClose={() => setSheetOpen(false)} />
+      <LikersModal
+        open={likersOpen}
+        likers={likers}
+        loading={loadingLikers}
+        onClose={() => setLikersOpen(false)}
+      />
+      <Modal open={editOpen} onClose={closeEdit} title={t('post.editTitle')}>
         <div className="space-y-3">
+          <Field label={t('post.photoLabel')} hint={t('post.photoHint')}>
+            <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-line p-2.5 transition-colors hover:bg-surface-2">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-accent-soft text-accent">
+                {shownPhoto ? (
+                  <img src={shownPhoto} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <ImagePlus size={18} />
+                )}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-sm text-muted">
+                {photoFile
+                  ? photoFile.name
+                  : post.photo_url && !removePhoto
+                    ? t('post.changePhoto')
+                    : t('post.choosePhoto')}
+              </span>
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  setPhotoFile(e.target.files?.[0] ?? null)
+                  setRemovePhoto(false)
+                }}
+              />
+            </label>
+          </Field>
+          {post.photo_url && !photoFile && (
+            <Button size="sm" variant="ghost" block onClick={() => setRemovePhoto((v) => !v)}>
+              {removePhoto ? t('post.keepPhoto') : t('post.removePhoto')}
+            </Button>
+          )}
           <Field label={t('post.textLabel')}><Textarea value={caption} onChange={(e) => setCaption(e.target.value)} maxLength={500} rows={4} /></Field>
           <Field label={t('post.visibilityField')}><Select value={visibility} onChange={(e) => setVisibility(e.target.value as PostVisibility)}>
             <option value="public">{t('post.visPublic')}</option><option value="followers">{t('post.visFollowers')}</option><option value="private">{t('post.visOnlyMe')}</option>
